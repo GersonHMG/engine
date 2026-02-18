@@ -1,0 +1,188 @@
+name: Windows Deploy
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build and Package (Windows - MinGW/GCC)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure submodules are updated
+        run: git submodule update --init --recursive
+
+      - name: Install Qt 6 (MinGW)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          # Pull a modern MinGW toolchain with reliable <filesystem> support (GCC 13.1)
+          tools: 'tools_mingw1310'
+          modules: 'qtserialport qtwebsockets'
+
+      - name: Configure CMake
+        run: |
+          # 1. Attempt to find the Qt directory
+          $qtDir = $env:Qt6_DIR
+          if (-not $qtDir -or $qtDir -eq "") {
+            $qtDir = $env:QT_ROOT_DIR
+          }
+
+          # 2. Find the Compiler and Tools directory
+          $qtRoot = Split-Path (Split-Path $qtDir -Parent) -Parent
+          $toolsDir = Join-Path $qtRoot "Tools"
+          
+          # Search for the modern MinGW directory (mingw*_64)
+          $compilerDir = Get-ChildItem -Path $toolsDir -Directory -Filter "mingw*_64" -ErrorAction SilentlyContinue | 
+                         Sort-Object Name -Descending | 
+                         Select-Object -First 1
+          
+          if ($compilerDir) {
+             $compilerBin = Join-Path $compilerDir.FullName "bin"
+             $gpp = Join-Path $compilerBin "g++.exe"
+             $gcc = Join-Path $compilerBin "gcc.exe"
+             
+             # --- CRITICAL FIX: Add MinGW bin to PATH for runtime DLLs ---
+             # This ensures protoc.exe can run during the build step
+             echo "$compilerBin" | Out-File -FilePath $env:GITHUB_PATH -Append
+             Write-Host "Added to PATH: $compilerBin"
+          } else {
+             throw "Could not find MinGW directory in $toolsDir"
+          }
+
+          # 3. Force CMake to use these specific compilers
+          $qtDirCmake = $qtDir -replace '\\', '/'
+          $gppCmake = $gpp -replace '\\', '/'
+          $gccCmake = $gcc -replace '\\', '/'
+
+          cmake -S . -B build -G "MinGW Makefiles" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$qtDirCmake" `
+            -DCMAKE_C_COMPILER="$gccCmake" `
+            -DCMAKE_CXX_COMPILER="$gppCmake"
+
+      - name: Pre-build bundled Protobuf (serial)
+        run: |
+          # Build the ExternalProject first to avoid racing it against proto generation
+          cmake --build build --config Release --target project_protobuf-install -- -j1
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Bundle Qt runtime
+        run: |
+          # Recover Qt dir
+          $qtDir = $env:Qt6_DIR
+          if (-not $qtDir) { $qtDir = $env:QT_ROOT_DIR }
+
+          # Prefer common locations, but fall back to a recursive search to avoid path
+          # mismatches between generators/configurations.
+          $exePath = @(
+            "build/src/engine.exe",
+            "build/src/engine/engine.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $exePath) {
+            $found = Get-ChildItem -Path "build" -Filter "engine.exe" -Recurse -File -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+            if ($found) { $exePath = $found.FullName }
+          }
+
+          if (-not $exePath) {
+            throw "Executable not found under build/. Checked build/src/engine.exe and build/src/engine/engine.exe, and no engine.exe was discovered recursively."
+          }
+
+          # Persist the resolved path for later steps (normalize slashes for downstream tooling)
+          "ENGINE_EXE=$($exePath -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          & "$qtDir\bin\windeployqt.exe" $exePath --compiler-runtime --no-translations
+
+      - name: Stage deployment bundle
+        run: |
+          $distDir = "dist/engine-windows"
+          New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+
+          $exePath = $env:ENGINE_EXE
+          if (-not $exePath) {
+            $exePath = @(
+              "build/src/engine.exe",
+              "build/src/engine/engine.exe"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+
+          if (-not $exePath) {
+            $found = Get-ChildItem -Path "build" -Filter "engine.exe" -Recurse -File -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+            if ($found) { $exePath = $found.FullName }
+          }
+
+          if (-not $exePath) {
+            throw "Executable not found under build/. Checked build/src/engine.exe and build/src/engine/engine.exe, and no engine.exe was discovered recursively."
+          }
+
+          $deployedFilesDir = (Split-Path $exePath)
+
+          if (Test-Path "build/config.ini") {
+             Copy-Item "build/config.ini" $distDir -ErrorAction Stop
+          }
+
+          Copy-Item "$deployedFilesDir/*" $distDir -Recurse -Force
+          
+          Get-ChildItem -Path $distDir -Include *.pdb, *.lib -Recurse | Remove-Item -Force
+
+      - name: Compress artifact
+        run: |
+          $refName = "${{ github.ref_name }}"
+          # Replace path separators (e.g., feature/foo) to avoid treating the zip name as a directory path
+          $safeRef = $refName -replace "[\\/]+", "-"
+          $zipName = "engine-$safeRef-windows-mingw-x64.zip"
+          Compress-Archive -Path dist/engine-windows/* -DestinationPath $zipName
+          echo "ZIP_NAME=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-artifact
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+  release-github:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    needs: [build-windows]
+
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release-artifact
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: engine-${{ github.ref_name }}-windows-mingw-x64.zip
+          draft: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
