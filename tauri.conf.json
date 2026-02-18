@@ -1,0 +1,42 @@
+{
+    "build": {
+        "beforeDevCommand": "",
+        "beforeBuildCommand": "",
+        "devPath": "src/gui",
+        "distDir": "src/gui",
+        "withGlobalTauri": true
+    },
+    "package": {
+        "productName": "engine",
+        "version": "1.0.0"
+    },
+    "tauri": {
+        "allowlist": {
+            "all": false,
+            "shell": {
+                "all": false,
+                "open": true
+            }
+        },
+        "bundle": {
+            "active": true,
+            "targets": "all",
+            "identifier": "com.sysmic.engine",
+            "icon": [
+                "icons/icon.ico"
+            ]
+        },
+        "security": {
+            "csp": null
+        },
+        "windows": [
+            {
+                "fullscreen": false,
+                "resizable": true,
+                "title": "Sysmic Engine",
+                "width": 1200,
+                "height": 800
+            }
+        ]
+    }
+}
