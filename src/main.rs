@@ -30,6 +30,7 @@ use crate::game_controller::GameState;
 use crate::lua_interface::LuaInterface;
 use crate::radio::Radio;
 use crate::world::World;
+use crate::logger::Logger;
 
 /// Load config.ini and return parsed settings as an `ini::Ini`.
 fn load_config() -> ini::Ini {
@@ -77,17 +78,10 @@ struct VisionState {
     port: u16,
 }
 
-#[derive(Default)]
-// --- Recording Structs ---
-struct RecordingState {
-    writer: Option<csv::Writer<std::fs::File>>,
-    active: bool,
-}
-
 struct AppState {
     world: Arc<RwLock<World>>,
     vision_state: Arc<Mutex<VisionState>>,
-    recording_state: Arc<Mutex<RecordingState>>,
+    logger: Arc<Mutex<Logger>>,
     radio: Arc<Mutex<Radio>>, // Needed for Xbox commands
 }
 
@@ -138,6 +132,19 @@ async fn update_vision_connection(
 }
 
 #[tauri::command]
+async fn update_radio_config(
+    state: tauri::State<'_, AppState>,
+    use_radio: bool,
+    port_name: String,
+    baud_rate: u32,
+) -> Result<(), String> {
+    let mut radio = state.radio.lock().unwrap();
+    radio.reconfigure(use_radio, &port_name, baud_rate);
+    info!("Radio reconfigured: use_radio={}, port={}, baud={}", use_radio, port_name, baud_rate);
+    Ok(())
+}
+
+#[tauri::command]
 async fn update_tracker_config(
     state: tauri::State<'_, AppState>,
     enabled: bool,
@@ -169,33 +176,24 @@ async fn start_recording(
     state: tauri::State<'_, AppState>,
     filename: String,
 ) -> Result<(), String> {
-    let mut rec = state.recording_state.lock().unwrap();
-    if rec.active {
-        return Err("Already recording".into());
+    let mut logger = state.logger.lock().unwrap();
+    if logger.is_logging() {
+       return Err("Already recording".into());
     }
-
-    match csv::Writer::from_path(&filename) {
-        Ok(w) => {
-            rec.writer = Some(w);
-            rec.active = true;
-            info!("Started recording to {}", filename);
-            Ok(())
-        }
-        Err(e) => Err(e.to_string()),
-    }
+    
+    logger.start_logging(Some(&filename));
+    info!("Started recording to {}", filename);
+    Ok(())
 }
 
 #[tauri::command]
 async fn stop_recording(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut rec = state.recording_state.lock().unwrap();
-    if !rec.active {
+    let mut logger = state.logger.lock().unwrap();
+    if !logger.is_logging() {
         return Ok(());
     }
     
-    if let Some(mut w) = rec.writer.take() {
-        w.flush().map_err(|e| e.to_string())?;
-    }
-    rec.active = false;
+    logger.stop_logging();
     info!("Stopped recording");
     Ok(())
 }
@@ -238,6 +236,7 @@ async fn main() {
         .invoke_handler(tauri::generate_handler![
             update_vision_connection, 
             update_tracker_config,
+            update_radio_config,
             start_recording,
             stop_recording,
             send_robot_command
@@ -250,23 +249,22 @@ async fn run_engine(app_handle: tauri::AppHandle) {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
-    let config = load_config();
-
+    // Configuration Defaults (No config.ini)
+    
     // Vision
-    let vision_ip = get_str(&config, "Vision", "ip_address", "224.5.23.2");
-    let vision_port = get_int(&config, "Vision", "port", 10020) as u16;
+    let vision_ip = "224.5.23.2".to_string();
+    let vision_port = 10020u16;
 
     // World
-    let blue_team_size = get_int(&config, "World", "blue_team_size", 6) as i32;
-    let yellow_team_size = get_int(&config, "World", "yellow_team_size", 6) as i32;
-
-    // Performance
-    let _update_fps = get_int(&config, "Performance", "update_fps", 60) as u32;
+    let blue_team_size = 6;
+    let yellow_team_size = 6;
 
     // Radio
-    let use_radio = get_bool(&config, "Radio", "use_radio", false);
-    let radio_port = get_str(&config, "Radio", "port_name", "/dev/ttyUSB0");
-    let radio_baud = get_int(&config, "Radio", "baud_rate", 115200) as u32;
+    let use_radio = false; // Default to simulator
+    let radio_port = "/dev/ttyUSB0".to_string();
+    let radio_baud = 115200;
+
+    // Shared state
 
     // Shared state
     let world = Arc::new(RwLock::new(World::new(blue_team_size, yellow_team_size)));
@@ -274,13 +272,15 @@ async fn run_engine(app_handle: tauri::AppHandle) {
     let radio = Arc::new(Mutex::new(Radio::new(use_radio, &radio_port, radio_baud)));
     
     let vision_state = Arc::new(Mutex::new(VisionState::default()));
-    let recording_state = Arc::new(Mutex::new(RecordingState { writer: None, active: false }));
+    
+    // Initialize Logger
+    let logger = Arc::new(Mutex::new(Logger::new(Arc::clone(&world), Arc::clone(&radio))));
 
     // Register state
     app_handle.manage(AppState {
         world: world.clone(),
         vision_state: vision_state.clone(),
-        recording_state: recording_state.clone(),
+        logger: logger.clone(),
         radio: radio.clone(),
     });
 
@@ -299,7 +299,7 @@ async fn run_engine(app_handle: tauri::AppHandle) {
         let ip_clone = vision_ip.clone();
         
         let handle = tokio::spawn(async move {
-            // Fix: Pass vision_ip directly (String), don't borrow
+            // Fix: Pass ip_clone directly (String), don't borrow
             if let Err(e) = vision::run_vision(ip_clone, vision_port, world_for_vision, app_handle_vision, rx).await {
                 warn!("Vision task error: {e}");
                 Ok(())
@@ -343,22 +343,8 @@ async fn run_engine(app_handle: tauri::AppHandle) {
     let frame_duration = Duration::from_micros(16_667); // ~60 Hz
     info!("Engine started. Running at ~60 FPS.");
     
-    // Recording helper function
-    #[derive(serde::Serialize)]
-    struct CsvRow {
-        timestamp: u128,
-        ball_x: f64,
-        ball_y: f64,
-        // Can add more fields or just dump JSON string if needed, but CSV usually flat.
-        // For now let's just dump ball pos.
-    }
-
     loop {
         let frame_start = Instant::now();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis();
 
         // 1. Call Lua process()
         {
@@ -366,28 +352,28 @@ async fn run_engine(app_handle: tauri::AppHandle) {
             lua.call_process();
         }
 
+        // 3. Log Frame (CSV Recording)
+        {
+            let mut l = match logger.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("Logger lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            l.log_frame();
+        }
+
         // 2. Send radio commands
         {
-            let mut r = radio.lock().unwrap();
-            r.send_commands();
-        }
-        
-        // 3. Recording
-        {
-            let mut rec = recording_state.lock().unwrap();
-            if rec.active {
-                if let Some(w) = rec.writer.as_mut() {
-                    let w_read = world.read().unwrap();
-                     let row = CsvRow {
-                        timestamp,
-                        ball_x: w_read.ball.position.x,
-                        ball_y: w_read.ball.position.y,
-                    };
-                    if let Err(e) = w.serialize(&row) {
-                        warn!("Failed to write CSV row: {e}");
-                    }
+            let mut r = match radio.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("Radio lock poisoned, recovering");
+                    poisoned.into_inner()
                 }
-            }
+            };
+            r.send_commands();
         }
 
         // Sleep for remaining frame time

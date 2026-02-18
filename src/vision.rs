@@ -16,6 +16,7 @@ struct VisionUpdate {
     ball: Option<Vec2D>,
     robots_blue: Vec<RobotUpdate>,
     robots_yellow: Vec<RobotUpdate>,
+    pps: u32,
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -57,23 +58,44 @@ pub async fn run_vision(
         )?;
         socket.set_reuse_address(true)?;
         socket.set_nonblocking(true)?;
+        
+        // Important for Windows/Localhost: Enable loopback
+        socket.set_multicast_loop_v4(true)?;
 
-        let addr = std::net::SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port);
+        let addr = std::net::SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
         socket.bind(&socket2::SockAddr::from(addr))?;
-        socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::UNSPECIFIED)?;
+        
+        // Join multicast group on default interface (0.0.0.0)
+        // This usually works if routing table is correct or for simple setups.
+        match socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::new(0, 0, 0, 0)) {
+            Ok(_) => info!("Joined multicast group on default interface"),
+            Err(e) => warn!("Failed to join multicast on default interface: {e}"),
+        }
+        
+        // Also try joining on Loopback interface (127.0.0.1) explicitly for local sims
+        let _ = socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::new(127, 0, 0, 1));
 
         let std_socket: std::net::UdpSocket = socket.into();
         UdpSocket::from_std(std_socket)?
     };
 
     info!(
-        "Vision: Listening on port {port}, joined multicast group {multicast_addr}"
+        "Vision: Listening on port {port}, joined multicast group {multicast_addr} (Loopback enabled)"
     );
 
     let mut buf = vec![0u8; 65536];
     let mut tracker = Tracker::new();
+    
+    // PPS Calculation variables
+    let mut packet_count: u32 = 0;
+    let mut last_pps_calc = std::time::Instant::now();
+    let mut current_pps: u32 = 0;
 
     loop {
+        // Calculate PPS periodically (every 1s check? No, maybe just update on every 100 packets or keep a sliding count?)
+        // Simplest: Check elapsed time every loop iteration? No, that's spammy.
+        // Let's check elapsed time when we receive a packet.
+        
         tokio::select! {
             cmd = command_rx.recv() => {
                 match cmd {
@@ -91,12 +113,27 @@ pub async fn run_vision(
                 match res {
                     Ok((len, _src)) => {
                         let data = &buf[..len];
+                        
+                        packet_count += 1;
+                        let now = std::time::Instant::now();
+                        if now.duration_since(last_pps_calc).as_secs() >= 1 {
+                            current_pps = packet_count;
+                            packet_count = 0;
+                            last_pps_calc = now;
+                        }
 
                         // Parse SSL_WrapperPacket
                         match crate::proto::protos::ssl_vision_wrapper::SSL_WrapperPacket::parse_from_bytes(data) {
                             Ok(wrapper) => {
                                 if let Some(ref detection) = wrapper.detection.as_ref() {
-                                    let mut world_writer = world.write().unwrap();
+                                    // Handle lock poisoning gracefully
+                                    let mut world_writer = match world.write() {
+                                        Ok(w) => w,
+                                        Err(e) => {
+                                            warn!("World lock poisoned, recovering");
+                                            e.into_inner()
+                                        }
+                                    };
 
                                     // Process balls
                                     for ball in &detection.balls {
@@ -121,6 +158,7 @@ pub async fn run_vision(
                                         ball: Some(world_writer.ball.position),
                                         robots_blue: vec![],
                                         robots_yellow: vec![],
+                                        pps: current_pps,
                                     };
 
                                     for robot in world_writer.blue_robots.values() {
