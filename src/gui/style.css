@@ -1,0 +1,147 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #222;
+    display: flex;
+    /* Flex container for sidebar + main */
+    height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+}
+
+#sidebar {
+    width: 300px;
+    background: #1e1e1e;
+    border-right: 1px solid #333;
+    padding: 15px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    z-index: 10;
+}
+
+#main {
+    flex: 1;
+    position: relative;
+    background-color: #111;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+canvas {
+    background-color: #006600;
+    /* Field Green */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Config Controls */
+h3 {
+    margin-top: 0;
+    border-bottom: 1px solid #444;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+h4 {
+    margin: 5px 0 5px 0;
+    color: #aaa;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section {
+    background: #252526;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid #333;
+}
+
+.row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 0.9em;
+}
+
+label {
+    flex: 1;
+}
+
+input[type="text"],
+input[type="number"] {
+    width: 80px;
+    background: #3c3c3c;
+    border: 1px solid #555;
+    color: white;
+    padding: 3px 6px;
+    border-radius: 2px;
+    text-align: right;
+}
+
+button {
+    width: 100%;
+    padding: 6px;
+    background: #0e639c;
+    color: white;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background 0.1s;
+    font-size: 0.9em;
+}
+
+button:hover {
+    background: #1177bb;
+}
+
+button:active {
+    background: #094770;
+}
+
+button.stop {
+    background: #a1260d;
+}
+
+button.stop:hover {
+    background: #c53011;
+}
+
+input[type="range"] {
+    flex: 1;
+    margin: 0 8px;
+}
+
+span {
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+/* Zoom Controls Overlay */
+#zoom-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 5px;
+}
+
+#zoom-controls button {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 1.2em;
+    line-height: 1;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+#zoom-controls button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
