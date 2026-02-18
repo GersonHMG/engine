@@ -1,7 +1,7 @@
 // grsim.rs — grSim UDP command sender
 // Port of radio/grsim.cpp
 
-use prost::Message;
+use protobuf::Message;
 use std::net::UdpSocket;
 use tracing::warn;
 
@@ -30,36 +30,28 @@ impl Grsim {
         spinner: i32,
         wheels_speed: bool,
     ) {
-        let command = crate::proto::protos::GrSimRobotCommand {
-            id: id as u32,
-            velangular: vel_angular as f32,
-            kickspeedx: kick_speed_x as f32,
-            kickspeedz: kick_speed_z as f32,
-            veltangent: vel_x as f32,
-            velnormal: vel_y as f32,
-            spinner: spinner != 0,
-            wheelsspeed: wheels_speed,
-            wheel1: None,
-            wheel2: None,
-            wheel3: None,
-            wheel4: None,
-        };
+        let mut command = crate::proto::protos::grSim_Commands::GrSim_Robot_Command::new();
+        command.set_id(id as u32);
+        command.set_velangular(vel_angular as f32);
+        command.set_kickspeedx(kick_speed_x as f32);
+        command.set_kickspeedz(kick_speed_z as f32);
+        command.set_veltangent(vel_x as f32);
+        command.set_velnormal(vel_y as f32);
+        command.set_spinner(spinner != 0);
+        command.set_wheelsspeed(wheels_speed);
 
-        let commands = crate::proto::protos::GrSimCommands {
-            timestamp: 0.0,
-            isteamyellow: team != 0,
-            robot_commands: vec![command],
-        };
+        let mut commands = crate::proto::protos::grSim_Commands::GrSim_Commands::new();
+        commands.set_timestamp(0.0);
+        commands.set_isteamyellow(team != 0);
+        commands.robot_commands.push(command);
 
-        let packet = crate::proto::protos::GrSimPacket {
-            commands: Some(commands),
-            replacement: None,
-        };
+        let mut packet = crate::proto::protos::grSim_Packet::GrSim_Packet::new();
+        packet.commands = protobuf::MessageField::some(commands);
 
-        let mut buf = Vec::new();
-        if packet.encode(&mut buf).is_ok() && !buf.is_empty() {
+        let encoded: Vec<u8> = packet.write_to_bytes().unwrap_or_default();
+        if !encoded.is_empty() {
             let addr = format!("127.0.0.1:{GRSIM_COMMAND_PORT}");
-            if let Err(e) = self.socket.send_to(&buf, &addr) {
+            if let Err(e) = self.socket.send_to(&encoded, &addr) {
                 warn!("grSim send error: {e}");
             }
         }
@@ -76,29 +68,24 @@ impl Grsim {
     ) {
         let dir_deg = dir.to_degrees();
 
-        let robot = crate::proto::protos::GrSimRobotReplacement {
-            x,
-            y,
-            dir: dir_deg,
-            id: id as u32,
-            yellowteam: yellow_team != 0,
-            turnon: Some(true),
-        };
+        let mut robot = crate::proto::protos::grSim_Replacement::GrSim_RobotReplacement::new();
+        robot.set_x(x);
+        robot.set_y(y);
+        robot.set_dir(dir_deg);
+        robot.set_id(id as u32);
+        robot.set_yellowteam(yellow_team != 0);
+        robot.turnon = Some(true);
 
-        let replacement = crate::proto::protos::GrSimReplacement {
-            robots: vec![robot],
-            ball: None,
-        };
+        let mut replacement = crate::proto::protos::grSim_Replacement::GrSim_Replacement::new();
+        replacement.robots.push(robot);
 
-        let packet = crate::proto::protos::GrSimPacket {
-            commands: None,
-            replacement: Some(replacement),
-        };
+        let mut packet = crate::proto::protos::grSim_Packet::GrSim_Packet::new();
+        packet.replacement = protobuf::MessageField::some(replacement);
 
-        let mut buf = Vec::new();
-        if packet.encode(&mut buf).is_ok() && !buf.is_empty() {
+        let encoded: Vec<u8> = packet.write_to_bytes().unwrap_or_default();
+        if !encoded.is_empty() {
             let addr = format!("127.0.0.1:{GRSIM_COMMAND_PORT}");
-            if let Err(e) = self.socket.send_to(&buf, &addr) {
+            if let Err(e) = self.socket.send_to(&encoded, &addr) {
                 warn!("grSim teleport send error: {e}");
             }
         }
@@ -106,27 +93,22 @@ impl Grsim {
 
     /// Teleport the ball in grSim.
     pub fn communicate_pos_ball(&self, x: f64, y: f64) {
-        let ball = crate::proto::protos::GrSimBallReplacement {
-            x: Some(x),
-            y: Some(y),
-            vx: Some(0.0),
-            vy: Some(0.0),
-        };
+        let mut ball = crate::proto::protos::grSim_Replacement::GrSim_BallReplacement::new();
+        ball.x = Some(x);
+        ball.y = Some(y);
+        ball.vx = Some(0.0);
+        ball.vy = Some(0.0);
 
-        let replacement = crate::proto::protos::GrSimReplacement {
-            ball: Some(ball),
-            robots: vec![],
-        };
+        let mut replacement = crate::proto::protos::grSim_Replacement::GrSim_Replacement::new();
+        replacement.ball = protobuf::MessageField::some(ball);
 
-        let packet = crate::proto::protos::GrSimPacket {
-            commands: None,
-            replacement: Some(replacement),
-        };
+        let mut packet = crate::proto::protos::grSim_Packet::GrSim_Packet::new();
+        packet.replacement = protobuf::MessageField::some(replacement);
 
-        let mut buf = Vec::new();
-        if packet.encode(&mut buf).is_ok() && !buf.is_empty() {
+        let encoded: Vec<u8> = packet.write_to_bytes().unwrap_or_default();
+        if !encoded.is_empty() {
             let addr = format!("127.0.0.1:{GRSIM_COMMAND_PORT}");
-            if let Err(e) = self.socket.send_to(&buf, &addr) {
+            if let Err(e) = self.socket.send_to(&encoded, &addr) {
                 warn!("grSim ball teleport send error: {e}");
             }
         }

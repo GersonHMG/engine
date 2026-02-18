@@ -1,7 +1,7 @@
 // game_controller.rs — Multicast UDP receiver for SSL Game Controller referee messages
 // Port of receivers/game_controller_ref.cpp + game_state.cpp
 
-use prost::Message;
+use protobuf::Message;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
@@ -87,9 +87,9 @@ pub async fn run_game_controller(
         let (len, _src) = socket.recv_from(&mut buf).await?;
         let data = &buf[..len];
 
-        match crate::proto::protos::Referee::decode(data) {
+        match crate::proto::protos::ssl_gc_referee_message::Referee::parse_from_bytes(data) {
             Ok(ref_msg) => {
-                let cmd_str = command_to_string(ref_msg.command as i32);
+                let cmd_str = command_to_string(ref_msg.command() as i32);
                 if let Ok(mut gs) = game_state.lock() {
                     gs.set_ref_command(cmd_str.to_string());
                 }

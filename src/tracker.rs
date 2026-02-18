@@ -126,6 +126,19 @@ impl ExtendedKalmanFilter {
 
         h
     }
+    pub fn set_noise_parameters(&mut self, p_noise_p: f64, p_noise_v: f64, m_noise: f64) {
+        // Position noise
+        self.q[(0, 0)] = p_noise_p;
+        self.q[(1, 1)] = p_noise_p;
+        // Velocity noise
+        self.q[(4, 4)] = p_noise_v;
+        self.q[(5, 5)] = p_noise_v;
+        
+        // Measurement noise
+        self.r[(0, 0)] = m_noise;
+        self.r[(1, 1)] = m_noise;
+        self.r[(2, 2)] = m_noise;
+    }
 }
 
 fn normalize_angle(mut angle: f64) -> f64 {
@@ -141,12 +154,20 @@ fn normalize_angle(mut angle: f64) -> f64 {
 /// Tracker: maintains per-robot EKF instances keyed by (team, id)
 pub struct Tracker {
     filters: HashMap<(i32, i32), ExtendedKalmanFilter>,
+    enabled: bool,
+    process_noise_p: f64,
+    process_noise_v: f64,
+    measurement_noise: f64,
 }
 
 impl Tracker {
     pub fn new() -> Self {
         Self {
             filters: HashMap::new(),
+            enabled: true,
+            process_noise_p: 1e-7,
+            process_noise_v: 1e-4,
+            measurement_noise: 1e-6,
         }
     }
 
@@ -161,10 +182,25 @@ impl Tracker {
         theta: f64,
         dt: f64,
     ) -> (f64, f64, f64, f64, f64, f64) {
+        if !self.enabled {
+            return (x, y, theta, 0.0, 0.0, 0.0);
+        }
+
+        let process_noise_p = self.process_noise_p;
+        let process_noise_v = self.process_noise_v;
+        let measurement_noise = self.measurement_noise;
+        
         let filter = self
             .filters
             .entry((team, id))
-            .or_insert_with(Self::create_initial_filter);
+            .or_insert_with(|| Self::create_initial_filter(process_noise_p, process_noise_v, measurement_noise));
+
+        // Update filter parameters if they changed (simplification: always update or check diff)
+        // For now, let's just update Q and R every step or when requested. 
+        // To be efficient, we might want to only do this when config changes.
+        // But since we don't track "dirty" state easily here without more logic, let's just updating Q and R diagonal is cheap.
+        
+        filter.set_noise_parameters(process_noise_p, process_noise_v, measurement_noise);
 
         let (_, _, _, vx, vy, omega) = filter.filter_pose(x, y, theta, dt);
 
@@ -172,7 +208,7 @@ impl Tracker {
         (x, y, theta, vx, vy, omega)
     }
 
-    fn create_initial_filter() -> ExtendedKalmanFilter {
+    fn create_initial_filter(p_noise_p: f64, p_noise_v: f64, m_noise: f64) -> ExtendedKalmanFilter {
         let mut initial_state = SVector::<f64, 7>::zeros();
         initial_state[2] = 0.0_f64.sin();
         initial_state[3] = 0.0_f64.cos();
@@ -187,20 +223,30 @@ impl Tracker {
         p[(6, 6)] = 1.0;
 
         let mut q = SMatrix::<f64, 7, 7>::zeros();
-        q[(0, 0)] = 1e-7;
-        q[(1, 1)] = 1e-7;
+        // Position noise
+        q[(0, 0)] = p_noise_p;
+        q[(1, 1)] = p_noise_p;
+        // Angle noise (fixed for now or scaled?)
         q[(2, 2)] = 1e-4;
         q[(3, 3)] = 1e-4;
-        q[(4, 4)] = 1e-4;
-        q[(5, 5)] = 1e-4;
+        // Velocity noise
+        q[(4, 4)] = p_noise_v;
+        q[(5, 5)] = p_noise_v;
         q[(6, 6)] = 1e-2;
 
         let mut r = SMatrix::<f64, 3, 3>::zeros();
-        r[(0, 0)] = 1e-6;
-        r[(1, 1)] = 1e-6;
-        r[(2, 2)] = 1e-6;
+        r[(0, 0)] = m_noise;
+        r[(1, 1)] = m_noise;
+        r[(2, 2)] = m_noise;
 
         ExtendedKalmanFilter::new(initial_state, p, q, r)
+    }
+    
+    pub fn update_config(&mut self, enabled: bool, process_noise_p: f64, process_noise_v: f64, measurement_noise: f64) {
+        self.enabled = enabled;
+        self.process_noise_p = process_noise_p;
+        self.process_noise_v = process_noise_v;
+        self.measurement_noise = measurement_noise;
     }
 }
 
