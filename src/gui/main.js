@@ -3,37 +3,112 @@ const { listen } = window.__TAURI__.event;
 
 const canvas = document.getElementById('fieldCanvas');
 const ctx = canvas.getContext('2d');
+const mouseCoords = document.getElementById('mouse-coords');
+const visionStatus = document.getElementById('vision-status');
 
 let robots = {
     blue: [],
     yellow: []
 };
 let ball = { x: 0, y: 0 };
+let lastVisionUpdate = 0;
 
 // Field dimensions (mm)
-const FIELD_LENGTH = 12000;
-const FIELD_WIDTH = 9000;
+const FIELD_LENGTH = 9000;
+const FIELD_WIDTH = 6000;
 // --- Zoom Logic ---
 let scale = 0.08; // Initial pixels per mm
 const MIN_SCALE = 0.01;
 const MAX_SCALE = 0.5;
 
+// --- Pan Logic ---
+let panX = 0; // Offset in pixels
+let panY = 0;
+let isDragging = false;
+let lastMouseX = 0;
+let lastMouseY = 0;
+
 document.getElementById('btn-zoom-in').addEventListener('click', () => {
     scale = Math.min(MAX_SCALE, scale * 1.2);
     drawField();
+    updateMouseCoords(lastMouseX, lastMouseY);
 });
 
 document.getElementById('btn-zoom-out').addEventListener('click', () => {
     scale = Math.max(MIN_SCALE, scale / 1.2);
     drawField();
+    updateMouseCoords(lastMouseX, lastMouseY);
 });
+
+// Mouse Wheel Zoom
+canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const zoomFactor = 1.1;
+    if (e.deltaY < 0) {
+        scale = Math.min(MAX_SCALE, scale * zoomFactor);
+    } else {
+        scale = Math.max(MIN_SCALE, scale / zoomFactor);
+    }
+    drawField();
+    updateMouseCoords(e.clientX, e.clientY);
+});
+
+// Drag and Drop (Pan)
+canvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    canvas.style.cursor = 'grabbing';
+});
+
+window.addEventListener('mousemove', (e) => {
+    updateMouseCoords(e.clientX, e.clientY);
+
+    if (!isDragging) return;
+    const dx = e.clientX - lastMouseX;
+    const dy = e.clientY - lastMouseY;
+    panX += dx;
+    panY += dy;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    drawField();
+});
+
+window.addEventListener('mouseup', () => {
+    isDragging = false;
+    canvas.style.cursor = 'grab';
+});
+
+function updateMouseCoords(clientX, clientY) {
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
+
+    // Calculate field coordinates from screen coordinates
+    // screenX = cx + fieldX * scale => fieldX = (screenX - cx) / scale
+    // screenY = cy - fieldY * scale => fieldY = -(screenY - cy) / scale
+
+    // We need coordinates relative to the canvas element, not window
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
+
+    const fieldX = Math.round((mouseX - cx) / scale);
+    const fieldY = Math.round(-(mouseY - cy) / scale);
+
+    if (mouseCoords) {
+        mouseCoords.textContent = `${fieldX}, ${fieldY}`;
+    }
+}
 
 // --- Field Drawing ---
 function drawField() {
     const w = canvas.width;
     const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
+    // Apply pan offset to center
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
 
     ctx.clearRect(0, 0, w, h);
 
@@ -55,8 +130,12 @@ function drawField() {
 }
 
 function drawRobot(x, y, theta, teamColor, id) {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const w = canvas.width;
+    const h = canvas.height;
+    // Apply pan offset
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
+
     const screenX = cx + x * 1000 * scale;
     const screenY = cy - y * 1000 * scale;
 
@@ -88,34 +167,138 @@ function drawRobot(x, y, theta, teamColor, id) {
 }
 
 function drawBall(x, y) {
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const w = canvas.width;
+    const h = canvas.height;
+    // Apply pan offset
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
+
     const screenX = cx + x * 1000 * scale;
     const screenY = cy - y * 1000 * scale;
 
     ctx.fillStyle = 'orange';
     ctx.beginPath();
-    ctx.arc(screenX, screenY, 43 * scale, 0, Math.PI * 2);
+    ctx.arc(screenX, screenY, 25 * scale, 0, Math.PI * 2);
     ctx.fill();
 }
 
 function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Resize based on #main container, not window
+    const main = document.getElementById('main');
+    if (main) {
+        canvas.width = main.clientWidth;
+        canvas.height = main.clientHeight;
+    } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    drawField();
 }
 window.addEventListener('resize', resize);
+// Initial resize
 resize();
+// Set initial cursor
+canvas.style.cursor = 'grab';
 
 // Listen for updates
+// Listen for updates
+const ppsHistory = new Array(50).fill(0);
+const ppsCanvas = document.getElementById('pps-graph');
+const ppsCtx = ppsCanvas ? ppsCanvas.getContext('2d') : null;
+
 listen('vision-update', (event) => {
     const payload = event.payload;
     if (payload.robots_blue) robots.blue = payload.robots_blue;
     if (payload.robots_yellow) robots.yellow = payload.robots_yellow;
     if (payload.ball) ball = payload.ball;
+
+    // Update PPS
+    if (payload.pps !== undefined) {
+        ppsHistory.shift();
+        ppsHistory.push(payload.pps);
+        drawPPSGraph();
+    }
+
+    lastVisionUpdate = Date.now();
+    if (visionStatus) {
+        visionStatus.textContent = `Connected (${payload.pps} PPS)`;
+        visionStatus.style.color = "#0f0";
+    }
 });
 
+function drawPPSGraph() {
+    if (!ppsCtx) return;
+    const w = ppsCanvas.width;
+    const h = ppsCanvas.height;
+    ppsCtx.clearRect(0, 0, w, h);
+
+    ppsCtx.strokeStyle = '#0f0';
+    ppsCtx.lineWidth = 1;
+    ppsCtx.beginPath();
+
+    const maxPPS = 100; // Expected max, or dynamic?
+    // Let's use dynamic max for scaling
+    // const currentMax = Math.max(...ppsHistory, 60); 
+    const currentMax = 100;
+
+    for (let i = 0; i < ppsHistory.length; i++) {
+        const x = (i / (ppsHistory.length - 1)) * w;
+        const y = h - (ppsHistory[i] / currentMax) * h;
+        if (i === 0) ppsCtx.moveTo(x, y);
+        else ppsCtx.lineTo(x, y);
+    }
+    ppsCtx.stroke();
+}
+
+// ... (PPS drawing logic)
+
 // --- Configuration Logic ---
+// --- Configuration Logic ---
+const visionIp = document.getElementById('vision-ip');
+const visionPort = document.getElementById('vision-port');
+// Removed visionLocalIp
+const btnReconnect = document.getElementById('btn-reconnect');
+
+btnReconnect.addEventListener('click', async () => {
+    try {
+        await invoke('update_vision_connection', {
+            ip: visionIp.value,
+            port: parseInt(visionPort.value)
+        });
+        console.log("Vision connection updated");
+        if (visionStatus) {
+            visionStatus.textContent = "Connecting...";
+            visionStatus.style.color = "#888";
+        }
+    } catch (e) {
+        console.error("Failed to update vision:", e);
+        alert("Failed to reconnect: " + e);
+    }
+});
+
+// Radio Config
+const radioPortName = document.getElementById('radio-port-name');
+const radioBaudRate = document.getElementById('radio-baud-rate');
+const useRadio = document.getElementById('use-radio');
+const btnUpdateRadio = document.getElementById('btn-update-radio');
+
+btnUpdateRadio.addEventListener('click', async () => {
+    try {
+        await invoke('update_radio_config', {
+            useRadio: useRadio.checked,
+            portName: radioPortName.value,
+            baudRate: parseInt(radioBaudRate.value)
+        });
+        console.log("Radio config updated");
+        alert("Radio configuration updated!");
+    } catch (e) {
+        console.error("Failed to update radio:", e);
+        alert("Failed to update radio: " + e);
+    }
+});
+
 const kfEnabled = document.getElementById('kf-enabled');
+// ... (rest of config logic)
 const kfPNoiseP = document.getElementById('kf-pnoise-p');
 const kfPNoiseV = document.getElementById('kf-pnoise-v');
 const kfMNoise = document.getElementById('kf-mnoise');
@@ -226,6 +409,14 @@ function loop() {
     robots.blue.forEach(r => drawRobot(r.x, r.y, r.theta, 'blue', r.id));
     robots.yellow.forEach(r => drawRobot(r.x, r.y, r.theta, 'yellow', r.id));
     drawBall(ball.x, ball.y);
+
+    // Vision connection timeout check
+    if (Date.now() - lastVisionUpdate > 1000) {
+        if (visionStatus) {
+            visionStatus.textContent = "Disconnected";
+            visionStatus.style.color = "#f00";
+        }
+    }
 
     requestAnimationFrame(loop);
 }
