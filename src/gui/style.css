@@ -33,7 +33,8 @@ body {
 }
 
 canvas {
-    background-color: #333; /* Dark Gray Field */
+    background-color: #A9A9A9;
+    /* Dark Gray Field */
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
 }
 
@@ -47,7 +48,8 @@ canvas {
     border-radius: 4px;
     font-family: monospace;
     font-size: 1.1em;
-    pointer-events: none; /* Let clicks pass through */
+    pointer-events: none;
+    /* Let clicks pass through */
 }
 
 /* Config Controls */

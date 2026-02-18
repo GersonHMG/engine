@@ -202,7 +202,9 @@ canvas.style.cursor = 'grab';
 
 // Listen for updates
 // Listen for updates
+// Listen for updates
 const ppsHistory = new Array(50).fill(0);
+let currentPPS = 0;
 const ppsCanvas = document.getElementById('pps-graph');
 const ppsCtx = ppsCanvas ? ppsCanvas.getContext('2d') : null;
 
@@ -212,19 +214,24 @@ listen('vision-update', (event) => {
     if (payload.robots_yellow) robots.yellow = payload.robots_yellow;
     if (payload.ball) ball = payload.ball;
 
-    // Update PPS
+    // Update PPS variable instead of pushing to history directly
     if (payload.pps !== undefined) {
-        ppsHistory.shift();
-        ppsHistory.push(payload.pps);
-        drawPPSGraph();
+        currentPPS = payload.pps;
     }
 
     lastVisionUpdate = Date.now();
     if (visionStatus) {
-        visionStatus.textContent = `Connected (${payload.pps} PPS)`;
+        visionStatus.textContent = `Connected (${currentPPS} PPS)`;
         visionStatus.style.color = "#0f0";
     }
 });
+
+// Update PPS graph periodically
+setInterval(() => {
+    ppsHistory.shift();
+    ppsHistory.push(currentPPS);
+    drawPPSGraph();
+}, 500);
 
 function drawPPSGraph() {
     if (!ppsCtx) return;
@@ -237,9 +244,9 @@ function drawPPSGraph() {
     ppsCtx.beginPath();
 
     const maxPPS = 100; // Expected max, or dynamic?
-    // Let's use dynamic max for scaling
-    // const currentMax = Math.max(...ppsHistory, 60); 
-    const currentMax = 100;
+    // Dynamic max scaling
+    const maxVal = Math.max(...ppsHistory, 10);
+    const currentMax = Math.max(100, maxVal);
 
     for (let i = 0; i < ppsHistory.length; i++) {
         const x = (i / (ppsHistory.length - 1)) * w;
