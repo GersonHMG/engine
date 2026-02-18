@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sysmic Engine Visualization</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="sidebar">
+        <h3>Configuration</h3>
+
+        <div class="section">
+            <h4>Vision Connection</h4>
+            <div class="row">
+                <label>IP:</label>
+                <input type="text" id="vision-ip" value="224.5.23.2">
+            </div>
+            <div class="row">
+                <label>Port:</label>
+                <input type="number" id="vision-port" value="10020">
+            </div>
+            <button id="btn-reconnect">Reconnect</button>
+        </div>
+
+        <div class="section">
+            <h4>Kalman Filter</h4>
+            <div class="row">
+                <label>Enabled:</label>
+                <input type="checkbox" id="kf-enabled" checked>
+            </div>
+            <div class="row">
+                <label>Proc. Noise (P):</label>
+                <input type="number" id="kf-pnoise-p" value="0.0000001" step="0.0000001">
+            </div>
+            <div class="row">
+                <label>Proc. Noise (V):</label>
+                <input type="number" id="kf-pnoise-v" value="0.0001" step="0.0001">
+            </div>
+            <div class="row">
+                <label>Meas. Noise:</label>
+                <input type="number" id="kf-mnoise" value="0.000001" step="0.000001">
+            </div>
+            <button id="btn-update-kf">Update KF</button>
+        </div>
+
+        <div class="section">
+            <h4>Xbox Control</h4>
+            <div class="row">
+                <label>Active:</label>
+                <input type="checkbox" id="xbox-active">
+            </div>
+            <div class="row">
+                <label>Team:</label>
+                <select id="xbox-team" style="background:#3c3c3c; color:white; border:1px solid #555;">
+                    <option value="0">Blue</option>
+                    <option value="1">Yellow</option>
+                </select>
+            </div>
+            <div class="row">
+                <label>Robot ID:</label>
+                <input type="number" id="xbox-id" value="0" min="0" max="15">
+            </div>
+            <div id="xbox-status" style="font-size:0.8em; color:#888; margin-top:5px;">No controller</div>
+        </div>
+
+        <div class="section">
+            <h4>Recording</h4>
+            <div class="row">
+                <input type="text" id="rec-filename" value="record.csv" style="width:100%">
+            </div>
+            <div style="display:flex; gap:5px;">
+                <button id="btn-record-start">Start</button>
+                <button id="btn-record-stop" class="stop" disabled>Stop</button>
+            </div>
+            <div id="rec-status" style="font-size:0.8em; color:#888; margin-top:5px;">Idle</div>
+        </div>
+    </div>
+
+    <div id="main">
+        <canvas id="fieldCanvas"></canvas>
+        <div id="zoom-controls">
+            <button id="btn-zoom-out">-</button>
+            <button id="btn-zoom-in">+</button>
+        </div>
+    </div>
+    <script src="main.js"></script>
+</body>
+
+</html>
