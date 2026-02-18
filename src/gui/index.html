@@ -22,7 +22,33 @@
                 <label>Port:</label>
                 <input type="number" id="vision-port" value="10020">
             </div>
+            <div class="row">
+                <label>Status:</label>
+                <span id="vision-status" style="color:#f00; font-weight:bold;">Disconnected</span>
+            </div>
+            <div class="row" style="flex-direction:column; align-items:flex-start; margin-top:5px;">
+                <label style="font-size:0.8em; color:#aaa;">PPS History:</label>
+                <canvas id="pps-graph" width="180" height="40"
+                    style="background:#222; border:1px solid #444; margin-top:2px;"></canvas>
+            </div>
             <button id="btn-reconnect">Reconnect</button>
+        </div>
+
+        <div class="section">
+            <h4>Radio Configuration</h4>
+            <div class="row">
+                <label>Port Name:</label>
+                <input type="text" id="radio-port-name" value="/dev/ttyUSB0">
+            </div>
+            <div class="row">
+                <label>Baud Rate:</label>
+                <input type="number" id="radio-baud-rate" value="115200">
+            </div>
+            <div class="row">
+                <label>Use Radio:</label>
+                <input type="checkbox" id="use-radio">
+            </div>
+            <button id="btn-update-radio">Update Radio</button>
         </div>
 
         <div class="section">
@@ -77,10 +103,12 @@
             </div>
             <div id="rec-status" style="font-size:0.8em; color:#888; margin-top:5px;">Idle</div>
         </div>
+
     </div>
 
     <div id="main">
         <canvas id="fieldCanvas"></canvas>
+        <div id="mouse-coords">0, 0</div>
         <div id="zoom-controls">
             <button id="btn-zoom-out">-</button>
             <button id="btn-zoom-in">+</button>

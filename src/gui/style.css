@@ -33,9 +33,21 @@ body {
 }
 
 canvas {
-    background-color: #006600;
-    /* Field Green */
+    background-color: #333; /* Dark Gray Field */
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+/* Mouse Coords Overlay */
+#mouse-coords {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 1.1em;
+    pointer-events: none; /* Let clicks pass through */
 }
 
 /* Config Controls */
