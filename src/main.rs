@@ -22,6 +22,7 @@ mod logger;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
+use serde::Deserialize;
 
 use tracing::{info, warn};
 use tauri::Manager; // Fix: Import Manager trait
@@ -31,6 +32,7 @@ use crate::lua_interface::LuaInterface;
 use crate::radio::Radio;
 use crate::world::World;
 use crate::logger::Logger;
+use crate::types::{PathTestState, Vec2D, MotionCommand};
 
 /// Load config.ini and return parsed settings as an `ini::Ini`.
 fn load_config() -> ini::Ini {
@@ -83,6 +85,7 @@ struct AppState {
     vision_state: Arc<Mutex<VisionState>>,
     logger: Arc<Mutex<Logger>>,
     radio: Arc<Mutex<Radio>>, // Needed for Xbox commands
+    path_test: Arc<Mutex<Option<PathTestState>>>,
 }
 
 #[tauri::command]
@@ -207,6 +210,13 @@ async fn send_robot_command(
     vy: f64,
     omega: f64,
 ) -> Result<(), String> {
+    // Clear any path test going on so manual control takes over
+    if (vx.abs() > 0.01 || vy.abs() > 0.01 || omega.abs() > 0.01) {
+        if let Ok(mut pt) = state.path_test.lock() {
+            *pt = None;
+        }
+    }
+
     let mut radio = state.radio.lock().unwrap();
     // Use radio/grsim to send command
     // radio struct has add_motion_command
@@ -219,6 +229,35 @@ async fn send_robot_command(
         angular: omega,
     };
     radio.add_motion_command(cmd);
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct PointReq {
+    x: f64,
+    y: f64,
+}
+
+#[tauri::command]
+async fn send_path_test(
+    state: tauri::State<'_, AppState>,
+    id: i32,
+    team: i32,
+    controller: String,
+    points: Vec<PointReq>,
+) -> Result<(), String> {
+    if points.is_empty() {
+        return Ok(());
+    }
+
+    let vec2d_points = points.into_iter().map(|p| Vec2D::new(p.x, p.y)).collect();
+    let path_state = PathTestState::new(id, team, controller, vec2d_points);
+
+    if let Ok(mut pt) = state.path_test.lock() {
+        *pt = Some(path_state);
+        info!("Started PathTest for robot {} team {} with {} points", id, team, pt.as_ref().unwrap().points.len());
+    }
+
     Ok(())
 }
 
@@ -239,7 +278,8 @@ async fn main() {
             update_radio_config,
             start_recording,
             stop_recording,
-            send_robot_command
+            send_robot_command,
+            send_path_test
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -276,12 +316,15 @@ async fn run_engine(app_handle: tauri::AppHandle) {
     // Initialize Logger
     let logger = Arc::new(Mutex::new(Logger::new(Arc::clone(&world), Arc::clone(&radio))));
 
+    let path_test = Arc::new(Mutex::new(None));
+
     // Register state
     app_handle.manage(AppState {
         world: world.clone(),
         vision_state: vision_state.clone(),
         logger: logger.clone(),
         radio: radio.clone(),
+        path_test: path_test.clone(),
     });
 
     // Spawn Vision receiver task
@@ -364,7 +407,73 @@ async fn run_engine(app_handle: tauri::AppHandle) {
             l.log_frame();
         }
 
-        // 2. Send radio commands
+        // 3. Evaluate Path Test Loop (Overrides Radio output with motion commands)
+        {
+            let mut pt_guard = path_test.lock().unwrap();
+            let mut radio_guard = radio.lock().unwrap();
+            
+            if let Some(ref mut pts) = *pt_guard {
+                let w = world.read().unwrap();
+                let robot = w.get_robot_state(pts.id, pts.team);
+                
+                // Active check: if robot isn't active, we might want to still try, 
+                // but let's just proceed with the returned state (fallback is default).
+                if true {
+                    if pts.current_target_idx < pts.points.len() {
+                        let target = pts.points[pts.current_target_idx];
+                        let diff = target - robot.position;
+                        let dist = diff.length();
+                        
+                        // Proceed to next point if close
+                        if dist < 0.15 {
+                            pts.current_target_idx += 1;
+                        } 
+                        
+                        if pts.current_target_idx < pts.points.len() {
+                            let curr_target = pts.points[pts.current_target_idx];
+
+                            if pts.controller == "bangbang" {
+                                let mut m = crate::motion::Motion::new();
+                                // We can feed all remaining points into bangbang
+                                let remaining = pts.points[pts.current_target_idx..].to_vec();
+                                // Fallback to direct path for simple visualization 
+                                let mut cmd = m.move_direct(&robot, curr_target);
+                                radio_guard.add_motion_command(cmd);
+                            } else {
+                                // Simple PID
+                                let kp = 2.0;
+                                let global_vel = (curr_target - robot.position) * kp;
+                                
+                                // Rotate to local frame
+                                let orientation = robot.orientation;
+                                let local_vx = global_vel.x * (-orientation).cos() - global_vel.y * (-orientation).sin();
+                                let local_vy = global_vel.x * (-orientation).sin() + global_vel.y * (-orientation).cos();
+                                
+                                // Max speed limit
+                                let max_v = 1.5;
+                                let mut final_vel = Vec2D::new(local_vx, local_vy);
+                                if final_vel.length() > max_v {
+                                    final_vel = final_vel.normalized() * max_v;
+                                }
+
+                                radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, final_vel.x, final_vel.y));
+                            }
+                        } else {
+                            // Target reached. Full stop.
+                            radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, 0.0, 0.0));
+                            *pt_guard = None; // clear path
+                            info!("Path following finished");
+                        }
+                    } else {
+                        // Finished
+                        radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, 0.0, 0.0));
+                        *pt_guard = None;
+                        info!("Path following finished");
+                    }
+                }
+            }
+        }
+        // 4. Send radio commands
         {
             let mut r = match radio.lock() {
                 Ok(guard) => guard,
