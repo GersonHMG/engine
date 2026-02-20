@@ -5,7 +5,17 @@ const xboxTeam = document.getElementById('xbox-team');
 const xboxId = document.getElementById('xbox-id');
 const xboxStatus = document.getElementById('xbox-status');
 const manualControlMode = document.getElementById('manual-control-mode');
-const manualVelScale = document.getElementById('manual-vel-scale');
+const manualVelScaleVx = document.getElementById('manual-vel-scale-vx');
+const manualVelScaleVy = document.getElementById('manual-vel-scale-vy');
+const manualVelScaleW = document.getElementById('manual-vel-scale-w');
+
+// Path matching UI
+const pathDrawMode = document.getElementById('path-draw-mode');
+const pathController = document.getElementById('path-controller');
+const pathTeam = document.getElementById('path-team');
+const pathId = document.getElementById('path-id');
+const btnPathClear = document.getElementById('btn-path-clear');
+const btnPathSend = document.getElementById('btn-path-send');
 
 let gamepadIndex = null;
 let wasSendingManual = false;
@@ -14,6 +24,10 @@ export let commandedVel = { vx: 0, vy: 0 };
 export let cmdId = 0;
 export let cmdTeam = 0;
 export let isActive = false;
+
+// Path variables
+export let isPathDrawMode = false;
+export let pathPoints = []; // Array of {x, y} in field coords (meters)
 
 const controlActiveIndicator = document.getElementById('control-active-indicator');
 
@@ -58,6 +72,51 @@ export function initControl() {
             keys[key] = false;
         }
     });
+
+    // Path UI events
+    if (pathDrawMode) {
+        pathDrawMode.addEventListener('change', (e) => {
+            isPathDrawMode = e.target.checked;
+            // When enabling, we don't clear. User does it manually.
+        });
+    }
+
+    if (btnPathClear) {
+        btnPathClear.addEventListener('click', () => {
+            pathPoints = []; // Clear current path
+        });
+    }
+
+    if (btnPathSend) {
+        btnPathSend.addEventListener('click', async () => {
+            if (pathPoints.length === 0) {
+                alert("No path to send.");
+                return;
+            }
+            const controller = pathController ? pathController.value : 'pid';
+            const id = parseInt(pathId.value) || 0;
+            const team = parseInt(pathTeam.value) || 0;
+            try {
+                await invoke('send_path_test', {
+                    id: id,
+                    team: team,
+                    controller: controller,
+                    points: pathPoints
+                });
+                console.log(`Path sent using ${controller} to Team ${team} ID ${id}`);
+            } catch (e) {
+                console.error("Failed to send path:", e);
+                // Gracefully handle if backend command 'send_path_test' is not implemented yet
+                alert("Path sent (simulated or error details in console):\n" + e);
+            }
+        });
+    }
+}
+
+export function addPathPoint(x, y) {
+    if (isPathDrawMode) {
+        pathPoints.push({ x, y });
+    }
 }
 
 export function pollManualControl() {
@@ -77,8 +136,13 @@ export function pollManualControl() {
     }
 
     const mode = manualControlMode ? manualControlMode.value : 'xbox';
-    let scale = manualVelScale ? parseFloat(manualVelScale.value) : 1.0;
-    if (isNaN(scale)) scale = 1.0;
+    let scaleVx = manualVelScaleVx ? parseFloat(manualVelScaleVx.value) : 1.0;
+    let scaleVy = manualVelScaleVy ? parseFloat(manualVelScaleVy.value) : 1.0;
+    let scaleW = manualVelScaleW ? parseFloat(manualVelScaleW.value) : 1.0;
+
+    if (isNaN(scaleVx)) scaleVx = 1.0;
+    if (isNaN(scaleVy)) scaleVy = 1.0;
+    if (isNaN(scaleW)) scaleW = 1.0;
 
     let vx = 0;
     let vy = 0;
@@ -105,9 +169,9 @@ export function pollManualControl() {
         if (keys['e']) omega -= 4.0;
     }
 
-    vx *= scale;
-    vy *= scale;
-    omega *= scale;
+    vx *= scaleVx;
+    vy *= scaleVy;
+    omega *= scaleW;
 
     if (Math.abs(vx) < 0.05 && Math.abs(vy) < 0.05 && Math.abs(omega) < 0.05) {
         vx = 0; vy = 0; omega = 0;

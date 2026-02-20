@@ -244,6 +244,29 @@ impl RobotCommand {
     }
 }
 
+// ─── PathTestState ──────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct PathTestState {
+    pub id: i32,
+    pub team: i32,
+    pub controller: String,
+    pub points: Vec<Vec2D>,
+    pub current_target_idx: usize,
+}
+
+impl PathTestState {
+    pub fn new(id: i32, team: i32, controller: String, points: Vec<Vec2D>) -> Self {
+        Self {
+            id,
+            team,
+            controller,
+            points,
+            current_target_idx: 0,
+        }
+    }
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 // main.js - Entry point
 import { initConfig } from './config.js';
-import { initControl, pollManualControl, commandedVel, cmdId, cmdTeam, isActive } from './control.js';
-import { initRendering, drawField, drawRobot, drawBall, ppsHistory, currentPPS, setCurrentPPS, drawPPSGraph } from './rendering.js';
+import { initControl, pollManualControl, commandedVel, cmdId, cmdTeam, isActive, pathPoints } from './control.js';
+import { initRendering, drawField, drawRobot, drawBall, drawPath, ppsHistory, currentPPS, setCurrentPPS, drawPPSGraph } from './rendering.js';
 
 const { listen } = window.__TAURI__.event;
 
@@ -48,6 +48,7 @@ setInterval(() => {
 function loop() {
     pollManualControl();
     drawField();
+    drawPath(pathPoints);
 
     const visualizeEl = document.getElementById('visualize-velocities');
     const visVels = visualizeEl && visualizeEl.checked;

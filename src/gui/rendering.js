@@ -2,6 +2,7 @@
 const canvas = document.getElementById('fieldCanvas');
 const ctx = canvas ? canvas.getContext('2d') : null;
 const mouseCoords = document.getElementById('mouse-coords');
+import { addPathPoint } from './control.js';
 
 const FIELD_LENGTH = 9000;
 const FIELD_WIDTH = 6000;
@@ -15,6 +16,7 @@ const MAX_SCALE = 0.5;
 export let panX = 0; // Offset in pixels
 export let panY = 0;
 let isDragging = false;
+let didDrag = false;
 let lastMouseX = 0;
 let lastMouseY = 0;
 
@@ -54,6 +56,7 @@ export function initRendering() {
 
     canvas.addEventListener('mousedown', (e) => {
         isDragging = true;
+        didDrag = false;
         lastMouseX = e.clientX;
         lastMouseY = e.clientY;
         canvas.style.cursor = 'grabbing';
@@ -63,8 +66,14 @@ export function initRendering() {
         updateMouseCoords(e.clientX, e.clientY);
 
         if (!isDragging) return;
+
         const dx = e.clientX - lastMouseX;
         const dy = e.clientY - lastMouseY;
+
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+            didDrag = true;
+        }
+
         panX += dx;
         panY += dy;
         lastMouseX = e.clientX;
@@ -72,7 +81,23 @@ export function initRendering() {
         drawField();
     });
 
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mouseup', (e) => {
+        if (isDragging && !didDrag && e.target === canvas) {
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = (w / 2) + panX;
+            const cy = (h / 2) + panY;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const fieldX = (mouseX - cx) / scale / 1000.0;
+            const fieldY = -(mouseY - cy) / scale / 1000.0;
+
+            addPathPoint(fieldX, fieldY);
+        }
+
         isDragging = false;
         canvas.style.cursor = 'grab';
     });
@@ -164,7 +189,7 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
     // Actual velocity (red) (Global coordinates)
     if (Math.abs(actualVx) > 0.05 || Math.abs(actualVy) > 0.05) {
         ctx.beginPath();
-        ctx.strokeStyle = '#f00'; // red
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.75)'; // red 75%
         ctx.lineWidth = 3;
         ctx.moveTo(screenX, screenY);
         ctx.lineTo(screenX + actualVx * VEL_SCALE, screenY - actualVy * VEL_SCALE);
@@ -174,7 +199,7 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
     // Commanded velocity (green) (Local coordinates)
     if (Math.abs(cmdVx) > 0.05 || Math.abs(cmdVy) > 0.05) {
         ctx.beginPath();
-        ctx.strokeStyle = '#0f0'; // green
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.75)'; // green 75%
         ctx.lineWidth = 3;
         ctx.moveTo(screenX, screenY);
 
@@ -184,6 +209,39 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
 
         ctx.lineTo(screenX + gVx * VEL_SCALE, screenY - gVy * VEL_SCALE);
         ctx.stroke();
+    }
+}
+
+export function drawPath(points) {
+    if (!ctx || points.length === 0) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
+
+    ctx.strokeStyle = 'magenta';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let i = 0; i < points.length; i++) {
+        const screenX = cx + points[i].x * 1000 * scale;
+        const screenY = cy - points[i].y * 1000 * scale;
+        if (i === 0) {
+            ctx.moveTo(screenX, screenY);
+        } else {
+            ctx.lineTo(screenX, screenY);
+        }
+    }
+    ctx.stroke();
+
+    // Draw waypoints
+    ctx.fillStyle = 'magenta';
+    for (let i = 0; i < points.length; i++) {
+        const screenX = cx + points[i].x * 1000 * scale;
+        const screenY = cy - points[i].y * 1000 * scale;
+        ctx.beginPath();
+        ctx.arc(screenX, screenY, 4, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 

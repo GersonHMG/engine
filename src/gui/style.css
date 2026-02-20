@@ -3,10 +3,17 @@ body {
     overflow: hidden;
     background-color: #222;
     display: flex;
-    /* Flex container for sidebar + main */
+    flex-direction: column;
+    /* Flex container for top-nav + content */
     height: 100vh;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: white;
+}
+
+#content-wrapper {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
 }
 
 #sidebar {
@@ -27,35 +34,38 @@ body {
     height: 50px;
     background: #1e1e1e;
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     gap: 20px;
+    padding: 0 20px;
     border-bottom: 1px solid #333;
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .nav-btn {
     background: transparent;
     color: #ccc;
     border: none;
-    padding: 10px 20px;
+    padding: 0 20px;
+    height: 100%;
     cursor: pointer;
     font-weight: bold;
     font-size: 1.1em;
-    border-radius: 4px;
     transition: all 0.2s;
     display: flex;
     align-items: center;
     gap: 8px;
+    border-bottom: 3px solid transparent;
 }
 
 .nav-btn.active {
-    background: #0e639c;
     color: white;
+    border-bottom: 3px solid #0e639c;
 }
 
 .nav-btn:hover:not(.active) {
-    background: #333;
+    background: #2d2d2d;
     color: white;
 }
 
