@@ -25,6 +25,8 @@ struct RobotUpdate {
     x: f64,
     y: f64,
     theta: f64,
+    vx: f64,
+    vy: f64,
 }
 
 // VisionCommand enum
@@ -168,6 +170,8 @@ pub async fn run_vision(
                                                  x: robot.position.x,
                                                  y: robot.position.y,
                                                  theta: robot.orientation,
+                                                 vx: robot.velocity.x,
+                                                 vy: robot.velocity.y,
                                              });
                                          }
                                     }
@@ -179,6 +183,8 @@ pub async fn run_vision(
                                                  x: robot.position.x,
                                                  y: robot.position.y,
                                                  theta: robot.orientation,
+                                                 vx: robot.velocity.x,
+                                                 vy: robot.velocity.y,
                                              });
                                          }
                                     }
