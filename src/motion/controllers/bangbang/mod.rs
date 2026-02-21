@@ -253,7 +253,7 @@ impl BangBangControl {
 
     fn is_near_to_break(&self, robot: &RobotState, point: &Vec2D) -> bool {
         let position = robot.position;
-        let velocity = robot.position; // Note: matches C++ bug (uses position twice)
+        let velocity = robot.velocity; 
 
         let dx_brake = (velocity.x * velocity.x) / (2.0 * self.a_max);
         let dy_brake = (velocity.y * velocity.y) / (2.0 * self.a_max);
