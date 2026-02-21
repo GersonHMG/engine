@@ -12,7 +12,7 @@ nalgebra = "0.33"
 mlua = { version = "0.10", features = ["lua54", "vendored", "send"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "1", features = ["shell-open"] }
+tauri = { version = "1", features = ["shell-open", "window-all"] }
 rust-ini = "0.21"
 tracing = "0.1"
 tracing-subscriber = "0.3"
