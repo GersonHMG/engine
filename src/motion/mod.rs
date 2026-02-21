@@ -1,10 +1,13 @@
 // motion.rs — High-level motion control
 // Port of motion/motion.cpp
 
+pub mod controllers;
+pub mod pathplanning;
+
 use crate::environment::Environment;
-use crate::path_planner::FastPathPlanner;
-use crate::pid::PID;
-use crate::trajectory::BangBangControl;
+use crate::motion::pathplanning::FastPathPlanner;
+use crate::motion::controllers::pid::pid::PID;
+use crate::motion::controllers::bangbang::BangBangControl;
 use crate::types::{MotionCommand, RobotState, Vec2D};
 use crate::world::World;
 
