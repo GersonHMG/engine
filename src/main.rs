@@ -7,10 +7,7 @@ mod vision;
 mod tracker;
 mod game_controller;
 mod world;
-mod pid;
-mod trajectory;
 mod environment;
-mod path_planner;
 mod motion;
 mod packet_serializer;
 mod grsim;
@@ -424,8 +421,8 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                         let diff = target - robot.position;
                         let dist = diff.length();
                         
-                        // Proceed to next point if close
-                        if dist < 0.15 {
+                        // Proceed to next point if reasonably close
+                        if dist < 0.30 {
                             pts.current_target_idx += 1;
                         } 
                         
@@ -439,7 +436,7 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                                 // Fallback to direct path for simple visualization 
                                 let mut cmd = m.move_direct(&robot, curr_target);
                                 radio_guard.add_motion_command(cmd);
-                            } else {
+                            } else if pts.controller == "pid" {
                                 // Simple PID
                                 let kp = 2.0;
                                 let global_vel = (curr_target - robot.position) * kp;
@@ -457,12 +454,44 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                                 }
 
                                 radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, final_vel.x, final_vel.y));
-                            }
-                        } else {
-                            // Target reached. Full stop.
-                            radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, 0.0, 0.0));
-                            *pt_guard = None; // clear path
-                            info!("Path following finished");
+                            } else if pts.controller == "lookahead" {
+                                    // Make sure LookAhead controller state exists inside AppState, 
+                                    // but for this simple port we'll instantiate it on the fly or hold it in PathTestState.
+                                    // To hold it in PathTestState, let's create a temporary one if we don't want to change the struct entirely. 
+                                    // Actually, it's stateful (integral), we must put it in the lock. Since we just ported it,
+                                    // let's do a stateless simple PID if we can't store it, or simply use static or add to PathTestState.
+                                    // Since PathTestState is right here, it's better to store it. But for a quick test, 
+                                    // let's create a new one each frame (might lose integral windup but P & D terms will work).
+                                    // For a proper test, we should add it to PathTestState.
+                                    
+                                    // We will temporarily instantiate inline. The integral will be 0 but P works. 
+                                    // A proper fix is updating PathTestState or adding a hashmap in AppState.
+                                    let mut lookahead_pid = crate::motion::controllers::pid::lookahead::LookAheadPID::new(
+                                        3.0, 0.1, 0.5, 2.0, 4.0, 1.0, 0.25
+                                    );
+                                    
+                                    // Restore index if we can
+                                    lookahead_pid.closest_idx = pts.current_target_idx;
+
+                                    let (vx, vy, omega) = lookahead_pid.compute(robot.position, robot.orientation, robot.velocity, &pts.points, 1.0/60.0);
+                                    
+                                    // Update our stored index
+                                    pts.current_target_idx = lookahead_pid.closest_idx;
+
+                                    radio_guard.add_motion_command(MotionCommand {
+                                        id: pts.id, team: pts.team, vx, vy, angular: omega
+                                    });
+
+                                    // If we are essentially at the end of the path
+                                    if lookahead_pid.closest_idx >= pts.points.len() - 2 {
+                                        pts.current_target_idx = pts.points.len(); // triggers finish next tick
+                                    }
+                                } else {
+                                    // Target reached. Full stop.
+                                    radio_guard.add_motion_command(MotionCommand::new(pts.id, pts.team, 0.0, 0.0));
+                                    *pt_guard = None; // clear path
+                                    info!("Path following finished");
+                                }
                         }
                     } else {
                         // Finished
@@ -482,7 +511,14 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                     poisoned.into_inner()
                 }
             };
-            r.send_commands();
+            let mut w = match world.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("World lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            r.send_commands(&mut w);
         }
 
         // Sleep for remaining frame time

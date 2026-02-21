@@ -79,6 +79,16 @@ impl World {
         self.ball.velocity = velocity;
     }
 
+    pub fn set_commanded_velocity(&mut self, id: i32, team: i32, cmd_v: Vec2D) {
+        let robots = match team {
+            0 => &mut self.blue_robots,
+            _ => &mut self.yellow_robots,
+        };
+        if let Some(robot) = robots.get_mut(&id) {
+            robot.commanded_velocity = cmd_v;
+        }
+    }
+
     pub fn to_json(&self) -> serde_json::Value {
         let mut robots_arr = Vec::new();
 
@@ -91,6 +101,7 @@ impl World {
                 "team": "blue",
                 "position": { "x": robot.position.x, "y": robot.position.y },
                 "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
+                "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
                 "orientation": robot.orientation,
             }));
         }
@@ -104,6 +115,7 @@ impl World {
                 "team": "yellow",
                 "position": { "x": robot.position.x, "y": robot.position.y },
                 "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
+                "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
                 "orientation": robot.orientation,
             }));
         }

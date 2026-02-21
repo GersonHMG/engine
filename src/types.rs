@@ -105,6 +105,7 @@ pub struct RobotState {
     pub team: i32,
     pub position: Vec2D,
     pub velocity: Vec2D,
+    pub commanded_velocity: Vec2D,
     pub angular_velocity: f64,
     pub orientation: f64,
     pub active: bool,
@@ -118,6 +119,7 @@ impl Default for RobotState {
             team: 0,
             position: Vec2D::default(),
             velocity: Vec2D::default(),
+            commanded_velocity: Vec2D::default(),
             angular_velocity: 0.0,
             orientation: 0.0,
             active: false,
@@ -125,6 +127,8 @@ impl Default for RobotState {
         }
     }
 }
+
+
 
 impl RobotState {
     pub fn new(id: i32, team: i32) -> Self {
