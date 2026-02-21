@@ -168,6 +168,21 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
     ctx.arc(0, 0, 90 * scale, 0, Math.PI * 2);
     ctx.fill();
 
+    // Omni Wheels
+    ctx.fillStyle = 'black';
+    const wheelW = 30 * scale;
+    const wheelH = 10 * scale;
+    const wheelDist = 85 * scale;
+    const angles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+
+    angles.forEach(a => {
+        ctx.save();
+        ctx.rotate(a);
+        ctx.translate(wheelDist, 0);
+        ctx.fillRect(-wheelH / 2, -wheelW / 2, wheelH, wheelW);
+        ctx.restore();
+    });
+
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -189,17 +204,23 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
     // Actual velocity (red) (Global coordinates)
     if (Math.abs(actualVx) > 0.05 || Math.abs(actualVy) > 0.05) {
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255, 0, 0, 0.75)'; // red 75%
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // red 50%
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
         ctx.lineWidth = 3;
         ctx.moveTo(screenX, screenY);
-        ctx.lineTo(screenX + actualVx * VEL_SCALE, screenY - actualVy * VEL_SCALE);
+        let endX = screenX + actualVx * VEL_SCALE;
+        let endY = screenY - actualVy * VEL_SCALE;
+        ctx.lineTo(endX, endY);
         ctx.stroke();
+
+        ctx.fillRect(endX - 3, endY - 3, 6, 6);
     }
 
     // Commanded velocity (green) (Local coordinates)
     if (Math.abs(cmdVx) > 0.05 || Math.abs(cmdVy) > 0.05) {
         ctx.beginPath();
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.75)'; // green 75%
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)'; // green 50%
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.5)';
         ctx.lineWidth = 3;
         ctx.moveTo(screenX, screenY);
 
@@ -207,8 +228,12 @@ export function drawRobot(x, y, theta, teamColor, id, actualVx = 0, actualVy = 0
         const gVx = cmdVx * Math.cos(theta) - cmdVy * Math.sin(theta);
         const gVy = cmdVx * Math.sin(theta) + cmdVy * Math.cos(theta);
 
-        ctx.lineTo(screenX + gVx * VEL_SCALE, screenY - gVy * VEL_SCALE);
+        let endX = screenX + gVx * VEL_SCALE;
+        let endY = screenY - gVy * VEL_SCALE;
+        ctx.lineTo(endX, endY);
         ctx.stroke();
+
+        ctx.fillRect(endX - 3, endY - 3, 6, 6);
     }
 }
 
@@ -259,6 +284,9 @@ export function drawBall(x, y) {
     ctx.beginPath();
     ctx.arc(screenX, screenY, 25 * scale, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 }
 
 export function resize() {

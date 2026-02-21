@@ -118,9 +118,21 @@ impl Radio {
         }
     }
 
-    pub fn send_commands(&mut self) {
+    pub fn send_commands(&mut self, world: &mut crate::world::World) {
         if self.command_map.is_empty() {
+            // Also reset commanded velocities to 0 in UI for active robots maybe?
+            // Usually, GUI will just hold the last or we can clear them. 
+            // In our case, leaving it alone or zeroing it is a design choice.
             return;
+        }
+
+        // Inject current commands to World for GUI/Log before sending
+        for cmd in self.command_map.values() {
+            world.set_commanded_velocity(
+                cmd.id,
+                cmd.team,
+                crate::types::Vec2D::new(cmd.motion.vx, cmd.motion.vy)
+            );
         }
 
         if self.use_radio {
