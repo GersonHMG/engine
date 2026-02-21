@@ -1,4 +1,4 @@
-// pid.rs — PID controller
+﻿// pid.rs ΓÇö PID controller
 // Port of motion/pid/pid.cpp
 
 /// Simple PID controller.
