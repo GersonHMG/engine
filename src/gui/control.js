@@ -1,4 +1,5 @@
 const { invoke } = window.__TAURI__.tauri;
+const { WebviewWindow } = window.__TAURI__.window;
 
 const xboxActive = document.getElementById('xbox-active');
 const xboxTeam = document.getElementById('xbox-team');
@@ -96,11 +97,33 @@ export function initControl() {
             const controller = pathController ? pathController.value : 'lookahead';
             const id = parseInt(pathId.value) || 0;
             const team = parseInt(pathTeam.value) || 0;
+
+            // Read controller params from localStorage
+            const getParam = (key, defaultVal) => {
+                const val = localStorage.getItem(key);
+                return val !== null ? parseFloat(val) : defaultVal;
+            };
+
+            const params = {
+                lat_kp: getParam('ctrl-lat-kp', 3.0),
+                lat_ki: getParam('ctrl-lat-ki', 0.1),
+                lat_kd: getParam('ctrl-lat-kd', 0.5),
+                speed_kp: getParam('ctrl-speed-kp', 2.0),
+                head_kp: getParam('ctrl-head-kp', 4.0),
+                target_speed: getParam('ctrl-target-speed', 1.0),
+                lookahead: getParam('ctrl-lookahead', 0.25),
+                bangbang_a_max: getParam('ctrl-bb-amax', 2.5),
+                bangbang_v_max: getParam('ctrl-bb-vmax', 5.0),
+                pid_kp: getParam('ctrl-pid-kp', 2.0),
+                pid_max_v: getParam('ctrl-pid-maxv', 1.5),
+            };
+
             try {
                 await invoke('send_path_test', {
                     id: id,
                     team: team,
                     controller: controller,
+                    params: params,
                     points: pathPoints
                 });
                 console.log(`Path sent using ${controller} to Team ${team} ID ${id}`);
@@ -110,6 +133,34 @@ export function initControl() {
                 alert("Path sent (simulated or error details in console):\n" + e);
             }
         });
+    }
+
+    // Modal logic is no longer here because elements might not be loaded when initControl is called.
+}
+
+export function initModal() {
+    const btnEditParams = document.getElementById('btn-edit-params');
+    const pathController = document.getElementById('path-controller');
+
+    if (btnEditParams) {
+        btnEditParams.addEventListener('click', () => {
+            const controller = pathController ? pathController.value : 'lookahead';
+            console.log("Opening hyperparameters window for", controller, "...");
+            const webview = new WebviewWindow('hyperparameters', {
+                url: `hyperparameters.html?controller=${encodeURIComponent(controller)}`,
+                title: `Settings: ${controller}`,
+                width: 380,
+                height: 520,
+                resizable: false,
+                maximizable: false
+            });
+
+            webview.once('tauri://error', function (e) {
+                console.error('Error creating window. It might already exist.', e);
+            });
+        });
+    } else {
+        console.error("Could not find btnEditParams element");
     }
 }
 

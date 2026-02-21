@@ -255,16 +255,18 @@ pub struct PathTestState {
     pub id: i32,
     pub team: i32,
     pub controller: String,
+    pub params: crate::ControllerParams,
     pub points: Vec<Vec2D>,
     pub current_target_idx: usize,
 }
 
 impl PathTestState {
-    pub fn new(id: i32, team: i32, controller: String, points: Vec<Vec2D>) -> Self {
+    pub fn new(id: i32, team: i32, controller: String, params: crate::ControllerParams, points: Vec<Vec2D>) -> Self {
         Self {
             id,
             team,
             controller,
+            params,
             points,
             current_target_idx: 0,
         }
