@@ -154,6 +154,7 @@ fn normalize_angle(mut angle: f64) -> f64 {
 /// Tracker: maintains per-robot EKF instances keyed by (team, id)
 pub struct Tracker {
     filters: HashMap<(i32, i32), ExtendedKalmanFilter>,
+    last_states: HashMap<(i32, i32), (f64, f64, f64)>, // (x, y, theta)
     enabled: bool,
     process_noise_p: f64,
     process_noise_v: f64,
@@ -164,6 +165,7 @@ impl Tracker {
     pub fn new() -> Self {
         Self {
             filters: HashMap::new(),
+            last_states: HashMap::new(),
             enabled: true,
             process_noise_p: 1e-7,
             process_noise_v: 1e-4,
@@ -183,7 +185,18 @@ impl Tracker {
         dt: f64,
     ) -> (f64, f64, f64, f64, f64, f64) {
         if !self.enabled {
-            return (x, y, theta, 0.0, 0.0, 0.0);
+            // Calculate simple derivative velocity
+            let (last_x, last_y, last_theta) = self.last_states.get(&(team, id)).copied().unwrap_or((x, y, theta));
+            let vx = if dt > 0.0 { (x - last_x) / dt } else { 0.0 };
+            let vy = if dt > 0.0 { (y - last_y) / dt } else { 0.0 };
+            
+            let mut diff_theta = theta - last_theta;
+            diff_theta = normalize_angle(diff_theta);
+            let omega = if dt > 0.0 { diff_theta / dt } else { 0.0 };
+            
+            self.last_states.insert((team, id), (x, y, theta));
+            
+            return (x, y, theta, vx, vy, omega);
         }
 
         let process_noise_p = self.process_noise_p;
@@ -195,16 +208,10 @@ impl Tracker {
             .entry((team, id))
             .or_insert_with(|| Self::create_initial_filter(process_noise_p, process_noise_v, measurement_noise));
 
-        // Update filter parameters if they changed (simplification: always update or check diff)
-        // For now, let's just update Q and R every step or when requested. 
-        // To be efficient, we might want to only do this when config changes.
-        // But since we don't track "dirty" state easily here without more logic, let's just updating Q and R diagonal is cheap.
-        
         filter.set_noise_parameters(process_noise_p, process_noise_v, measurement_noise);
 
         let (_, _, _, vx, vy, omega) = filter.filter_pose(x, y, theta, dt);
 
-        // Return raw pose + filtered velocity (matches C++ behavior)
         (x, y, theta, vx, vy, omega)
     }
 

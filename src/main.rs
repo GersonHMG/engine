@@ -229,6 +229,21 @@ async fn send_robot_command(
     Ok(())
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct ControllerParams {
+    pub lat_kp: f64,
+    pub lat_ki: f64,
+    pub lat_kd: f64,
+    pub speed_kp: f64,
+    pub head_kp: f64,
+    pub target_speed: f64,
+    pub lookahead: f64,
+    pub bangbang_a_max: f64,
+    pub bangbang_v_max: f64,
+    pub pid_kp: f64,
+    pub pid_max_v: f64,
+}
+
 #[derive(Deserialize)]
 struct PointReq {
     x: f64,
@@ -241,6 +256,7 @@ async fn send_path_test(
     id: i32,
     team: i32,
     controller: String,
+    params: ControllerParams,
     points: Vec<PointReq>,
 ) -> Result<(), String> {
     if points.is_empty() {
@@ -248,7 +264,7 @@ async fn send_path_test(
     }
 
     let vec2d_points = points.into_iter().map(|p| Vec2D::new(p.x, p.y)).collect();
-    let path_state = PathTestState::new(id, team, controller, vec2d_points);
+    let path_state = PathTestState::new(id, team, controller, params, vec2d_points);
 
     if let Ok(mut pt) = state.path_test.lock() {
         *pt = Some(path_state);
@@ -421,24 +437,31 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                         let diff = target - robot.position;
                         let dist = diff.length();
                         
-                        // Proceed to next point if reasonably close
+                        // Proceed to next point if reasonably close, but don't finish if it's the last point.
                         if dist < 0.30 {
-                            pts.current_target_idx += 1;
+                            if pts.current_target_idx < pts.points.len() - 1 {
+                                pts.current_target_idx += 1;
+                            }
                         } 
                         
                         if pts.current_target_idx < pts.points.len() {
                             let curr_target = pts.points[pts.current_target_idx];
 
                             if pts.controller == "bangbang" {
-                                let mut m = crate::motion::Motion::new();
-                                // We can feed all remaining points into bangbang
+                                // Instantiate BangBang inline with our requested config
+                                let bangbang = crate::motion::controllers::bangbang::BangBangControl::new(
+                                    pts.params.bangbang_a_max, 
+                                    pts.params.bangbang_v_max
+                                );
+
                                 let remaining = pts.points[pts.current_target_idx..].to_vec();
-                                // Fallback to direct path for simple visualization 
-                                let mut cmd = m.move_direct(&robot, curr_target);
+                                let delta = 1.0 / 60.0;
+                                let cmd = bangbang.compute_motion(&robot, remaining, delta);
                                 radio_guard.add_motion_command(cmd);
+
                             } else if pts.controller == "pid" {
                                 // Simple PID
-                                let kp = 2.0;
+                                let kp = pts.params.pid_kp; // using pid_kp for simple PID
                                 let global_vel = (curr_target - robot.position) * kp;
                                 
                                 // Rotate to local frame
@@ -447,7 +470,7 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                                 let local_vy = global_vel.x * (-orientation).sin() + global_vel.y * (-orientation).cos();
                                 
                                 // Max speed limit
-                                let max_v = 1.5;
+                                let max_v = pts.params.pid_max_v;
                                 let mut final_vel = Vec2D::new(local_vx, local_vy);
                                 if final_vel.length() > max_v {
                                     final_vel = final_vel.normalized() * max_v;
@@ -467,7 +490,13 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                                     // We will temporarily instantiate inline. The integral will be 0 but P works. 
                                     // A proper fix is updating PathTestState or adding a hashmap in AppState.
                                     let mut lookahead_pid = crate::motion::controllers::pid::lookahead::LookAheadPID::new(
-                                        3.0, 0.1, 0.5, 2.0, 4.0, 1.0, 0.25
+                                        pts.params.lat_kp, 
+                                        pts.params.lat_ki, 
+                                        pts.params.lat_kd, 
+                                        pts.params.speed_kp, 
+                                        pts.params.head_kp, 
+                                        pts.params.target_speed, 
+                                        pts.params.lookahead
                                     );
                                     
                                     // Restore index if we can
@@ -478,13 +507,14 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                                     // Update our stored index
                                     pts.current_target_idx = lookahead_pid.closest_idx;
 
-                                    radio_guard.add_motion_command(MotionCommand {
-                                        id: pts.id, team: pts.team, vx, vy, angular: omega
-                                    });
-
-                                    // If we are essentially at the end of the path
-                                    if lookahead_pid.closest_idx >= pts.points.len() - 2 {
-                                        pts.current_target_idx = pts.points.len(); // triggers finish next tick
+                                    if vx.abs() > 0.05 || vy.abs() > 0.05 || omega.abs() > 0.05 {
+                                        radio_guard.add_motion_command(MotionCommand {
+                                            id: pts.id,
+                                            team: pts.team,
+                                            vx,
+                                            vy,
+                                            angular: omega,
+                                        });
                                     }
                                 } else {
                                     // Target reached. Full stop.
