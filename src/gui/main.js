@@ -1,7 +1,7 @@
 // main.js - Entry point
 import { initConfig } from './config.js';
-import { initControl, pollManualControl, commandedVel, cmdId, cmdTeam, isActive, pathPoints } from './control.js';
-import { initRendering, drawField, drawRobot, drawBall, drawPath, ppsHistory, currentPPS, setCurrentPPS, drawPPSGraph } from './rendering.js';
+import { initControl, pollManualControl, commandedVel, cmdId, cmdTeam, isActive, pathPoints, initModal } from './control.js';
+import { initRendering, drawField, drawRobot, drawRobotTrace, drawBall, drawPath, ppsHistory, currentPPS, setCurrentPPS, drawPPSGraph } from './rendering.js';
 
 const { listen } = window.__TAURI__.event;
 
@@ -13,10 +13,15 @@ let robots = {
 };
 let ball = { x: 0, y: 0 };
 let lastVisionUpdate = 0;
+let robotTrace = [];
+let lastTraceId = -1;
+let lastTraceTeam = -1;
+let lastTraceEnabled = false;
 
 // Initialize modules
 initConfig();
 initControl();
+initModal();
 initRendering();
 
 // Listen for vision updates
@@ -53,13 +58,32 @@ function loop() {
     const visualizeEl = document.getElementById('visualize-velocities');
     const visVels = visualizeEl && visualizeEl.checked;
 
+    // Trace logic
+    const pathTraceEl = document.getElementById('path-trace-mode');
+    const isTraceEnabled = pathTraceEl && pathTraceEl.checked;
+    const traceId = parseInt(document.getElementById('path-id')?.value || 0);
+    const traceTeamStr = document.getElementById('path-team')?.value || "0";
+    const traceTeam = parseInt(traceTeamStr);
+
+    // Clear trace if disabled or changed target
+    if (!isTraceEnabled || traceId !== lastTraceId || traceTeam !== lastTraceTeam) {
+        robotTrace = [];
+    }
+    lastTraceEnabled = isTraceEnabled;
+    lastTraceId = traceId;
+    lastTraceTeam = traceTeam;
+
     robots.blue.forEach(r => {
         let isControlled = true; // Use server's command knowledge instead of purely client state
         drawRobot(r.x, r.y, r.theta, 'blue', r.id,
             visVels ? r.vx : 0,
             visVels ? r.vy : 0,
-            (visVels && isControlled && r.cmd_v) ? r.cmd_v.x : 0,
-            (visVels && isControlled && r.cmd_v) ? r.cmd_v.y : 0);
+            (visVels && isControlled && r.cmd_vx) ? r.cmd_vx : 0,
+            (visVels && isControlled && r.cmd_vy) ? r.cmd_vy : 0);
+
+        if (isTraceEnabled && traceTeam === 0 && r.id === traceId) {
+            robotTrace.push({ x: r.x, y: r.y });
+        }
     });
 
     robots.yellow.forEach(r => {
@@ -67,9 +91,17 @@ function loop() {
         drawRobot(r.x, r.y, r.theta, 'yellow', r.id,
             visVels ? r.vx : 0,
             visVels ? r.vy : 0,
-            (visVels && isControlled && r.cmd_v) ? r.cmd_v.x : 0,
-            (visVels && isControlled && r.cmd_v) ? r.cmd_v.y : 0);
+            (visVels && isControlled && r.cmd_vx) ? r.cmd_vx : 0,
+            (visVels && isControlled && r.cmd_vy) ? r.cmd_vy : 0);
+
+        if (isTraceEnabled && traceTeam === 1 && r.id === traceId) {
+            robotTrace.push({ x: r.x, y: r.y });
+        }
     });
+
+    if (isTraceEnabled && robotTrace.length > 0) {
+        drawRobotTrace(robotTrace);
+    }
 
     drawBall(ball.x, ball.y);
 

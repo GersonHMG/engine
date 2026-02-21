@@ -270,6 +270,29 @@ export function drawPath(points) {
     }
 }
 
+export function drawRobotTrace(tracePoints) {
+    if (!ctx || tracePoints.length === 0) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = (w / 2) + panX;
+    const cy = (h / 2) + panY;
+
+    ctx.strokeStyle = 'cyan';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let i = 0; i < tracePoints.length; i++) {
+        const screenX = cx + tracePoints[i].x * 1000 * scale;
+        const screenY = cy - tracePoints[i].y * 1000 * scale;
+        if (i === 0) {
+            ctx.moveTo(screenX, screenY);
+        } else {
+            ctx.lineTo(screenX, screenY);
+        }
+    }
+    ctx.stroke();
+}
+
 export function drawBall(x, y) {
     if (!ctx) return;
     const w = canvas.width;
@@ -285,7 +308,7 @@ export function drawBall(x, y) {
     ctx.arc(screenX, screenY, 25 * scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = 'black';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.5;
     ctx.stroke();
 }
 

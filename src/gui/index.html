@@ -143,12 +143,22 @@
                     <input type="number" id="path-id" value="0" min="0" max="15">
                 </div>
                 <div class="row">
+                    <label>Trace Path:</label>
+                    <input type="checkbox" id="path-trace-mode">
+                </div>
+                <div class="row">
                     <label>Controller:</label>
                     <select id="path-controller" style="background:#3c3c3c; color:white; border:1px solid #555;">
                         <option value="pid">PID</option>
                         <option value="lookahead">LookAhead PID</option>
                         <option value="bangbang">BangBangTrajectories</option>
                     </select>
+                </div>
+                <div style="margin-top: 10px; margin-bottom: 10px;">
+                    <button id="btn-edit-params"
+                        style="background-color:#4a4a4a; display:flex; justify-content:center; align-items:center; gap:5px;">
+                        <span>⚙️ Settings</span>
+                    </button>
                 </div>
                 <div style="display:flex; gap:5px; margin-top:5px;">
                     <button id="btn-path-clear">Clear Path</button>
