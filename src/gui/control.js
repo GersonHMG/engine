@@ -93,7 +93,7 @@ export function initControl() {
                 alert("No path to send.");
                 return;
             }
-            const controller = pathController ? pathController.value : 'pid';
+            const controller = pathController ? pathController.value : 'lookahead';
             const id = parseInt(pathId.value) || 0;
             const team = parseInt(pathTeam.value) || 0;
             try {

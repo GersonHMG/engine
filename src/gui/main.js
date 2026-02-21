@@ -54,21 +54,21 @@ function loop() {
     const visVels = visualizeEl && visualizeEl.checked;
 
     robots.blue.forEach(r => {
-        let isControlled = isActive && cmdTeam === 0 && cmdId === r.id;
+        let isControlled = true; // Use server's command knowledge instead of purely client state
         drawRobot(r.x, r.y, r.theta, 'blue', r.id,
             visVels ? r.vx : 0,
             visVels ? r.vy : 0,
-            (visVels && isControlled) ? commandedVel.vx : 0,
-            (visVels && isControlled) ? commandedVel.vy : 0);
+            (visVels && isControlled && r.cmd_v) ? r.cmd_v.x : 0,
+            (visVels && isControlled && r.cmd_v) ? r.cmd_v.y : 0);
     });
 
     robots.yellow.forEach(r => {
-        let isControlled = isActive && cmdTeam === 1 && cmdId === r.id;
+        let isControlled = true;
         drawRobot(r.x, r.y, r.theta, 'yellow', r.id,
             visVels ? r.vx : 0,
             visVels ? r.vy : 0,
-            (visVels && isControlled) ? commandedVel.vx : 0,
-            (visVels && isControlled) ? commandedVel.vy : 0);
+            (visVels && isControlled && r.cmd_v) ? r.cmd_v.x : 0,
+            (visVels && isControlled && r.cmd_v) ? r.cmd_v.y : 0);
     });
 
     drawBall(ball.x, ball.y);
@@ -78,6 +78,20 @@ function loop() {
         if (visionStatus) {
             visionStatus.textContent = "Disconnected";
             visionStatus.style.color = "#f00";
+        }
+
+        // Draw gray overlay on canvas
+        const canvas = document.getElementById('fieldCanvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(128, 128, 128, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'white';
+            ctx.font = '30px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('No Vision Connected', canvas.width / 2, canvas.height / 2);
         }
     }
 
