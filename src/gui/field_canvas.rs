@@ -3,6 +3,7 @@
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Canvas, Frame, Geometry, Path, Stroke, Text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
+use std::cell::Cell;
 
 
 /// Data needed to render the field
@@ -51,6 +52,7 @@ pub struct FieldCanvas {
     is_dragging: bool,
     last_mouse: Option<Point>,
     mouse_field_pos: Option<(f64, f64)>,
+    last_bounds: Cell<Rectangle>,
 }
 
 const FIELD_LENGTH: f32 = 9000.0;
@@ -67,6 +69,7 @@ impl FieldCanvas {
             is_dragging: false,
             last_mouse: None,
             mouse_field_pos: None,
+            last_bounds: Cell::new(Rectangle::default()),
         }
     }
 
@@ -83,6 +86,7 @@ impl FieldCanvas {
             data,
             pan: self.pan,
             scale: self.scale,
+            last_bounds: &self.last_bounds,
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -134,8 +138,18 @@ impl FieldCanvas {
         (x, y)
     }
 
-    pub fn update_mouse_pos(&mut self, bounds: Rectangle, position: Point) {
-        self.mouse_field_pos = Some(self.screen_to_field(bounds, position));
+    pub fn update_mouse_pos(&mut self, position: Point) {
+        let bounds = self.last_bounds.get();
+        // Adjust for toolbar / sidebar offset (approximate based on layout)
+        // A better way is Event::Mouse(Event::CursorMoved) being passed through the canvas widget,
+        // but since we read from global window events, we use the captured canvas bounds directly relative to the canvas.
+        // Wait, the global `position` is relative to the WINDOW. The canvas bounds are also relative to the CANVAs if bounds.x is 0,
+        // Actually bounds in iced `draw` are relative to the canvas itself (0,0 is top left).
+        // Since we need to know the offset of the canvas, we can't get it from bounds. 
+        // We know Sidebar is 44px wide, Toolbar is 36px high.
+        let canvas_mouse_x = position.x - 44.0;
+        let canvas_mouse_y = position.y - 36.0;
+        self.mouse_field_pos = Some(self.screen_to_field(bounds, Point::new(canvas_mouse_x, canvas_mouse_y)));
     }
 }
 
@@ -143,6 +157,7 @@ struct FieldProgram<'a> {
     data: &'a FieldData,
     pan: Vector,
     scale: f32,
+    last_bounds: &'a Cell<Rectangle>,
 }
 
 impl<'a> FieldProgram<'a> {
@@ -167,6 +182,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
+        self.last_bounds.set(bounds);
         let mut frame = Frame::new(renderer, bounds.size());
 
         // Background

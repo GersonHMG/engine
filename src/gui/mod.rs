@@ -445,8 +445,10 @@ impl EngineApp {
                         let ctrl_team = self.control_panel.team.to_id();
                         let robots = if ctrl_team == 0 { &update.robots_blue } else { &update.robots_yellow };
                         if let Some(target) = robots.iter().find(|r| r.id == ctrl_id as u32) {
-                            self.bottom_panel.chart_data.push_vel(target.cmd_vx, target.cmd_vy, target.cmd_angular);
-                            self.bottom_panel.chart_data.push_pos(target.x, target.y, target.theta);
+                            if self.bottom_panel.capturing {
+                                self.bottom_panel.chart_data.push_vel(target.cmd_vx, target.cmd_vy, target.cmd_angular);
+                                self.bottom_panel.chart_data.push_pos(target.x, target.y, target.theta);
+                            }
                             if self.bottom_panel.trace_on {
                                 self.robot_trace.push((target.x, target.y));
                                 self.field_data.robot_trace = self.robot_trace.clone();
@@ -504,14 +506,7 @@ impl EngineApp {
                     Event::Mouse(mouse::Event::CursorMoved { position }) => {
                         self.last_cursor_position = Some(iced::Point::new(position.x, position.y));
                         self.field_canvas.handle_drag_move(iced::Point::new(position.x, position.y));
-                        // Update mouse field position (approximate using main window bounds)
-                        let bounds = iced::Rectangle {
-                            x: 0.0,
-                            y: 0.0,
-                            width: 900.0,  // approximate
-                            height: 800.0, // approximate
-                        };
-                        self.field_canvas.update_mouse_pos(bounds, iced::Point::new(position.x, position.y));
+                        self.field_canvas.update_mouse_pos(iced::Point::new(position.x, position.y));
                     }
                     _ => {}
                 }
