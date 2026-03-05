@@ -4,11 +4,14 @@
 use crate::grsim::Grsim;
 use crate::packet_serializer;
 use crate::types::{KickerCommand, MotionCommand, RobotCommand};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
 
 pub struct Radio {
     command_map: HashMap<i32, RobotCommand>,
+    /// Robots that received a command last frame and need a zero-velocity
+    /// default until explicitly overridden again.
+    active_robots: HashSet<(i32, i32)>,
     use_radio: bool,
     port_name: String,
     baud_rate: u32,
@@ -42,6 +45,7 @@ impl Radio {
 
         Self {
             command_map: HashMap::new(),
+            active_robots: HashSet::new(),
             use_radio,
             port_name: port_name.to_string(),
             baud_rate,
@@ -80,23 +84,30 @@ impl Radio {
         }
     }
 
+    /// Pre-populate the command map with zero-velocity defaults for all
+    /// robots that were actively commanded in the previous frame.  Call
+    /// this at the start of each iteration, before any `add_*` calls.
+    pub fn prepare_frame(&mut self) {
+        for &(id, team) in &self.active_robots {
+            self.command_map
+                .entry(id)
+                .or_insert_with(|| RobotCommand::new(id, team));
+        }
+    }
+
     pub fn add_motion_command(&mut self, motion: MotionCommand) {
         let id = motion.id;
+        self.active_robots.insert((id, motion.team));
+
         let entry = self
             .command_map
             .entry(id)
             .or_insert_with(|| RobotCommand::new(id, motion.team));
 
-        let existing = &mut entry.motion;
-        if motion.vx != 0.0 {
-            existing.vx = motion.vx;
-        }
-        if motion.vy != 0.0 {
-            existing.vy = motion.vy;
-        }
-        if motion.angular != 0.0 {
-            existing.angular = motion.angular;
-        }
+        // Override the default zero vector with the incoming values.
+        entry.motion.vx = motion.vx;
+        entry.motion.vy = motion.vy;
+        entry.motion.angular = motion.angular;
     }
 
     pub fn add_kicker_command(&mut self, kicker: KickerCommand) {
@@ -120,9 +131,6 @@ impl Radio {
 
     pub fn send_commands(&mut self, world: &mut crate::world::World) {
         if self.command_map.is_empty() {
-            // Also reset commanded velocities to 0 in UI for active robots maybe?
-            // Usually, GUI will just hold the last or we can clear them. 
-            // In our case, leaving it alone or zeroing it is a design choice.
             return;
         }
 
@@ -131,7 +139,8 @@ impl Radio {
             world.set_commanded_velocity(
                 cmd.id,
                 cmd.team,
-                crate::types::Vec2D::new(cmd.motion.vx, cmd.motion.vy)
+                crate::types::Vec2D::new(cmd.motion.vx, cmd.motion.vy),
+                cmd.motion.angular,
             );
         }
 
@@ -163,6 +172,17 @@ impl Radio {
                 );
             }
         }
+
+        // Deregister robots that were sent a pure-zero command (no active
+        // input this frame) so we stop sending to them next iteration.
+        self.active_robots.retain(|&(id, _team)| {
+            if let Some(cmd) = self.command_map.get(&id) {
+                let m = &cmd.motion;
+                m.vx != 0.0 || m.vy != 0.0 || m.angular != 0.0
+            } else {
+                false
+            }
+        });
 
         self.command_map.clear();
     }
