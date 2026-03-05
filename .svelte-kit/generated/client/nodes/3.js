@@ -1,1 +1,1 @@
-export { default as component } from "../../../../src/gui/routes/hyperparameters/+page.svelte";
+export { default as component } from "../../../../src/gui/routes/control/+page.svelte";
