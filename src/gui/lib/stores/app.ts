@@ -71,6 +71,13 @@ export const recStopDisabled = writable(true);
 export const scriptPath = writable('');
 export const scriptStatus = writable<'idle' | 'loaded' | 'running' | 'paused' | 'error'>('idle');
 
+// --- Lua Draw Commands ---
+export interface LuaDrawPoint { type: 'Point'; x: number; y: number }
+export interface LuaDrawHighlight { type: 'HighlightRobot'; id: number; team: number }
+export interface LuaDrawLine { type: 'Line'; points: [number, number][] }
+export type LuaDrawCommand = LuaDrawPoint | LuaDrawHighlight | LuaDrawLine;
+export const luaDrawCommands = writable<LuaDrawCommand[]>([]);
+
 // --- Position History (for bottom panel plots) ---
 const POS_HISTORY_SIZE = 600;
 export const posHistory = writable({

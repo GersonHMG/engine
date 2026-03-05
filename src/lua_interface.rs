@@ -4,7 +4,7 @@
 use crate::game_controller::GameState;
 use crate::motion::Motion;
 use crate::radio::Radio;
-use crate::types::{KickerCommand, MotionCommand, Vec2D};
+use crate::types::{DrawCommand, KickerCommand, MotionCommand, Vec2D};
 use crate::world::World;
 use mlua::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
@@ -15,6 +15,7 @@ pub struct LuaInterface {
     radio: Arc<Mutex<Radio>>,
     world: Arc<RwLock<World>>,
     game_state: Arc<Mutex<GameState>>,
+    draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
     have_script: bool,
     is_paused: bool,
 }
@@ -32,6 +33,7 @@ impl LuaInterface {
             radio,
             world,
             game_state,
+            draw_commands: Arc::new(Mutex::new(Vec::new())),
             have_script: false,
             is_paused: false,
         };
@@ -46,7 +48,63 @@ impl LuaInterface {
         let world = Arc::clone(&self.world);
         let game_state = Arc::clone(&self.game_state);
 
+        let draw_cmds = Arc::clone(&self.draw_commands);
+
         let globals = self.lua.globals();
+
+        // ── draw_point(x, y) ──
+        {
+            let dc = Arc::clone(&draw_cmds);
+            let f = self
+                .lua
+                .create_function(move |_, (x, y): (f64, f64)| {
+                    dc.lock()
+                        .map_err(|e| LuaError::external(format!("{e}")))?
+                        .push(DrawCommand::Point { x, y });
+                    Ok(())
+                })
+                .unwrap();
+            globals.set("draw_point", f).unwrap();
+        }
+
+        // ── highlight_robot(id, team) ──
+        {
+            let dc = Arc::clone(&draw_cmds);
+            let f = self
+                .lua
+                .create_function(move |_, (id, team): (i32, i32)| {
+                    dc.lock()
+                        .map_err(|e| LuaError::external(format!("{e}")))?
+                        .push(DrawCommand::HighlightRobot { id, team });
+                    Ok(())
+                })
+                .unwrap();
+            globals.set("highlight_robot", f).unwrap();
+        }
+
+        // ── draw_line({{x, y}, {x, y}, ...}) ──
+        {
+            let dc = Arc::clone(&draw_cmds);
+            let f = self
+                .lua
+                .create_function(move |_, tbl: LuaTable| {
+                    let mut points = Vec::new();
+                    for pair in tbl.sequence_values::<LuaTable>() {
+                        let pt = pair.map_err(|e| LuaError::external(format!("{e}")))?;
+                        let x: f64 = pt.get(1).or_else(|_| pt.get("x"))?;
+                        let y: f64 = pt.get(2).or_else(|_| pt.get("y"))?;
+                        points.push([x, y]);
+                    }
+                    if points.len() >= 2 {
+                        dc.lock()
+                            .map_err(|e| LuaError::external(format!("{e}")))?
+                            .push(DrawCommand::Line { points });
+                    }
+                    Ok(())
+                })
+                .unwrap();
+            globals.set("draw_line", f).unwrap();
+        }
 
         // ── get_robot_state(id, team) ──
         {
@@ -481,5 +539,14 @@ impl LuaInterface {
 
     pub fn resume_script(&mut self) {
         self.is_paused = false;
+    }
+
+    /// Take all queued draw commands (drains the buffer).
+    pub fn take_draw_commands(&self) -> Vec<DrawCommand> {
+        if let Ok(mut cmds) = self.draw_commands.lock() {
+            std::mem::take(&mut *cmds)
+        } else {
+            Vec::new()
+        }
     }
 }

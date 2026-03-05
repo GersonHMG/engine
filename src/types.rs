@@ -275,6 +275,16 @@ impl PathTestState {
     }
 }
 
+// ─── DrawCommand (Lua → GUI overlay) ────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum DrawCommand {
+    Point { x: f64, y: f64 },
+    HighlightRobot { id: i32, team: i32 },
+    Line { points: Vec<[f64; 2]> },
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

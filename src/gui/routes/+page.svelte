@@ -19,7 +19,8 @@
 		velScaleW,
 		visualizeVelocities,
 		pushVelSample,
-		pushPosSample
+		pushPosSample,
+		luaDrawCommands
 	} from '$lib/stores/app.js';
 	import { setupControlListeners } from '$lib/services/control.js';
 
@@ -95,10 +96,15 @@
 
 	let unlistenVision: UnlistenFn;
 	let unlistenControl: UnlistenFn;
+	let unlistenDraw: UnlistenFn;
 	let cleanupControl: (() => void) | undefined;
 
 	onMount(async () => {
 		cleanupControl = setupControlListeners();
+
+		unlistenDraw = await listen('lua-draw', (event: any) => {
+			luaDrawCommands.set(event.payload || []);
+		});
 
 		unlistenControl = await listen('control-settings', (event: any) => {
 			const p = event.payload;
@@ -148,6 +154,7 @@
 	onDestroy(() => {
 		if (unlistenVision) unlistenVision();
 		if (unlistenControl) unlistenControl();
+		if (unlistenDraw) unlistenDraw();
 		if (cleanupControl) cleanupControl();
 	});
 </script>
