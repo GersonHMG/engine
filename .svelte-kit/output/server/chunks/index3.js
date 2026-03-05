@@ -1,10 +1,7 @@
-import { ad as element, b as bind_props, a as attributes, s as spread_props, c as clsx$1 } from "./index2.js";
+import { ad as element, aa as bind_props, a9 as attributes, ab as spread_props } from "./index2.js";
+import { c as cn } from "./utils2.js";
 import { tv } from "tailwind-variants";
-import { clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
+import "clsx";
 function Button$1($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let {
@@ -112,64 +109,6 @@ const buttonVariants = tv({
     size: "default"
   }
 });
-function Input($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let {
-      class: className,
-      value = void 0,
-      $$slots,
-      $$events,
-      ...restProps
-    } = $$props;
-    $$renderer2.push(`<input${attributes(
-      {
-        class: clsx$1(cn("flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50", className)),
-        value,
-        ...restProps
-      },
-      void 0,
-      void 0,
-      void 0,
-      4
-    )}/>`);
-    bind_props($$props, { value });
-  });
-}
-function Label($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
-    $$renderer2.push(`<label${attributes({
-      class: clsx$1(cn("text-xs font-medium leading-none text-muted-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70", className)),
-      ...restProps
-    })}>`);
-    children?.($$renderer2);
-    $$renderer2.push(`<!----></label>`);
-  });
-}
-function Card($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
-    $$renderer2.push(`<div${attributes({
-      class: clsx$1(cn("rounded-lg border bg-card text-card-foreground shadow-sm", className)),
-      ...restProps
-    })}>`);
-    children?.($$renderer2);
-    $$renderer2.push(`<!----></div>`);
-  });
-}
-function Card_content($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
-    $$renderer2.push(`<div${attributes({ class: clsx$1(cn("p-3 pt-0", className)), ...restProps })}>`);
-    children?.($$renderer2);
-    $$renderer2.push(`<!----></div>`);
-  });
-}
 export {
-  Button as B,
-  Card as C,
-  Input as I,
-  Label as L,
-  Card_content as a,
-  cn as c
+  Button as B
 };
