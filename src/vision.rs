@@ -3,34 +3,14 @@
 use crate::tracker::Tracker;
 use crate::types::Vec2D;
 use crate::world::World;
+use crate::gui::{VisionUpdate, RobotUpdateData};
 use protobuf::Message;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, RwLock};
 use tokio::net::UdpSocket;
+use tokio::sync::mpsc;
 
 use tracing::{info, warn};
-use tauri::Manager;
-
-#[derive(serde::Serialize, Clone)]
-struct VisionUpdate {
-    ball: Option<Vec2D>,
-    robots_blue: Vec<RobotUpdate>,
-    robots_yellow: Vec<RobotUpdate>,
-    pps: u32,
-}
-
-#[derive(serde::Serialize, Clone)]
-struct RobotUpdate {
-    id: u32,
-    x: f64,
-    y: f64,
-    theta: f64,
-    vx: f64,
-    vy: f64,
-    cmd_vx: f64,
-    cmd_vy: f64,
-    cmd_angular: f64,
-}
 
 // VisionCommand enum
 #[derive(Debug, Clone)]
@@ -49,8 +29,8 @@ pub async fn run_vision(
     multicast_addr: String,
     port: u16,
     world: Arc<RwLock<World>>,
-    app_handle: tauri::AppHandle,
-    mut command_rx: tokio::sync::mpsc::Receiver<VisionCommand>,
+    gui_tx: mpsc::Sender<VisionUpdate>,
+    mut command_rx: mpsc::Receiver<VisionCommand>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let multicast_ip: Ipv4Addr = multicast_addr.parse()?;
 
@@ -71,7 +51,6 @@ pub async fn run_vision(
         socket.bind(&socket2::SockAddr::from(addr))?;
         
         // Join multicast group on default interface (0.0.0.0)
-        // This usually works if routing table is correct or for simple setups.
         match socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::new(0, 0, 0, 0)) {
             Ok(_) => info!("Joined multicast group on default interface"),
             Err(e) => warn!("Failed to join multicast on default interface: {e}"),
@@ -97,10 +76,6 @@ pub async fn run_vision(
     let mut current_pps: u32 = 0;
 
     loop {
-        // Calculate PPS periodically (every 1s check? No, maybe just update on every 100 packets or keep a sliding count?)
-        // Simplest: Check elapsed time every loop iteration? No, that's spammy.
-        // Let's check elapsed time when we receive a packet.
-        
         tokio::select! {
             cmd = command_rx.recv() => {
                 match cmd {
@@ -168,7 +143,7 @@ pub async fn run_vision(
 
                                     for robot in world_writer.blue_robots.values() {
                                          if robot.active {
-                                             current_update.robots_blue.push(RobotUpdate {
+                                             current_update.robots_blue.push(RobotUpdateData {
                                                  id: robot.id as u32,
                                                  x: robot.position.x,
                                                  y: robot.position.y,
@@ -184,7 +159,7 @@ pub async fn run_vision(
 
                                     for robot in world_writer.yellow_robots.values() {
                                          if robot.active {
-                                             current_update.robots_yellow.push(RobotUpdate {
+                                             current_update.robots_yellow.push(RobotUpdateData {
                                                  id: robot.id as u32,
                                                  x: robot.position.x,
                                                  y: robot.position.y,
@@ -198,8 +173,8 @@ pub async fn run_vision(
                                          }
                                     }
 
-                                    // Emit event
-                                     let _ = app_handle.emit_all("vision-update", &current_update);
+                                    // Send to GUI via channel
+                                    let _ = gui_tx.try_send(current_update);
                                 }
                             }
                             Err(e) => {
