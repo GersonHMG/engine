@@ -1,8 +1,8 @@
 {
     "build": {
-        "beforeDevCommand": "npm run dev",
+        "beforeDevCommand": "",
         "beforeBuildCommand": "npm run build",
-        "devPath": "http://localhost:5173",
+        "devPath": "build",
         "distDir": "build",
         "withGlobalTauri": true
     },
@@ -13,6 +13,9 @@
     "tauri": {
         "allowlist": {
             "all": false,
+            "dialog": {
+                "open": true
+            },
             "shell": {
                 "all": false,
                 "open": true
@@ -38,7 +41,9 @@
                 "resizable": true,
                 "title": "Sysmic Engine",
                 "width": 1200,
-                "height": 800
+                "height": 800,
+                "decorations": false,
+                "transparent": true
             }
         ]
     }

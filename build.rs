@@ -1,6 +1,21 @@
 // build.rs — Compile .proto files with protobuf-codegen (pure Rust, no protoc needed)
 
 fn main() {
+    // Build the frontend if the build/ directory is missing or sources changed
+    println!("cargo:rerun-if-changed=src/gui/");
+    println!("cargo:rerun-if-changed=package.json");
+    println!("cargo:rerun-if-changed=svelte.config.js");
+    println!("cargo:rerun-if-changed=vite.config.ts");
+
+    println!("cargo:warning=Building frontend...");
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "npm", "run", "build"])
+        .status()
+        .expect("Failed to run npm run build. Make sure npm is installed.");
+    if !status.success() {
+        panic!("Frontend build failed");
+    }
+
     protobuf_codegen::Codegen::new()
         .pure()
         .includes(&["src/protobuf/protos/"])

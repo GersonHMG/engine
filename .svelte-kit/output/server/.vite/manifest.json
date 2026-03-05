@@ -10,6 +10,13 @@
       "_internal.js"
     ]
   },
+  "_card-content.js": {
+    "file": "chunks/card-content.js",
+    "name": "card-content",
+    "imports": [
+      "_index2.js"
+    ]
+  },
   "_context.js": {
     "file": "chunks/context.js",
     "name": "context"
@@ -46,13 +53,6 @@
     "imports": [
       "_context.js",
       "_false.js"
-    ]
-  },
-  "_index3.js": {
-    "file": "chunks/index3.js",
-    "name": "index",
-    "imports": [
-      "_index2.js"
     ]
   },
   "_internal.js": {
@@ -137,7 +137,7 @@
     "src": "src/gui/routes/+layout.svelte",
     "isEntry": true,
     "css": [
-      "_app/immutable/assets/_layout.BF5-5_gG.css"
+      "_app/immutable/assets/_layout.Dt4GzbVG.css"
     ]
   },
   "src/gui/routes/+layout.ts": {
@@ -156,7 +156,7 @@
       "_index-server.js",
       "_index.js",
       "_context.js",
-      "_index3.js"
+      "_card-content.js"
     ]
   },
   "src/gui/routes/hyperparameters/+page.svelte": {
@@ -171,7 +171,7 @@
       "_utils.js",
       "_root.js",
       "_state.svelte.js",
-      "_index3.js"
+      "_card-content.js"
     ]
   },
   "src/gui/routes/wheels/+page.svelte": {
