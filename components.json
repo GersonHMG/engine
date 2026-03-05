@@ -1,0 +1,13 @@
+{
+	"$schema": "https://next.shadcn-svelte.com/schema.json",
+	"style": "default",
+	"tailwind": {
+		"css": "src/gui/app.css"
+	},
+	"aliases": {
+		"components": "$lib/components",
+		"utils": "$lib/utils",
+		"hooks": "$lib/hooks"
+	},
+	"typescript": true
+}

@@ -420,7 +420,13 @@ async fn run_engine(app_handle: tauri::AppHandle) {
             l.log_frame();
         }
 
-        // 3. Evaluate Path Test Loop (Overrides Radio output with motion commands)
+        // 3. Prepare radio frame (zero-velocity defaults for active robots)
+        {
+            let mut r = radio.lock().unwrap();
+            r.prepare_frame();
+        }
+
+        // 4. Evaluate Path Test Loop (Overrides Radio output with motion commands)
         {
             let mut pt_guard = path_test.lock().unwrap();
             let mut radio_guard = radio.lock().unwrap();
@@ -532,7 +538,7 @@ async fn run_engine(app_handle: tauri::AppHandle) {
                 }
             }
         }
-        // 4. Send radio commands
+        // 5. Send radio commands
         {
             let mut r = match radio.lock() {
                 Ok(guard) => guard,

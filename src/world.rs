@@ -79,13 +79,14 @@ impl World {
         self.ball.velocity = velocity;
     }
 
-    pub fn set_commanded_velocity(&mut self, id: i32, team: i32, cmd_v: Vec2D) {
+    pub fn set_commanded_velocity(&mut self, id: i32, team: i32, cmd_v: Vec2D, cmd_angular: f64) {
         let robots = match team {
             0 => &mut self.blue_robots,
             _ => &mut self.yellow_robots,
         };
         if let Some(robot) = robots.get_mut(&id) {
             robot.commanded_velocity = cmd_v;
+            robot.commanded_angular = cmd_angular;
         }
     }
 
@@ -102,6 +103,7 @@ impl World {
                 "position": { "x": robot.position.x, "y": robot.position.y },
                 "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
                 "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
+                "cmd_angular": robot.commanded_angular,
                 "orientation": robot.orientation,
             }));
         }
@@ -116,6 +118,7 @@ impl World {
                 "position": { "x": robot.position.x, "y": robot.position.y },
                 "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
                 "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
+                "cmd_angular": robot.commanded_angular,
                 "orientation": robot.orientation,
             }));
         }
