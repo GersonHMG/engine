@@ -8,7 +8,7 @@ import "@sveltejs/kit/internal/server";
 import "../../../chunks/root.js";
 import "../../../chunks/state.svelte.js";
 import { appWindow } from "@tauri-apps/api/window";
-import { C as Card, a as Card_content, L as Label, I as Input, B as Button } from "../../../chunks/index3.js";
+import { C as Card, a as Card_content, L as Label, I as Input, B as Button } from "../../../chunks/card-content.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     const allParams = [
