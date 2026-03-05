@@ -14,7 +14,7 @@ export interface Robot {
 }
 
 // --- Navigation ---
-export const activeTab = writable<'connection' | 'control'>('connection');
+export const activeTab = writable<'connection' | 'control' | 'script'>('connection');
 
 // --- Vision ---
 export const robotsBlue = writable<Robot[]>([]);
@@ -66,3 +66,23 @@ export const recFilename = writable('record.csv');
 export const recStatus = writable<'idle' | 'recording' | 'saved'>('idle');
 export const recStartDisabled = writable(false);
 export const recStopDisabled = writable(true);
+
+// --- Script ---
+export const scriptPath = writable('');
+export const scriptStatus = writable<'idle' | 'loaded' | 'running' | 'paused' | 'error'>('idle');
+
+// --- Position History (for bottom panel plots) ---
+const POS_HISTORY_SIZE = 600;
+export const posHistory = writable({
+	x: new Array(POS_HISTORY_SIZE).fill(0) as number[],
+	y: new Array(POS_HISTORY_SIZE).fill(0) as number[],
+	theta: new Array(POS_HISTORY_SIZE).fill(0) as number[]
+});
+
+export function pushPosSample(x: number, y: number, theta: number) {
+	posHistory.update((h) => ({
+		x: [...h.x.slice(1), x],
+		y: [...h.y.slice(1), y],
+		theta: [...h.theta.slice(1), theta]
+	}));
+}
