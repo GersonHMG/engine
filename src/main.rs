@@ -83,6 +83,8 @@ struct AppState {
     logger: Arc<Mutex<Logger>>,
     radio: Arc<Mutex<Radio>>, // Needed for Xbox commands
     path_test: Arc<Mutex<Option<PathTestState>>>,
+    lua_interface: Arc<Mutex<LuaInterface>>,
+    last_script_path: Arc<Mutex<String>>,
 }
 
 #[tauri::command]
@@ -274,6 +276,49 @@ async fn send_path_test(
     Ok(())
 }
 
+#[tauri::command]
+async fn load_script(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<(), String> {
+    let mut lua = state.lua_interface.lock().map_err(|e| e.to_string())?;
+    lua.run_script(&path);
+    let mut last = state.last_script_path.lock().map_err(|e| e.to_string())?;
+    *last = path;
+    Ok(())
+}
+
+#[tauri::command]
+async fn pause_script(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let mut lua = state.lua_interface.lock().map_err(|e| e.to_string())?;
+    lua.pause_script();
+    Ok(())
+}
+
+#[tauri::command]
+async fn resume_script(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let mut lua = state.lua_interface.lock().map_err(|e| e.to_string())?;
+    lua.resume_script();
+    Ok(())
+}
+
+#[tauri::command]
+async fn reload_script(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let last = state.last_script_path.lock().map_err(|e| e.to_string())?.clone();
+    if last.is_empty() {
+        return Err("No script loaded yet".into());
+    }
+    let mut lua = state.lua_interface.lock().map_err(|e| e.to_string())?;
+    lua.run_script(&last);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     tauri::Builder::default()
@@ -292,7 +337,11 @@ async fn main() {
             start_recording,
             stop_recording,
             send_robot_command,
-            send_path_test
+            send_path_test,
+            load_script,
+            pause_script,
+            resume_script,
+            reload_script
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -331,13 +380,24 @@ async fn run_engine(app_handle: tauri::AppHandle) {
 
     let path_test = Arc::new(Mutex::new(None));
 
+    // Create Lua interface
+    let lua_iface = Arc::new(Mutex::new(LuaInterface::new(
+        Arc::clone(&radio),
+        Arc::clone(&world),
+        Arc::clone(&game_state),
+    )));
+
     // Register state
+    let last_script_path = Arc::new(Mutex::new(String::new()));
+
     app_handle.manage(AppState {
         world: world.clone(),
         vision_state: vision_state.clone(),
         logger: logger.clone(),
         radio: radio.clone(),
         path_test: path_test.clone(),
+        lua_interface: lua_iface.clone(),
+        last_script_path: last_script_path.clone(),
     });
 
     // Spawn Vision receiver task
@@ -376,23 +436,18 @@ async fn run_engine(app_handle: tauri::AppHandle) {
         }
     });
 
-    // Create Lua interface
-    let lua_interface = Arc::new(Mutex::new(LuaInterface::new(
-        Arc::clone(&radio),
-        Arc::clone(&world),
-        Arc::clone(&game_state),
-    )));
-
     // Spawn Console reader
-    let lua_for_console = Arc::clone(&lua_interface);
+    let lua_for_console = Arc::clone(&lua_iface);
     let _console_handle = tokio::task::spawn_blocking(move || {
         console::run_console(lua_for_console);
     });
 
     // Run script from command line arg if provided
     if let Some(script_path) = std::env::args().nth(1) {
-        let mut lua = lua_interface.lock().unwrap();
+        let mut lua = lua_iface.lock().unwrap();
         lua.run_script(&script_path);
+        let mut last = last_script_path.lock().unwrap();
+        *last = script_path;
     }
 
     // Main update loop (~60 FPS)
@@ -404,7 +459,7 @@ async fn run_engine(app_handle: tauri::AppHandle) {
 
         // 1. Call Lua process()
         {
-            let mut lua = lua_interface.lock().unwrap();
+            let mut lua = lua_iface.lock().unwrap();
             lua.call_process();
         }
 
