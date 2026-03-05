@@ -1,0 +1,12 @@
+{
+	"/": [
+		"src/gui/routes/+layout.ts",
+		"src/gui/routes/+layout.ts"
+	],
+	"/hyperparameters": [
+		"src/gui/routes/+layout.ts"
+	],
+	"/wheels": [
+		"src/gui/routes/+layout.ts"
+	]
+}
