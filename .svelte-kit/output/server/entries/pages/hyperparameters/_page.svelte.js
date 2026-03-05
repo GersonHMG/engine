@@ -1,4 +1,4 @@
-import { j as ensure_array_like, d as derived } from "../../../chunks/index2.js";
+import { e as ensure_array_like, f as derived } from "../../../chunks/index2.js";
 import { e as escape_html } from "../../../chunks/context.js";
 import "@sveltejs/kit/internal";
 import "../../../chunks/exports.js";
@@ -8,7 +8,8 @@ import "@sveltejs/kit/internal/server";
 import "../../../chunks/root.js";
 import "../../../chunks/state.svelte.js";
 import { appWindow } from "@tauri-apps/api/window";
-import { C as Card, a as Card_content, L as Label, I as Input, B as Button } from "../../../chunks/card-content.js";
+import { C as Card, a as Card_content, L as Label, I as Input } from "../../../chunks/label.js";
+import { B as Button } from "../../../chunks/index3.js";
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     const allParams = [
