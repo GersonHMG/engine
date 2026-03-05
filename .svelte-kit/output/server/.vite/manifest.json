@@ -166,7 +166,7 @@
     "src": "src/gui/routes/+layout.svelte",
     "isEntry": true,
     "css": [
-      "_app/immutable/assets/_layout.BPAmPxgn.css"
+      "_app/immutable/assets/_layout.BAElGqfw.css"
     ]
   },
   "src/gui/routes/+layout.ts": {
