@@ -3,7 +3,22 @@
 		"src/gui/routes/+layout.ts",
 		"src/gui/routes/+layout.ts"
 	],
+	"/control": [
+		"src/gui/routes/+layout.ts"
+	],
 	"/hyperparameters": [
+		"src/gui/routes/+layout.ts"
+	],
+	"/kalman": [
+		"src/gui/routes/+layout.ts"
+	],
+	"/radio": [
+		"src/gui/routes/+layout.ts"
+	],
+	"/recording": [
+		"src/gui/routes/+layout.ts"
+	],
+	"/vision": [
 		"src/gui/routes/+layout.ts"
 	],
 	"/wheels": [
