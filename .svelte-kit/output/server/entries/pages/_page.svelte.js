@@ -1,23 +1,34 @@
 import { a as attributes, c as clsx, d as derived, b as bind_props, s as spread_props, e as attr_class, f as stringify, g as store_get, u as unsubscribe_stores } from "../../chunks/index2.js";
 import { o as onDestroy } from "../../chunks/index-server.js";
 import "@tauri-apps/api/event";
+import "@tauri-apps/api/window";
 import { w as writable, g as get } from "../../chunks/index.js";
 import { clsx as clsx$1 } from "clsx";
 import { invoke } from "@tauri-apps/api/tauri";
 import { e as escape_html, h as hasContext, g as getContext, s as setContext } from "../../chunks/context.js";
-import { c as cn, C as Card, a as Card_content, L as Label, I as Input, B as Button } from "../../chunks/index3.js";
+import { c as cn, B as Button, L as Label, I as Input, C as Card, a as Card_content } from "../../chunks/card-content.js";
 import { tv } from "tailwind-variants";
 import parse from "style-to-object";
-import "@tauri-apps/api/window";
+import "@tauri-apps/api/dialog";
 writable(new Array(50).fill(0));
 const manualControlActive = writable(false);
+const controlTeam = writable(0);
+const controlRobotId = writable(0);
+const visualizeVelocities = writable(false);
 const pathDrawMode = writable(false);
+const pathTraceMode = writable(false);
 const pathPoints = writable([]);
-const VEL_CHART_SIZE = 120;
+const VEL_CHART_SIZE = 600;
 writable({
   vx: new Array(VEL_CHART_SIZE).fill(0),
   vy: new Array(VEL_CHART_SIZE).fill(0),
   omega: new Array(VEL_CHART_SIZE).fill(0)
+});
+const POS_HISTORY_SIZE = 600;
+writable({
+  x: new Array(POS_HISTORY_SIZE).fill(0),
+  y: new Array(POS_HISTORY_SIZE).fill(0),
+  theta: new Array(POS_HISTORY_SIZE).fill(0)
 });
 function screenToField(vp, clientX, clientY, canvasRect) {
   const cx = vp.width / 2 + vp.panX;
@@ -87,26 +98,34 @@ function FieldCanvas($$renderer, $$props) {
     $$renderer2.push(`<div class="relative flex-1 overflow-hidden bg-[#111]"><canvas class="h-full w-full" style="background-color: #A9A9A9;"></canvas> <div class="pointer-events-none absolute left-4 top-4 rounded bg-black/50 px-2.5 py-1 font-mono text-sm text-white">${escape_html(mouseCoords)}</div> <div class="absolute bottom-4 right-4 flex gap-1.5"><button class="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20">-</button> <button class="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20">+</button></div></div>`);
   });
 }
-function Card_header($$renderer, $$props) {
+function Badge($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
-    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
+    const badgeVariants = tv({
+      base: "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      variants: {
+        variant: {
+          default: "border-transparent bg-primary text-primary-foreground",
+          secondary: "border-transparent bg-secondary text-secondary-foreground",
+          destructive: "border-transparent bg-destructive text-destructive-foreground",
+          outline: "text-foreground"
+        }
+      },
+      defaultVariants: { variant: "default" }
+    });
+    let {
+      class: className,
+      variant = "default",
+      children,
+      $$slots,
+      $$events,
+      ...restProps
+    } = $$props;
     $$renderer2.push(`<div${attributes({
-      class: clsx(cn("flex flex-col space-y-1.5 p-3", className)),
+      class: clsx(cn(badgeVariants({ variant }), className)),
       ...restProps
     })}>`);
     children?.($$renderer2);
     $$renderer2.push(`<!----></div>`);
-  });
-}
-function Card_title($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
-    $$renderer2.push(`<h4${attributes({
-      class: clsx(cn("text-xs font-medium uppercase tracking-wide text-muted-foreground", className)),
-      ...restProps
-    })}>`);
-    children?.($$renderer2);
-    $$renderer2.push(`<!----></h4>`);
   });
 }
 function isFunction(value) {
@@ -783,149 +802,103 @@ function Switch_thumb($$renderer, $$props) {
     bind_props($$props, { ref });
   });
 }
-function Badge($$renderer, $$props) {
-  $$renderer.component(($$renderer2) => {
-    const badgeVariants = tv({
-      base: "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-      variants: {
-        variant: {
-          default: "border-transparent bg-primary text-primary-foreground",
-          secondary: "border-transparent bg-secondary text-secondary-foreground",
-          destructive: "border-transparent bg-destructive text-destructive-foreground",
-          outline: "text-foreground"
-        }
-      },
-      defaultVariants: { variant: "default" }
-    });
-    let {
-      class: className,
-      variant = "default",
-      children,
-      $$slots,
-      $$events,
-      ...restProps
-    } = $$props;
-    $$renderer2.push(`<div${attributes({
-      class: clsx(cn(badgeVariants({ variant }), className)),
-      ...restProps
-    })}>`);
-    children?.($$renderer2);
-    $$renderer2.push(`<!----></div>`);
-  });
-}
-function VisionPanel($$renderer, $$props) {
+function FieldToolbar($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     let visionIp = "224.5.23.2";
     let visionPort = 10020;
+    let popupOpen = false;
     let statusText = "Disconnected";
     onDestroy(() => {
     });
     async function reconnect() {
       try {
         await invoke("update_vision_connection", { ip: visionIp, port: visionPort });
-        statusText = "Connecting...";
+        popupOpen = false;
       } catch (e) {
         console.error("Failed to update vision:", e);
-        alert("Failed to reconnect: " + e);
       }
     }
     let $$settled = true;
     let $$inner_renderer;
     function $$render_inner($$renderer3) {
-      Card($$renderer3, {
+      $$renderer3.push(`<div class="flex h-9 shrink-0 items-center gap-3 border-b border-border bg-card px-3"><div class="relative">`);
+      Button($$renderer3, {
+        variant: "ghost",
+        size: "sm",
+        class: "h-7 gap-1.5 px-2 text-xs",
+        onclick: () => popupOpen = !popupOpen,
         children: ($$renderer4) => {
-          Card_header($$renderer4, {
-            children: ($$renderer5) => {
-              Card_title($$renderer5, {
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->Vision Connection`);
-                },
-                $$slots: { default: true }
-              });
-            },
-            $$slots: { default: true }
-          });
-          $$renderer4.push(`<!----> `);
-          Card_content($$renderer4, {
-            class: "space-y-3",
-            children: ($$renderer5) => {
-              $$renderer5.push(`<div class="flex items-center justify-between">`);
-              Label($$renderer5, {
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->IP`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!----> `);
-              Input($$renderer5, {
-                type: "text",
-                class: "w-32 text-right",
-                get value() {
-                  return visionIp;
-                },
-                set value($$value) {
-                  visionIp = $$value;
-                  $$settled = false;
-                }
-              });
-              $$renderer5.push(`<!----></div> <div class="flex items-center justify-between">`);
-              Label($$renderer5, {
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->Port`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!----> `);
-              Input($$renderer5, {
-                type: "number",
-                class: "w-24 text-right",
-                get value() {
-                  return visionPort;
-                },
-                set value($$value) {
-                  visionPort = $$value;
-                  $$settled = false;
-                }
-              });
-              $$renderer5.push(`<!----></div> <div class="flex items-center justify-between">`);
-              Label($$renderer5, {
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->Status`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!----> `);
-              Badge($$renderer5, {
-                variant: "destructive",
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->${escape_html(statusText)}`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!----></div> <div class="space-y-1">`);
-              Label($$renderer5, {
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->PPS History`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!----> <canvas width="200" height="40" class="w-full rounded border border-border bg-[#222]"></canvas></div> `);
-              Button($$renderer5, {
-                class: "w-full",
-                onclick: reconnect,
-                children: ($$renderer6) => {
-                  $$renderer6.push(`<!---->Reconnect`);
-                },
-                $$slots: { default: true }
-              });
-              $$renderer5.push(`<!---->`);
-            },
-            $$slots: { default: true }
-          });
-          $$renderer4.push(`<!---->`);
+          $$renderer4.push(`<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg> Vision`);
         },
         $$slots: { default: true }
       });
+      $$renderer3.push(`<!----> `);
+      if (popupOpen) {
+        $$renderer3.push("<!--[0-->");
+        $$renderer3.push(`<div class="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-card p-3 shadow-lg"><h4 class="mb-2 text-xs font-semibold text-muted-foreground">Vision Connection</h4> <div class="space-y-2"><div class="flex items-center justify-between gap-2">`);
+        Label($$renderer3, {
+          class: "text-xs",
+          children: ($$renderer4) => {
+            $$renderer4.push(`<!---->IP`);
+          },
+          $$slots: { default: true }
+        });
+        $$renderer3.push(`<!----> `);
+        Input($$renderer3, {
+          type: "text",
+          class: "h-7 w-36 text-xs",
+          get value() {
+            return visionIp;
+          },
+          set value($$value) {
+            visionIp = $$value;
+            $$settled = false;
+          }
+        });
+        $$renderer3.push(`<!----></div> <div class="flex items-center justify-between gap-2">`);
+        Label($$renderer3, {
+          class: "text-xs",
+          children: ($$renderer4) => {
+            $$renderer4.push(`<!---->Port`);
+          },
+          $$slots: { default: true }
+        });
+        $$renderer3.push(`<!----> `);
+        Input($$renderer3, {
+          type: "number",
+          class: "h-7 w-24 text-xs",
+          get value() {
+            return visionPort;
+          },
+          set value($$value) {
+            visionPort = $$value;
+            $$settled = false;
+          }
+        });
+        $$renderer3.push(`<!----></div> `);
+        Button($$renderer3, {
+          size: "sm",
+          class: "h-7 w-full text-xs",
+          onclick: reconnect,
+          children: ($$renderer4) => {
+            $$renderer4.push(`<!---->Reconnect`);
+          },
+          $$slots: { default: true }
+        });
+        $$renderer3.push(`<!----></div></div>`);
+      } else {
+        $$renderer3.push("<!--[-1-->");
+      }
+      $$renderer3.push(`<!--]--></div> <div class="h-4 w-px bg-border"></div> `);
+      Badge($$renderer3, {
+        variant: "destructive",
+        class: "h-5 text-[10px]",
+        children: ($$renderer4) => {
+          $$renderer4.push(`<!---->${escape_html(statusText)}`);
+        },
+        $$slots: { default: true }
+      });
+      $$renderer3.push(`<!----> <canvas width="120" height="24" class="rounded border border-border bg-[#222]"></canvas></div>`);
     }
     do {
       $$settled = true;
@@ -933,6 +906,28 @@ function VisionPanel($$renderer, $$props) {
       $$render_inner($$inner_renderer);
     } while (!$$settled);
     $$renderer2.subsume($$inner_renderer);
+  });
+}
+function Card_header($$renderer, $$props) {
+  $$renderer.component(($$renderer2) => {
+    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
+    $$renderer2.push(`<div${attributes({
+      class: clsx(cn("flex flex-col space-y-1.5 p-3", className)),
+      ...restProps
+    })}>`);
+    children?.($$renderer2);
+    $$renderer2.push(`<!----></div>`);
+  });
+}
+function Card_title($$renderer, $$props) {
+  $$renderer.component(($$renderer2) => {
+    let { class: className, children, $$slots, $$events, ...restProps } = $$props;
+    $$renderer2.push(`<h4${attributes({
+      class: clsx(cn("text-xs font-medium uppercase tracking-wide text-muted-foreground", className)),
+      ...restProps
+    })}>`);
+    children?.($$renderer2);
+    $$renderer2.push(`<!----></h4>`);
   });
 }
 function Switch($$renderer, $$props) {
@@ -1341,12 +1336,64 @@ function RecordingPanel($$renderer, $$props) {
     $$renderer2.subsume($$inner_renderer);
   });
 }
+function BottomPanel($$renderer, $$props) {
+  $$renderer.component(($$renderer2) => {
+    var $$store_subs;
+    let capturing = false;
+    function toggleTrace() {
+      pathTraceMode.update((v) => !v);
+    }
+    function toggleVectors() {
+      visualizeVelocities.update((v) => !v);
+    }
+    function toggleCapture() {
+      capturing = !capturing;
+    }
+    onDestroy(() => {
+    });
+    $$renderer2.push(`<div class="flex h-44 shrink-0 items-stretch gap-2 border-t border-border bg-card px-3 py-2"><div class="flex w-24 shrink-0 flex-col justify-center gap-1.5"><span class="text-center text-[10px] font-semibold text-muted-foreground">Robot ${escape_html(store_get($$store_subs ??= {}, "$controlRobotId", controlRobotId))} · ${escape_html(store_get($$store_subs ??= {}, "$controlTeam", controlTeam) === 0 ? "Blue" : "Yellow")}</span> `);
+    Button($$renderer2, {
+      variant: capturing ? "default" : "secondary",
+      size: "sm",
+      class: "h-7 text-[10px]",
+      onclick: toggleCapture,
+      children: ($$renderer3) => {
+        $$renderer3.push(`<!---->${escape_html(capturing ? "Capture ON" : "Capture OFF")}`);
+      },
+      $$slots: { default: true }
+    });
+    $$renderer2.push(`<!----> `);
+    Button($$renderer2, {
+      variant: "secondary",
+      size: "sm",
+      class: "h-7 text-[10px]",
+      onclick: toggleTrace,
+      children: ($$renderer3) => {
+        $$renderer3.push(`<!---->${escape_html("Trace OFF")}`);
+      },
+      $$slots: { default: true }
+    });
+    $$renderer2.push(`<!----> `);
+    Button($$renderer2, {
+      variant: "secondary",
+      size: "sm",
+      class: "h-7 text-[10px]",
+      onclick: toggleVectors,
+      children: ($$renderer3) => {
+        $$renderer3.push(`<!---->${escape_html("Vectors OFF")}`);
+      },
+      $$slots: { default: true }
+    });
+    $$renderer2.push(`<!----></div> <div class="w-px shrink-0 bg-border"></div> <div class="flex min-w-0 flex-1 gap-1"><div class="flex flex-1 flex-col gap-0.5"><div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-red-400">Vx</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div> <div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-orange-400">X</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div></div> <div class="flex flex-1 flex-col gap-0.5"><div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-green-400">Vy</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div> <div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-cyan-400">Y</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div></div> <div class="flex flex-1 flex-col gap-0.5"><div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-blue-400">ω</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div> <div class="flex flex-1 flex-col"><span class="text-[9px] font-bold text-purple-400">θ</span> <canvas width="200" height="36" class="h-full w-full rounded border border-border"></canvas></div></div></div></div>`);
+    if ($$store_subs) unsubscribe_stores($$store_subs);
+  });
+}
 function _page($$renderer, $$props) {
   $$renderer.component(($$renderer2) => {
     var $$store_subs;
     onDestroy(() => {
     });
-    $$renderer2.push(`<div class="flex h-screen flex-col overflow-hidden bg-background text-foreground"><nav class="flex h-12 shrink-0 items-center gap-1 border-b border-border bg-card px-4"><button${attr_class(`flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors ${stringify(
+    $$renderer2.push(`<div class="flex h-screen flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground"><div class="flex h-8 shrink-0 items-center justify-between bg-card" data-tauri-drag-region=""><span class="pointer-events-none select-none pl-3 text-xs font-medium text-muted-foreground" data-tauri-drag-region="">Sysmic Engine</span> <div class="flex h-full"><button class="inline-flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted" aria-label="Minimize"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"></rect></svg></button> <button class="inline-flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-muted" aria-label="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="9" height="9"></rect></svg></button> <button class="inline-flex h-full w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-red-600 hover:text-white" aria-label="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.2"><line x1="0" y1="0" x2="10" y2="10"></line><line x1="10" y1="0" x2="0" y2="10"></line></svg></button></div></div> <nav class="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-4"><button${attr_class(`flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors ${stringify(
       "border-primary text-foreground"
     )}`)}>Connection</button> <button${attr_class(`flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors ${stringify("border-transparent text-muted-foreground hover:text-foreground")}`)}>Control `);
     if (store_get($$store_subs ??= {}, "$manualControlActive", manualControlActive)) {
@@ -1355,11 +1402,9 @@ function _page($$renderer, $$props) {
     } else {
       $$renderer2.push("<!--[-1-->");
     }
-    $$renderer2.push(`<!--]--></button></nav> <div class="flex flex-1 overflow-hidden"><aside class="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-card p-3"><h3 class="border-b border-border pb-2 text-sm font-semibold">Configuration</h3> `);
+    $$renderer2.push(`<!--]--></button> <button${attr_class(`flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors ${stringify("border-transparent text-muted-foreground hover:text-foreground")}`)}>Script</button></nav> <div class="flex flex-1 overflow-hidden"><aside class="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-card p-3"><h3 class="border-b border-border pb-2 text-sm font-semibold">Configuration</h3> `);
     {
       $$renderer2.push("<!--[0-->");
-      VisionPanel($$renderer2);
-      $$renderer2.push(`<!----> `);
       RadioPanel($$renderer2);
       $$renderer2.push(`<!----> `);
       KalmanFilterPanel($$renderer2);
@@ -1367,9 +1412,13 @@ function _page($$renderer, $$props) {
       RecordingPanel($$renderer2);
       $$renderer2.push(`<!---->`);
     }
-    $$renderer2.push(`<!--]--></aside> `);
+    $$renderer2.push(`<!--]--></aside> <div class="flex flex-1 flex-col overflow-hidden">`);
+    FieldToolbar($$renderer2);
+    $$renderer2.push(`<!----> `);
     FieldCanvas($$renderer2);
-    $$renderer2.push(`<!----></div></div>`);
+    $$renderer2.push(`<!----></div></div> `);
+    BottomPanel($$renderer2);
+    $$renderer2.push(`<!----></div>`);
     if ($$store_subs) unsubscribe_stores($$store_subs);
   });
 }
