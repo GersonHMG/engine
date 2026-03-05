@@ -420,9 +420,17 @@ async fn run_engine(app_handle: tauri::AppHandle) {
         let frame_start = Instant::now();
 
         // 1. Call Lua process()
-        {
+        let draw_cmds = {
             let mut lua = lua_iface.lock().unwrap();
             lua.call_process();
+            lua.take_draw_commands()
+        };
+
+        // 1b. Emit draw commands to GUI
+        if !draw_cmds.is_empty() {
+            let _ = app_handle.emit_all("lua-draw", &draw_cmds);
+        } else {
+            let _ = app_handle.emit_all("lua-draw", &Vec::<()>::new());
         }
 
         // 3. Log Frame (CSV Recording)
