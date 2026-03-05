@@ -1,1 +1,0 @@
-export { default as component } from "../../../../src/gui/routes/hyperparameters/+page.svelte";
