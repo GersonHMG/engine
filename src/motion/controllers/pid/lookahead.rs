@@ -113,7 +113,7 @@ impl LookAheadPID {
         let mut vx_cmd = self.target_speed + self.kp_speed * speed_error;
 
         // Slow down at end of path
-        let remaining_points = n.saturating_sub(1).saturating_sub(self.closest_idx);
+        let _remaining_points = n.saturating_sub(1).saturating_sub(self.closest_idx);
         let dist_to_end = (*path.last().unwrap() - pos).length();
 
         // If we are within 2.0 meters of the end, start scaling down velocity. Mute velocity fully at 0.1m.
