@@ -27,16 +27,21 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/hyperparameters" | "/wheels";
+		RouteId(): "/" | "/control" | "/hyperparameters" | "/kalman" | "/radio" | "/recording" | "/vision" | "/wheels";
 		RouteParams(): {
 			
 		};
 		LayoutParams(): {
 			"/": Record<string, never>;
+			"/control": Record<string, never>;
 			"/hyperparameters": Record<string, never>;
+			"/kalman": Record<string, never>;
+			"/radio": Record<string, never>;
+			"/recording": Record<string, never>;
+			"/vision": Record<string, never>;
 			"/wheels": Record<string, never>
 		};
-		Pathname(): "/" | "/hyperparameters" | "/wheels";
+		Pathname(): "/" | "/control" | "/hyperparameters" | "/kalman" | "/radio" | "/recording" | "/vision" | "/wheels";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/.gitkeep" | string & {};
 	}
