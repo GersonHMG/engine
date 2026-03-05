@@ -12,7 +12,8 @@
 		pathTeam,
 		pathDrawMode,
 		visualizeVelocities,
-		robotTrace
+		robotTrace,
+		luaDrawCommands
 	} from '$lib/stores/app.js';
 	import {
 		type Viewport,
@@ -22,6 +23,7 @@
 		drawPath,
 		drawRobotTrace,
 		drawDisconnectedOverlay,
+		drawLuaCommands,
 		screenToField,
 		screenToFieldMm
 	} from '$lib/rendering/field.js';
@@ -152,6 +154,7 @@
 		const isTraceEnabled = get(pathTraceMode);
 		const traceId = get(pathRobotId);
 		const traceTeam = get(pathTeam);
+		const drawCmds = get(luaDrawCommands);
 
 		// Clear trace if disabled or target changed
 		if (!isTraceEnabled || traceId !== lastTraceId || traceTeam !== lastTraceTeam) {
@@ -209,6 +212,11 @@
 		}
 
 		drawBall(ctx, vp, b.x, b.y);
+
+		// Lua draw overlay
+		if (drawCmds.length > 0) {
+			drawLuaCommands(ctx, vp, drawCmds, blue, yellow);
+		}
 
 		// Vision disconnect overlay
 		if (Date.now() - get(lastVisionUpdate) > 1000) {
