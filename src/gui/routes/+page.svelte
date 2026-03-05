@@ -13,6 +13,11 @@
 		controlRobotId,
 		controlTeam,
 		manualControlActive,
+		manualControlMode,
+		velScaleVx,
+		velScaleVy,
+		velScaleW,
+		visualizeVelocities,
 		pushVelSample,
 		pushPosSample
 	} from '$lib/stores/app.js';
@@ -20,24 +25,92 @@
 
 	import FieldCanvas from '$lib/components/engine/FieldCanvas.svelte';
 	import FieldToolbar from '$lib/components/engine/FieldToolbar.svelte';
-	import RadioPanel from '$lib/components/engine/RadioPanel.svelte';
-	import KalmanFilterPanel from '$lib/components/engine/KalmanFilterPanel.svelte';
-	import RecordingPanel from '$lib/components/engine/RecordingPanel.svelte';
-	import ManualControlPanel from '$lib/components/engine/ManualControlPanel.svelte';
-	import PathFollowingPanel from '$lib/components/engine/PathFollowingPanel.svelte';
-	import ScriptPanel from '$lib/components/engine/ScriptPanel.svelte';
+	import { WebviewWindow } from '@tauri-apps/api/window';
 	import BottomPanel from '$lib/components/engine/BottomPanel.svelte';
 
-	let tab = $state<'connection' | 'control' | 'script'>('connection');
-	let unlistenVision: UnlistenFn;
-	let cleanupControl: (() => void) | undefined;
+	function openControlWindow() {
+		const webview = new WebviewWindow('manual-control', {
+			url: 'control',
+			title: 'Manual Control',
+			width: 380,
+			height: 520,
+			resizable: false
+		});
+		webview.once('tauri://error', (e: unknown) => {
+			console.error('Error creating control window.', e);
+		});
+	}
 
-	$effect(() => {
-		activeTab.set(tab);
-	});
+	function openRadioWindow() {
+		const webview = new WebviewWindow('radio-config', {
+			url: 'radio',
+			title: 'Radio Configuration',
+			width: 380,
+			height: 400,
+			resizable: false
+		});
+		webview.once('tauri://error', (e: unknown) => {
+			console.error('Error creating radio window.', e);
+		});
+	}
+
+	function openKalmanWindow() {
+		const webview = new WebviewWindow('kalman-config', {
+			url: 'kalman',
+			title: 'Kalman Filter',
+			width: 380,
+			height: 480,
+			resizable: false
+		});
+		webview.once('tauri://error', (e: unknown) => {
+			console.error('Error creating kalman window.', e);
+		});
+	}
+
+	function openRecordingWindow() {
+		const webview = new WebviewWindow('recording-config', {
+			url: 'recording',
+			title: 'Recording',
+			width: 380,
+			height: 340,
+			resizable: false
+		});
+		webview.once('tauri://error', (e: unknown) => {
+			console.error('Error creating recording window.', e);
+		});
+	}
+
+	function openVisionWindow() {
+		const webview = new WebviewWindow('vision-config', {
+			url: 'vision',
+			title: 'Vision Connection',
+			width: 380,
+			height: 400,
+			resizable: false
+		});
+		webview.once('tauri://error', (e: unknown) => {
+			console.error('Error creating vision window.', e);
+		});
+	}
+
+	let unlistenVision: UnlistenFn;
+	let unlistenControl: UnlistenFn;
+	let cleanupControl: (() => void) | undefined;
 
 	onMount(async () => {
 		cleanupControl = setupControlListeners();
+
+		unlistenControl = await listen('control-settings', (event: any) => {
+			const p = event.payload;
+			manualControlMode.set(p.mode);
+			manualControlActive.set(p.active);
+			controlTeam.set(p.team);
+			controlRobotId.set(p.robotId);
+			velScaleVx.set(p.scaleVx);
+			velScaleVy.set(p.scaleVy);
+			velScaleW.set(p.scaleW);
+			visualizeVelocities.set(p.visVels);
+		});
 
 		unlistenVision = await listen('vision-update', (event: any) => {
 			const payload = event.payload;
@@ -74,12 +147,9 @@
 
 	onDestroy(() => {
 		if (unlistenVision) unlistenVision();
+		if (unlistenControl) unlistenControl();
 		if (cleanupControl) cleanupControl();
 	});
-
-	function setTab(t: 'connection' | 'control' | 'script') {
-		tab = t;
-	}
 </script>
 
 <div class="flex h-screen flex-col overflow-hidden rounded-lg border border-border bg-background text-foreground">
@@ -111,53 +181,45 @@
 		</div>
 	</div>
 
-	<!-- Top Navigation -->
-	<nav class="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card px-4">
-		<button
-			class="flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors {tab === 'connection'
-				? 'border-primary text-foreground'
-				: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			onclick={() => setTab('connection')}
-		>
-			Connection
-		</button>
-		<button
-			class="flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors {tab === 'control'
-				? 'border-primary text-foreground'
-				: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			onclick={() => setTab('control')}
-		>
-			Control
-			{#if $manualControlActive}
-				<span class="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_5px_theme(colors.green.500)]"></span>
-			{/if}
-		</button>
-		<button
-			class="flex h-full items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors {tab === 'script'
-				? 'border-primary text-foreground'
-				: 'border-transparent text-muted-foreground hover:text-foreground'}"
-			onclick={() => setTab('script')}
-		>
-			Script
-		</button>
-	</nav>
-
 	<!-- Content: Sidebar + Field -->
 	<div class="flex flex-1 overflow-hidden">
 		<!-- Sidebar -->
-		<aside class="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border bg-card p-3">
-			<h3 class="border-b border-border pb-2 text-sm font-semibold">Configuration</h3>
-
-			{#if tab === 'connection'}
-				<RadioPanel />
-				<KalmanFilterPanel />
-				<RecordingPanel />
-			{:else if tab === 'control'}
-				<ManualControlPanel />
-				<PathFollowingPanel />
-			{:else if tab === 'script'}
-				<ScriptPanel />
-			{/if}
+		<aside class="flex shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-card p-2">
+			<button
+				class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openVisionWindow}
+				title="Vision Connection"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+			</button>
+			<button
+				class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openRadioWindow}
+				title="Radio Configuration"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/></svg>
+			</button>
+			<button
+				class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openKalmanWindow}
+				title="Kalman Filter"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+			</button>
+			<button
+				class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openRecordingWindow}
+				title="Recording"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>
+			</button>
+			<button
+				class="flex h-9 w-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+				onclick={openControlWindow}
+				title="Manual Control"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01"/><path d="M18 12h.01"/></svg>
+			</button>
 		</aside>
 
 		<!-- Main Canvas -->
