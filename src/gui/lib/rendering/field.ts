@@ -210,6 +210,69 @@ export function drawDisconnectedOverlay(ctx: CanvasRenderingContext2D, w: number
 	ctx.fillText('No Vision Connected', w / 2, h / 2);
 }
 
+export function drawLuaCommands(
+	ctx: CanvasRenderingContext2D,
+	vp: Viewport,
+	commands: { type: string; x?: number; y?: number; id?: number; team?: number; points?: [number, number][] }[],
+	blue: { id: number; x: number; y: number }[],
+	yellow: { id: number; x: number; y: number }[]
+) {
+	const { width: w, height: h, panX, panY, scale } = vp;
+	const cx = w / 2 + panX;
+	const cy = h / 2 + panY;
+
+	for (const cmd of commands) {
+		switch (cmd.type) {
+			case 'Point': {
+				const sx = cx + cmd.x! * 1000 * scale;
+				const sy = cy - cmd.y! * 1000 * scale;
+				ctx.fillStyle = 'lime';
+				ctx.beginPath();
+				ctx.arc(sx, sy, Math.max(4, 40 * scale), 0, Math.PI * 2);
+				ctx.fill();
+				break;
+			}
+			case 'HighlightRobot': {
+				const list = cmd.team === 0 ? blue : yellow;
+				const robot = list.find((r) => r.id === cmd.id);
+				if (robot) {
+					const sx = cx + robot.x * 1000 * scale;
+					const sy = cy - robot.y * 1000 * scale;
+					ctx.strokeStyle = 'lime';
+					ctx.lineWidth = 3;
+					ctx.beginPath();
+					ctx.arc(sx, sy, 120 * scale, 0, Math.PI * 2);
+					ctx.stroke();
+				}
+				break;
+			}
+			case 'Line': {
+				const pts = cmd.points!;
+				if (pts.length < 2) break;
+				ctx.strokeStyle = 'lime';
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				for (let i = 0; i < pts.length; i++) {
+					const sx = cx + pts[i][0] * 1000 * scale;
+					const sy = cy - pts[i][1] * 1000 * scale;
+					if (i === 0) ctx.moveTo(sx, sy);
+					else ctx.lineTo(sx, sy);
+				}
+				ctx.stroke();
+				ctx.fillStyle = 'lime';
+				for (const pt of pts) {
+					const sx = cx + pt[0] * 1000 * scale;
+					const sy = cy - pt[1] * 1000 * scale;
+					ctx.beginPath();
+					ctx.arc(sx, sy, Math.max(3, 30 * scale), 0, Math.PI * 2);
+					ctx.fill();
+				}
+				break;
+			}
+		}
+	}
+}
+
 export function screenToField(
 	vp: Viewport,
 	clientX: number,
