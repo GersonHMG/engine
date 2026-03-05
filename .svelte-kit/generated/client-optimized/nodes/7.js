@@ -1,0 +1,1 @@
+export { default as component } from "../../../../src/gui/routes/recording/+page.svelte";

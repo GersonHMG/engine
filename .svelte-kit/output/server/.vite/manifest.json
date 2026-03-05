@@ -10,11 +10,11 @@
       "_internal.js"
     ]
   },
-  "_card-content.js": {
-    "file": "chunks/card-content.js",
-    "name": "card-content",
+  "_app.js": {
+    "file": "chunks/app.js",
+    "name": "app",
     "imports": [
-      "_index2.js"
+      "_index.js"
     ]
   },
   "_context.js": {
@@ -55,12 +55,28 @@
       "_false.js"
     ]
   },
+  "_index3.js": {
+    "file": "chunks/index3.js",
+    "name": "index",
+    "imports": [
+      "_index2.js",
+      "_utils2.js"
+    ]
+  },
   "_internal.js": {
     "file": "chunks/internal.js",
     "name": "internal",
     "imports": [
       "_root.js",
       "_environment.js"
+    ]
+  },
+  "_label.js": {
+    "file": "chunks/label.js",
+    "name": "label",
+    "imports": [
+      "_index2.js",
+      "_utils2.js"
     ]
   },
   "_root.js": {
@@ -87,8 +103,21 @@
       "_root.js"
     ]
   },
+  "_switch.js": {
+    "file": "chunks/switch.js",
+    "name": "switch",
+    "imports": [
+      "_index2.js",
+      "_utils2.js",
+      "_context.js"
+    ]
+  },
   "_utils.js": {
     "file": "chunks/utils.js",
+    "name": "utils"
+  },
+  "_utils2.js": {
+    "file": "chunks/utils2.js",
     "name": "utils"
   },
   "node_modules/@sveltejs/kit/src/runtime/app/server/remote/index.js": {
@@ -137,7 +166,7 @@
     "src": "src/gui/routes/+layout.svelte",
     "isEntry": true,
     "css": [
-      "_app/immutable/assets/_layout.Dt4GzbVG.css"
+      "_app/immutable/assets/_layout.BPAmPxgn.css"
     ]
   },
   "src/gui/routes/+layout.ts": {
@@ -152,11 +181,25 @@
     "src": "src/gui/routes/+page.svelte",
     "isEntry": true,
     "imports": [
-      "_index2.js",
       "_index-server.js",
-      "_index.js",
+      "_app.js",
       "_context.js",
-      "_card-content.js"
+      "_index.js",
+      "_index2.js",
+      "_index3.js"
+    ]
+  },
+  "src/gui/routes/control/+page.svelte": {
+    "file": "entries/pages/control/_page.svelte.js",
+    "name": "entries/pages/control/_page.svelte",
+    "src": "src/gui/routes/control/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_label.js",
+      "_switch.js",
+      "_app.js",
+      "_context.js"
     ]
   },
   "src/gui/routes/hyperparameters/+page.svelte": {
@@ -171,7 +214,52 @@
       "_utils.js",
       "_root.js",
       "_state.svelte.js",
-      "_card-content.js"
+      "_label.js",
+      "_index3.js"
+    ]
+  },
+  "src/gui/routes/kalman/+page.svelte": {
+    "file": "entries/pages/kalman/_page.svelte.js",
+    "name": "entries/pages/kalman/_page.svelte",
+    "src": "src/gui/routes/kalman/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_label.js",
+      "_index3.js",
+      "_switch.js"
+    ]
+  },
+  "src/gui/routes/radio/+page.svelte": {
+    "file": "entries/pages/radio/_page.svelte.js",
+    "name": "entries/pages/radio/_page.svelte",
+    "src": "src/gui/routes/radio/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_label.js",
+      "_index3.js",
+      "_switch.js"
+    ]
+  },
+  "src/gui/routes/recording/+page.svelte": {
+    "file": "entries/pages/recording/_page.svelte.js",
+    "name": "entries/pages/recording/_page.svelte",
+    "src": "src/gui/routes/recording/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_index2.js",
+      "_label.js",
+      "_index3.js",
+      "_context.js"
+    ]
+  },
+  "src/gui/routes/vision/+page.svelte": {
+    "file": "entries/pages/vision/_page.svelte.js",
+    "name": "entries/pages/vision/_page.svelte",
+    "src": "src/gui/routes/vision/+page.svelte",
+    "isEntry": true,
+    "imports": [
+      "_label.js",
+      "_index3.js"
     ]
   },
   "src/gui/routes/wheels/+page.svelte": {

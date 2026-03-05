@@ -91,6 +91,11 @@ declare module '$env/static/private' {
 	export const DEBUG: string;
 	export const DriverData: string;
 	export const EDITOR: string;
+	export const EFC_11152_1262719628: string;
+	export const EFC_11152_1592913036: string;
+	export const EFC_11152_2283032206: string;
+	export const EFC_11152_2775293581: string;
+	export const EFC_11152_3789132940: string;
 	export const GEMINI_CLI_IDE_AUTH_TOKEN: string;
 	export const GEMINI_CLI_IDE_SERVER_PORT: string;
 	export const GEMINI_CLI_IDE_WORKSPACE_PATH: string;
@@ -140,7 +145,6 @@ declare module '$env/static/private' {
 	export const OUT_DIR: string;
 	export const Path: string;
 	export const PATHEXT: string;
-	export const POWERSHELL_DISTRIBUTION_CHANNEL: string;
 	export const PROCESSOR_ARCHITECTURE: string;
 	export const PROCESSOR_IDENTIFIER: string;
 	export const PROCESSOR_LEVEL: string;
@@ -151,7 +155,6 @@ declare module '$env/static/private' {
 	export const ProgramW6432: string;
 	export const PROMPT: string;
 	export const PROTOC: string;
-	export const PSExecutionPolicyPreference: string;
 	export const PSModulePath: string;
 	export const PUBLIC: string;
 	export const PyCharm: string;
@@ -163,6 +166,7 @@ declare module '$env/static/private' {
 	export const RUSTUP_HOME: string;
 	export const RUSTUP_TOOLCHAIN: string;
 	export const RUST_RECURSION_COUNT: string;
+	export const SESSIONNAME: string;
 	export const SPINNAKER_GENTL32_CTI_VS140: string;
 	export const SPINNAKER_GENTL64_CTI_VS140: string;
 	export const SPINNAKER_INSTALL_PATH: string;
@@ -331,6 +335,11 @@ declare module '$env/dynamic/private' {
 		DEBUG: string;
 		DriverData: string;
 		EDITOR: string;
+		EFC_11152_1262719628: string;
+		EFC_11152_1592913036: string;
+		EFC_11152_2283032206: string;
+		EFC_11152_2775293581: string;
+		EFC_11152_3789132940: string;
 		GEMINI_CLI_IDE_AUTH_TOKEN: string;
 		GEMINI_CLI_IDE_SERVER_PORT: string;
 		GEMINI_CLI_IDE_WORKSPACE_PATH: string;
@@ -380,7 +389,6 @@ declare module '$env/dynamic/private' {
 		OUT_DIR: string;
 		Path: string;
 		PATHEXT: string;
-		POWERSHELL_DISTRIBUTION_CHANNEL: string;
 		PROCESSOR_ARCHITECTURE: string;
 		PROCESSOR_IDENTIFIER: string;
 		PROCESSOR_LEVEL: string;
@@ -391,7 +399,6 @@ declare module '$env/dynamic/private' {
 		ProgramW6432: string;
 		PROMPT: string;
 		PROTOC: string;
-		PSExecutionPolicyPreference: string;
 		PSModulePath: string;
 		PUBLIC: string;
 		PyCharm: string;
@@ -403,6 +410,7 @@ declare module '$env/dynamic/private' {
 		RUSTUP_HOME: string;
 		RUSTUP_TOOLCHAIN: string;
 		RUST_RECURSION_COUNT: string;
+		SESSIONNAME: string;
 		SPINNAKER_GENTL32_CTI_VS140: string;
 		SPINNAKER_GENTL64_CTI_VS140: string;
 		SPINNAKER_INSTALL_PATH: string;
