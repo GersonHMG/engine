@@ -1,5 +1,7 @@
 # Sysmic Robotics — RoboCup SSL Engine
 
+Since the old [engine](https://github.com/Sysmic-Robotics/condorssl) was to heavy to install I decided to migrate to a light version using Rust and Iced.
+
 ![Engine demo](docs/example.gif)
 
 A Rust-based engine for RoboCup Small Size League (SSL) robots. It handles vision data (SSL-Vision), the game controller (ssl-game-controller), robot control via radio or grSim simulation, and exposes a Lua scripting interface for strategy code. A desktop GUI is built with [Iced](https://github.com/iced-rs/iced).
