@@ -186,6 +186,7 @@ impl EngineApp {
                 SidebarPanel::Kalman => "Kalman Filter".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
+                SidebarPanel::Charts => "Robot Charts".to_string(),
             }
         } else {
             "Sysmic Engine".to_string()
@@ -198,11 +199,21 @@ impl EngineApp {
 
     fn open_panel_window(&mut self, panel: SidebarPanel) -> iced::Task<Message> {
         if self.panel_windows.contains_key(&panel) {
+            // Bring existing window to front by focusing it
+            if let Some(&wid) = self.panel_windows.get(&panel) {
+                return window::gain_focus(wid);
+            }
             return iced::Task::none();
         }
 
+        let size = if panel == SidebarPanel::Charts {
+            iced::Size::new(640.0, 400.0)
+        } else {
+            iced::Size::new(300.0, 420.0)
+        };
+
         let (id, task) = window::open(window::Settings {
-            size: iced::Size::new(300.0, 420.0),
+            size,
             resizable: true,
             ..Default::default()
         });
@@ -265,7 +276,6 @@ impl EngineApp {
                     self.toolbar.script_status = toolbar::ScriptStatus::Loaded;
                 }
             }
-
             Message::ScriptFileSelected(Some(path)) => {
                 let _ = self.command_tx.try_send(EngineCommand::LoadScript { path: path.clone() });
                 self.toolbar.script_path = path;
@@ -274,25 +284,71 @@ impl EngineApp {
             Message::ScriptFileSelected(None) => {}
 
             // --- Bottom Panel ---
-            Message::BottomPanel(BottomPanelMessage::ToggleCapture) => {
-                self.bottom_panel.capturing = !self.bottom_panel.capturing;
-            }
-            Message::BottomPanel(BottomPanelMessage::ToggleTrace) => {
-                self.bottom_panel.trace_on = !self.bottom_panel.trace_on;
+            Message::BottomPanel(BottomPanelMessage::SetTrace(val)) => {
+                self.bottom_panel.trace_on = val;
                 self.field_data.robot_trace.clear();
                 self.robot_trace.clear();
             }
-            Message::BottomPanel(BottomPanelMessage::ToggleVectors) => {
-                self.bottom_panel.vectors_on = !self.bottom_panel.vectors_on;
-                self.field_data.vis_velocities = self.bottom_panel.vectors_on;
+            Message::BottomPanel(BottomPanelMessage::SetVectors(val)) => {
+                self.bottom_panel.vectors_on = val;
+                self.field_data.vis_velocities = val;
+            }
+            Message::BottomPanel(BottomPanelMessage::SetHighlight(val)) => {
+                self.bottom_panel.highlight_on = val;
+                if val {
+                    let id = self.bottom_panel.control_robot_id.parse::<u32>().unwrap_or(0);
+                    let team = self.bottom_panel.control_team.to_id();
+                    self.field_data.highlight_robot = Some((id, team));
+                } else {
+                    self.field_data.highlight_robot = None;
+                }
+            }
+            Message::BottomPanel(BottomPanelMessage::SetManualControl(val)) => {
+                self.bottom_panel.manual_control_on = val;
+                self.control_panel.active = val;
+            }
+            Message::BottomPanel(BottomPanelMessage::ToggleChartPause) => {
+                self.bottom_panel.chart_paused = !self.bottom_panel.chart_paused;
+            }
+            Message::BottomPanel(BottomPanelMessage::IncrementRobotId) => {
+                let new_id = (self.bottom_panel.control_robot_id.parse::<i32>().unwrap_or(0) + 1).min(12);
+                let s = new_id.to_string();
+                self.bottom_panel.control_robot_id = s.clone();
+                self.control_panel.robot_id = s.clone();
+                if self.bottom_panel.highlight_on {
+                    self.field_data.highlight_robot = Some((new_id as u32, self.bottom_panel.control_team.to_id()));
+                }
+            }
+            Message::BottomPanel(BottomPanelMessage::DecrementRobotId) => {
+                let new_id = (self.bottom_panel.control_robot_id.parse::<i32>().unwrap_or(0) - 1).max(0);
+                let s = new_id.to_string();
+                self.bottom_panel.control_robot_id = s.clone();
+                self.control_panel.robot_id = s.clone();
+                if self.bottom_panel.highlight_on {
+                    self.field_data.highlight_robot = Some((new_id as u32, self.bottom_panel.control_team.to_id()));
+                }
             }
             Message::BottomPanel(BottomPanelMessage::TeamSelected(team)) => {
                 self.bottom_panel.control_team = team;
                 self.control_panel.team = team;
+                if self.bottom_panel.highlight_on {
+                    let id = self.bottom_panel.control_robot_id.parse::<u32>().unwrap_or(0);
+                    self.field_data.highlight_robot = Some((id, team.to_id()));
+                }
             }
             Message::BottomPanel(BottomPanelMessage::RobotIdChanged(id)) => {
-                self.bottom_panel.control_robot_id = id.clone();
-                self.control_panel.robot_id = id;
+                // Accept only digits, clamp to 0-12
+                let filtered: String = id.chars().filter(|c| c.is_ascii_digit()).collect();
+                let clamped = filtered.parse::<i32>().unwrap_or(0).clamp(0, 12).to_string();
+                // Keep raw input while typing so user can clear and retype; only clamp when valid
+                let new_id = if filtered.is_empty() { filtered.clone() } else { clamped };
+                self.bottom_panel.control_robot_id = new_id.clone();
+                self.control_panel.robot_id = new_id.clone();
+                if self.bottom_panel.highlight_on {
+                    let robot_id = new_id.parse::<u32>().unwrap_or(0);
+                    let team = self.bottom_panel.control_team.to_id();
+                    self.field_data.highlight_robot = Some((robot_id, team));
+                }
             }
 
             // --- Vision Panel ---
@@ -374,9 +430,6 @@ impl EngineApp {
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
             }
-            Message::Control(ControlMessage::ActiveToggled(val)) => {
-                self.control_panel.active = val;
-            }
             Message::Control(ControlMessage::ScaleVxChanged(val)) => {
                 self.control_panel.scale_vx = val;
             }
@@ -445,7 +498,7 @@ impl EngineApp {
                         let ctrl_team = self.control_panel.team.to_id();
                         let robots = if ctrl_team == 0 { &update.robots_blue } else { &update.robots_yellow };
                         if let Some(target) = robots.iter().find(|r| r.id == ctrl_id as u32) {
-                            if self.bottom_panel.capturing {
+                            if self.bottom_panel.capturing && !self.bottom_panel.chart_paused {
                                 self.bottom_panel.chart_data.push_vel(target.cmd_vx, target.cmd_vy, target.cmd_angular);
                                 self.bottom_panel.chart_data.push_pos(target.x, target.y, target.theta);
                             }
@@ -514,7 +567,11 @@ impl EngineApp {
 
 
             // --- Window events ---
-            Message::WindowOpened(_id) => {}
+            Message::WindowOpened(id) => {
+                if self.window_to_panel.get(&id) == Some(&SidebarPanel::Charts) {
+                    self.bottom_panel.capturing = true;
+                }
+            }
             Message::WindowClosed(id) => {
                 if id == self.main_window_id {
                     let panel_ids: Vec<window::Id> = self.panel_windows.values().cloned().collect();
@@ -523,6 +580,9 @@ impl EngineApp {
                     return iced::Task::batch(tasks);
                 } else {
                     if let Some(panel) = self.window_to_panel.remove(&id) {
+                        if panel == SidebarPanel::Charts {
+                            self.bottom_panel.capturing = false;
+                        }
                         self.panel_windows.remove(&panel);
                         if self.sidebar.active_panel == Some(panel) {
                             self.sidebar.active_panel = None;
@@ -620,6 +680,7 @@ impl EngineApp {
             SidebarPanel::Kalman => self.kalman_panel.view().map(Message::Kalman),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
+            SidebarPanel::Charts => self.bottom_panel.view_charts().map(Message::BottomPanel),
         };
 
         container(scrollable(content))

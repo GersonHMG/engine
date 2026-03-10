@@ -18,6 +18,8 @@ pub struct FieldData {
     pub vision_connected: bool,
     pub vis_velocities: bool,
     pub path_draw_mode: bool,
+    /// Robot to highlight in red: (robot_id, team 0=blue 1=yellow)
+    pub highlight_robot: Option<(u32, i32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -282,10 +284,14 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
 
         // Draw robots
         for robot in &self.data.robots_blue {
-            self.draw_robot(&mut frame, bounds, robot, Color::from_rgb(0.1, 0.1, 0.9));
+            let highlighted = self.data.highlight_robot == Some((robot.id, 0));
+            let color = if highlighted { Color::from_rgb(0.9, 0.1, 0.1) } else { Color::from_rgb(0.1, 0.1, 0.9) };
+            self.draw_robot(&mut frame, bounds, robot, color);
         }
         for robot in &self.data.robots_yellow {
-            self.draw_robot(&mut frame, bounds, robot, Color::from_rgb(0.9, 0.9, 0.0));
+            let highlighted = self.data.highlight_robot == Some((robot.id, 1));
+            let color = if highlighted { Color::from_rgb(0.9, 0.1, 0.1) } else { Color::from_rgb(0.9, 0.9, 0.0) };
+            self.draw_robot(&mut frame, bounds, robot, color);
         }
 
         // Draw ball

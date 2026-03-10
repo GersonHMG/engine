@@ -1,7 +1,7 @@
 // gui/bottom_panel.rs — Velocity/position charts + toggle buttons + robot selector
 
 use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke, Text};
-use iced::widget::{button, column, container, pick_list, row, text, text_input, Canvas};
+use iced::widget::{checkbox, column, container, pick_list, row, text, text_input, Canvas};
 use iced::{mouse, Color, Element, Length, Point, Rectangle, Size, Theme};
 
 use crate::gui::panels::control::Team;
@@ -10,11 +10,15 @@ const CHART_HISTORY_SIZE: usize = 600;
 
 #[derive(Debug, Clone)]
 pub enum BottomPanelMessage {
-    ToggleCapture,
-    ToggleTrace,
-    ToggleVectors,
+    SetTrace(bool),
+    SetVectors(bool),
+    SetHighlight(bool),
+    SetManualControl(bool),
     TeamSelected(Team),
     RobotIdChanged(String),
+    IncrementRobotId,
+    DecrementRobotId,
+    ToggleChartPause,
 }
 
 #[derive(Debug, Clone)]
@@ -62,8 +66,11 @@ impl ChartData {
 
 pub struct BottomPanel {
     pub capturing: bool,
+    pub chart_paused: bool,
     pub trace_on: bool,
     pub vectors_on: bool,
+    pub highlight_on: bool,
+    pub manual_control_on: bool,
     pub control_robot_id: String,
     pub control_team: Team,
     pub chart_data: ChartData,
@@ -73,8 +80,11 @@ impl BottomPanel {
     pub fn new() -> Self {
         Self {
             capturing: false,
+            chart_paused: false,
             trace_on: false,
             vectors_on: false,
+            highlight_on: false,
+            manual_control_on: false,
             control_robot_id: "0".to_string(),
             control_team: Team::Blue,
             chart_data: ChartData::default(),
@@ -82,87 +92,120 @@ impl BottomPanel {
     }
 
     pub fn view(&self) -> Element<BottomPanelMessage> {
-        let controls = column![
-            // Robot selector
-            row![
-                text("Team").size(10),
-                pick_list(
-                    &[Team::Blue, Team::Yellow][..],
-                    Some(self.control_team),
-                    BottomPanelMessage::TeamSelected,
-                )
-                .text_size(10)
-                .width(Length::Fill),
-            ]
-            .spacing(4)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("ID").size(10),
-                text_input("0", &self.control_robot_id)
-                    .on_input(BottomPanelMessage::RobotIdChanged)
-                    .size(10)
-                    .width(Length::Fixed(40.0)),
-            ]
-            .spacing(4)
-            .align_y(iced::Alignment::Center),
-            // Toggle buttons
-            button(
-                text(if self.capturing {
-                    "Capture ON"
-                } else {
-                    "Capture OFF"
-                })
-                .size(10)
-                .center()
-                .width(Length::Fill),
-            )
-            .on_press(BottomPanelMessage::ToggleCapture)
-            .width(Length::Fill)
-            .style(if self.capturing {
-                button::primary
-            } else {
-                button::secondary
-            }),
-            button(
-                text(if self.trace_on {
-                    "Trace ON"
-                } else {
-                    "Trace OFF"
-                })
-                .size(10)
-                .center()
-                .width(Length::Fill),
-            )
-            .on_press(BottomPanelMessage::ToggleTrace)
-            .width(Length::Fill)
-            .style(if self.trace_on {
-                button::primary
-            } else {
-                button::secondary
-            }),
-            button(
-                text(if self.vectors_on {
-                    "Vectors ON"
-                } else {
-                    "Vectors OFF"
-                })
-                .size(10)
-                .center()
-                .width(Length::Fill),
-            )
-            .on_press(BottomPanelMessage::ToggleVectors)
-            .width(Length::Fill)
-            .style(if self.vectors_on {
-                button::primary
-            } else {
-                button::secondary
-            }),
-        ]
-        .spacing(4)
-        .width(Length::Fixed(100.0));
+        // Team + ID selector — text_input with stacked ▲/▼ overlaid on the right, like <input type="number">
+        let id_val: i32 = self.control_robot_id.parse().unwrap_or(0);
 
-        // Always show charts — active = colored, inactive = gray
-        let active = self.capturing;
+        let spin_up = iced::widget::button(
+            text("▲").size(6).align_x(iced::alignment::Horizontal::Center),
+        )
+        .on_press_maybe(if id_val < 12 { Some(BottomPanelMessage::IncrementRobotId) } else { None })
+        .style(|theme: &iced::Theme, status| {
+            let mut s = iced::widget::button::secondary(theme, status);
+            s.border.radius = 0.0.into();
+            s
+        })
+        .padding([0, 3])
+        .width(Length::Fixed(14.0))
+        .height(Length::Fixed(11.0));
+
+        let spin_down = iced::widget::button(
+            text("▼").size(6).align_x(iced::alignment::Horizontal::Center),
+        )
+        .on_press_maybe(if id_val > 0 { Some(BottomPanelMessage::DecrementRobotId) } else { None })
+        .style(|theme: &iced::Theme, status| {
+            let mut s = iced::widget::button::secondary(theme, status);
+            s.border.radius = 0.0.into();
+            s
+        })
+        .padding([0, 3])
+        .width(Length::Fixed(14.0))
+        .height(Length::Fixed(11.0));
+
+        let spin_col = column![spin_up, spin_down].spacing(0);
+
+        // Overlay the spin column on the right side of the text_input
+        const INPUT_W: f32 = 54.0;
+        let number_input = iced::widget::stack![
+            text_input("0", &self.control_robot_id)
+                .on_input(BottomPanelMessage::RobotIdChanged)
+                .size(10)
+                .width(Length::Fixed(INPUT_W)),
+            container(spin_col)
+                .width(Length::Fixed(INPUT_W))
+                .height(Length::Fill)
+                .align_x(iced::alignment::Horizontal::Right)
+                .align_y(iced::alignment::Vertical::Center),
+        ];
+
+        let selector = row![
+            text("Team").size(10),
+            pick_list(
+                &[Team::Blue, Team::Yellow][..],
+                Some(self.control_team),
+                BottomPanelMessage::TeamSelected,
+            )
+            .text_size(10)
+            .width(Length::Fixed(70.0)),
+            text("ID").size(10),
+            number_input,
+        ]
+        .spacing(6)
+        .align_y(iced::Alignment::Center);
+
+        let trace_check = checkbox(self.trace_on)
+            .label("Trace")
+            .on_toggle(BottomPanelMessage::SetTrace)
+            .size(14)
+            .text_size(10);
+
+        let vectors_check = checkbox(self.vectors_on)
+            .label("Vectors")
+            .on_toggle(BottomPanelMessage::SetVectors)
+            .size(14)
+            .text_size(10);
+
+        let highlight_check = checkbox(self.highlight_on)
+            .label("Highlight")
+            .on_toggle(BottomPanelMessage::SetHighlight)
+            .size(14)
+            .text_size(10);
+
+        let manual_check = checkbox(self.manual_control_on)
+            .label("Manual Control")
+            .on_toggle(BottomPanelMessage::SetManualControl)
+            .size(14)
+            .text_size(10);
+
+        let content = row![selector, trace_check, vectors_check, highlight_check, manual_check,]
+            .spacing(16)
+            .padding(8)
+            .align_y(iced::Alignment::Center);
+
+        container(content)
+            .width(Length::Fill)
+            .height(Length::Fixed(52.0))
+            .style(panel_style)
+            .into()
+    }
+
+    pub fn view_charts(&self) -> Element<BottomPanelMessage> {
+        let active = self.capturing && !self.chart_paused;
+
+        let pause_btn = if self.chart_paused {
+            iced::widget::button(text("▶ Resume").size(11))
+                .on_press(BottomPanelMessage::ToggleChartPause)
+                .style(iced::widget::button::success)
+        } else {
+            iced::widget::button(text("⏸ Pause").size(11))
+                .on_press(BottomPanelMessage::ToggleChartPause)
+                .style(iced::widget::button::secondary)
+        };
+
+        let header = row![
+            iced::widget::Space::new().width(Length::Fill),
+            pause_btn,
+        ]
+        .padding([4, 8]);
 
         let chart_color = |c: Color| -> Color {
             if active { c } else { Color::from_rgb(0.35, 0.35, 0.4) }
@@ -187,7 +230,7 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
                 text("X").size(9).color(label_color(x_color)),
                 Canvas::new(ChartProgram {
                     data: &self.chart_data.x,
@@ -195,9 +238,9 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
             ]
-            .spacing(2)
+            .spacing(4)
             .width(Length::Fill),
             column![
                 text("Vy").size(9).color(label_color(vy_color)),
@@ -207,7 +250,7 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
                 text("Y").size(9).color(label_color(y_color)),
                 Canvas::new(ChartProgram {
                     data: &self.chart_data.y,
@@ -215,9 +258,9 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
             ]
-            .spacing(2)
+            .spacing(4)
             .width(Length::Fill),
             column![
                 text("ω").size(9).color(label_color(omega_color)),
@@ -227,7 +270,7 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
                 text("θ").size(9).color(label_color(theta_color)),
                 Canvas::new(ChartProgram {
                     data: &self.chart_data.theta,
@@ -235,22 +278,19 @@ impl BottomPanel {
                     active,
                 })
                 .width(Length::Fill)
-                .height(Length::Fixed(36.0)),
+                .height(Length::Fixed(80.0)),
             ]
-            .spacing(2)
+            .spacing(4)
             .width(Length::Fill),
         ]
-        .spacing(4)
-        .width(Length::Fill);
+        .spacing(8)
+        .padding(12);
 
-        let content = row![controls, charts,]
-            .spacing(8)
-            .padding(8)
-            .align_y(iced::Alignment::Center);
+        let content = column![header, charts].spacing(0);
 
         container(content)
             .width(Length::Fill)
-            .height(Length::Fixed(180.0))
+            .height(Length::Fill)
             .style(panel_style)
             .into()
     }
