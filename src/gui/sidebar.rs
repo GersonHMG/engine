@@ -10,6 +10,7 @@ pub enum SidebarPanel {
     Kalman,
     Recording,
     Control,
+    Charts,
 }
 
 #[derive(Debug, Clone)]
@@ -63,6 +64,7 @@ impl Sidebar {
             make_btn("📈", SidebarPanel::Kalman, ap == Some(SidebarPanel::Kalman)),
             make_btn("⏺", SidebarPanel::Recording, ap == Some(SidebarPanel::Recording)),
             make_btn("🎮", SidebarPanel::Control, ap == Some(SidebarPanel::Control)),
+            make_btn("📊", SidebarPanel::Charts, ap == Some(SidebarPanel::Charts)),
         ]
         .spacing(4)
         .padding(4);

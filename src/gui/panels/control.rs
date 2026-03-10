@@ -1,6 +1,6 @@
 // gui/panels/control.rs — Manual control panel
 
-use iced::widget::{column, container, pick_list, row, text, text_input, toggler};
+use iced::widget::{column, container, pick_list, row, text, text_input};
 use iced::{Element, Length};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,7 +45,6 @@ impl Team {
 #[derive(Debug, Clone)]
 pub enum ControlMessage {
     ModeSelected(ControlMode),
-    ActiveToggled(bool),
     ScaleVxChanged(String),
     ScaleVyChanged(String),
     ScaleWChanged(String),
@@ -104,18 +103,11 @@ impl ControlPanel {
             row![
                 text("Mode").width(Length::Fixed(90.0)),
                 pick_list(
-                    &[ControlMode::Xbox, ControlMode::Keyboard][..],
+                    &[ControlMode::Keyboard, ControlMode::Xbox][..],
                     Some(self.mode),
                     ControlMessage::ModeSelected,
                 )
                 .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Active").width(Length::Fixed(90.0)),
-                toggler(self.active)
-                    .on_toggle(ControlMessage::ActiveToggled),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
