@@ -46,6 +46,28 @@ impl Motion {
         self.bangbang.compute_motion(robot, path, delta)
     }
 
+    /// Execute bang-bang trajectory from an explicit path with custom limits.
+    pub fn bangbang_trajectory(
+        &self,
+        robot: &RobotState,
+        id: i32,
+        team: i32,
+        v_max: f64,
+        a_max: f64,
+        path: Vec<Vec2D>,
+    ) -> MotionCommand {
+        if v_max <= 0.0 || a_max <= 0.0 {
+            return MotionCommand::zero();
+        }
+
+        let delta = 1.0 / 60.0;
+        let controller = BangBangControl::new(a_max, v_max);
+        let mut cmd = controller.compute_motion(robot, path, delta);
+        cmd.id = id;
+        cmd.team = team;
+        cmd
+    }
+
     /// Motion with PID velocity control and obstacle avoidance.
     pub fn motion(
         &self,
@@ -100,79 +122,6 @@ impl Motion {
         cmd
     }
 
-    /// Rotate to a specific angle using PID.
-    pub fn face_to_angle(
-        &self,
-        robot: &RobotState,
-        target_angle: f64,
-        kp: f64,
-        ki: f64,
-    ) -> MotionCommand {
-        let mut pid = PID::new(kp, ki, 0.0);
-
-        let current = normalize_angle(robot.orientation);
-        let target = normalize_angle(target_angle);
-        let error = normalize_angle(target - current);
-
-        let delta = 1.0 / 60.0;
-        let angular_velocity = pid.compute(error, delta);
-
-        let mut cmd = MotionCommand::with_id_team(robot.id, robot.team);
-        cmd.angular = angular_velocity;
-        cmd
-    }
-
-    /// Motion with orientation control.
-    pub fn motion_with_orientation(
-        &self,
-        robot: &RobotState,
-        target: Vec2D,
-        target_angle: f64,
-        world: &World,
-        kp_x: f64,
-        ki_x: f64,
-        kp_y: f64,
-        ki_y: f64,
-        kp_angle: f64,
-        ki_angle: f64,
-    ) -> MotionCommand {
-        let env = Environment::new(world, robot);
-        let path = self.planner.get_path(robot.position, target, &env);
-        let delta = 1.0 / 60.0;
-        let ref_vel = self.bangbang.compute_motion(robot, path, delta);
-
-        let orientation = robot.orientation;
-        let local_velocity = Vec2D::new(
-            robot.velocity.x * (-orientation).cos() - robot.velocity.y * (-orientation).sin(),
-            robot.velocity.x * (-orientation).sin() + robot.velocity.y * (-orientation).cos(),
-        );
-
-        // PID for Vx
-        let mut pid_x = PID::new(kp_x, ki_x, 0.0);
-        let error_x = ref_vel.vx - local_velocity.x;
-        let control_vx = pid_x.compute(error_x, delta);
-
-        // PID for Vy
-        let mut pid_y = PID::new(kp_y, ki_y, 0.0);
-        let error_y = ref_vel.vy - local_velocity.y;
-        let control_vy = pid_y.compute(error_y, delta);
-
-        // PID for angular
-        let mut angle_pid = PID::new(kp_angle, ki_angle, 0.0);
-        let current = normalize_angle(robot.orientation);
-        let target_a = normalize_angle(target_angle);
-        let error_angle = normalize_angle(target_a - current);
-        let angular = angle_pid.compute(error_angle, delta);
-
-        let mut cmd = MotionCommand::new(
-            robot.id,
-            robot.team,
-            ref_vel.vx + control_vx,
-            ref_vel.vy + control_vy,
-        );
-        cmd.angular = angular;
-        cmd
-    }
 }
 
 pub fn normalize_angle(mut angle: f64) -> f64 {
