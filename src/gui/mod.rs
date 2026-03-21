@@ -27,6 +27,7 @@ use panels::radio::{RadioPanel, RadioMessage};
 use panels::kalman::{KalmanPanel, KalmanMessage};
 use panels::recording::{RecordingPanel, RecordingMessage, RecordingStatus};
 use panels::control::{ControlPanel, ControlMessage};
+use panels::charts::{ChartsPanel, ChartsMessage, DataSample, export_csv_async};
 
 // --- Vision update (sent from vision task to GUI) ---
 #[derive(Debug, Clone)]
@@ -92,6 +93,7 @@ pub enum Message {
     Kalman(KalmanMessage),
     Recording(RecordingMessage),
     Control(ControlMessage),
+    Charts(ChartsMessage),
 
     // Events
     Tick,
@@ -117,6 +119,7 @@ pub struct EngineApp {
     kalman_panel: KalmanPanel,
     recording_panel: RecordingPanel,
     control_panel: ControlPanel,
+    charts_panel: ChartsPanel,
 
     // Data
     field_data: FieldData,
@@ -159,6 +162,7 @@ impl EngineApp {
             kalman_panel: KalmanPanel::default(),
             recording_panel: RecordingPanel::default(),
             control_panel: ControlPanel::default(),
+            charts_panel: ChartsPanel::new(),
             field_data: FieldData::default(),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -307,9 +311,6 @@ impl EngineApp {
                 self.bottom_panel.manual_control_on = val;
                 self.control_panel.active = val;
             }
-            Message::BottomPanel(BottomPanelMessage::ToggleChartPause) => {
-                self.bottom_panel.chart_paused = !self.bottom_panel.chart_paused;
-            }
             Message::BottomPanel(BottomPanelMessage::IncrementRobotId) => {
                 let new_id = (self.bottom_panel.control_robot_id.parse::<i32>().unwrap_or(0) + 1).min(12);
                 let s = new_id.to_string();
@@ -426,6 +427,18 @@ impl EngineApp {
                 self.recording_panel.status = RecordingStatus::Saved;
             }
 
+            // --- Charts Panel ---
+            Message::Charts(ref msg) => {
+                let needs_export = self.charts_panel.update(msg);
+                if needs_export {
+                    let samples = self.charts_panel.recorded_samples_clone();
+                    return iced::Task::perform(
+                        async move { export_csv_async(samples).await },
+                        |_| Message::Charts(ChartsMessage::ExportComplete),
+                    );
+                }
+            }
+
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -493,14 +506,24 @@ impl EngineApp {
                             self.field_data.ball = (b.x, b.y);
                         }
 
-                        // Charts
+                        // Charts — feed data to charts panel
                         let ctrl_id = self.control_panel.robot_id_parsed();
                         let ctrl_team = self.control_panel.team.to_id();
                         let robots = if ctrl_team == 0 { &update.robots_blue } else { &update.robots_yellow };
                         if let Some(target) = robots.iter().find(|r| r.id == ctrl_id as u32) {
-                            if self.bottom_panel.capturing && !self.bottom_panel.chart_paused {
-                                self.bottom_panel.chart_data.push_vel(target.cmd_vx, target.cmd_vy, target.cmd_angular);
-                                self.bottom_panel.chart_data.push_pos(target.x, target.y, target.theta);
+                            if self.charts_panel.active {
+                                let elapsed = self.charts_panel.start_time.elapsed().as_secs_f64();
+                                self.charts_panel.push_sample(DataSample {
+                                    time: elapsed,
+                                    x: target.x,
+                                    y: target.y,
+                                    theta: target.theta,
+                                    vx: target.vx,
+                                    vy: target.vy,
+                                    cmd_vx: target.cmd_vx,
+                                    cmd_vy: target.cmd_vy,
+                                    cmd_angular: target.cmd_angular,
+                                });
                             }
                             if self.bottom_panel.trace_on {
                                 self.robot_trace.push((target.x, target.y));
@@ -569,7 +592,7 @@ impl EngineApp {
             // --- Window events ---
             Message::WindowOpened(id) => {
                 if self.window_to_panel.get(&id) == Some(&SidebarPanel::Charts) {
-                    self.bottom_panel.capturing = true;
+                    self.charts_panel.active = true;
                 }
             }
             Message::WindowClosed(id) => {
@@ -581,7 +604,7 @@ impl EngineApp {
                 } else {
                     if let Some(panel) = self.window_to_panel.remove(&id) {
                         if panel == SidebarPanel::Charts {
-                            self.bottom_panel.capturing = false;
+                            self.charts_panel.active = false;
                         }
                         self.panel_windows.remove(&panel);
                         if self.sidebar.active_panel == Some(panel) {
@@ -680,7 +703,7 @@ impl EngineApp {
             SidebarPanel::Kalman => self.kalman_panel.view().map(Message::Kalman),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
-            SidebarPanel::Charts => self.bottom_panel.view_charts().map(Message::BottomPanel),
+            SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
         };
 
         container(scrollable(content))
