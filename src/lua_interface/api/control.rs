@@ -1,5 +1,5 @@
 use crate::motion::Motion;
-use crate::radio::Radio;
+use crate::sender::radio::Radio;
 use crate::types::{KickerCommand, MotionCommand, Vec2D};
 use crate::world::World;
 use mlua::prelude::*;
