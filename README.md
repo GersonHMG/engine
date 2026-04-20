@@ -174,13 +174,16 @@ engine/
 ├── scripts-test/             # Example Lua strategy scripts
 ├── src/
 │   ├── main.rs               # Entry point — Iced GUI + async engine loop
-│   ├── vision.rs             # SSL-Vision UDP multicast receiver
-│   ├── tracker.rs            # Kalman filter tracker
 │   ├── game_controller.rs    # ssl-game-controller client
 │   ├── world.rs              # Shared game state
 │   ├── lua_interface.rs      # Lua 5.4 scripting bridge
-│   ├── radio.rs              # Serial radio driver
-│   ├── grsim.rs              # grSim UDP command sender
+│   ├── receiver/             # Receiver-side modules
+│   │   ├── vision.rs         # SSL-Vision UDP multicast receiver
+│   │   └── tracker.rs        # Kalman filter tracker
+│   ├── sender/               # Sender-side modules
+│   │   ├── radio.rs          # Serial radio dispatcher
+│   │   ├── grsim.rs          # grSim UDP command sender
+│   │   └── packet_serializer.rs # Serial packet encoding
 │   ├── motion/               # Controllers (PID, bang-bang) and path planning
 │   ├── gui/                  # Iced GUI panels and field canvas
 │   └── protobuf/protos/      # SSL and grSim .proto definitions
