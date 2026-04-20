@@ -102,13 +102,68 @@ Strategy logic is written in Lua 5.4 scripts. Example scripts are provided in `s
 
 Load a script from the GUI toolbar or pass the path through the interface. The engine reloads the script on each tick, calling the `process()` function.
 
-Available Lua API functions (provided by the engine):
+### Lua API reference
 
-- `move_to(robotId, team, {x, y})` — send a move-to command
-- `get_robot_state(robotId, team)` — returns `{x, y, heading, vx, vy}`
-- `get_blue_team_state()` / `get_yellow_team_state()` — full team state
-- `draw_line(coords, color)` — draw a polyline overlay on the field canvas
-- `draw_circle(x, y, radius, color)` — draw a circle overlay
+The engine exposes these functions to Lua scripts.
+
+Conventions:
+- `team`: `0` = blue, `1` = yellow
+- Point/table arg: `{x = number, y = number}`
+- Optional args marked with `?` use the default values shown below
+
+#### Control and actuation
+
+- `send_velocity(id, team, vx, vy, omega)`
+    Sends direct velocity commands.
+- `move_to(id, team, {x=, y=})`
+    Move robot toward a target point using the default motion controller.
+- `move_direct(id, team, {x=, y=})`
+    Move robot directly toward a point (no path planning).
+- `motion(id, team, {x=, y=}, kp_x?, ki_x?, kp_y?, ki_y?)`
+    PID-like motion command with optional gains.
+    Defaults: `kp_x=0.5`, `ki_x=0.1`, `kp_y=0.5`, `ki_y=0.1`.
+- `face_to(id, team, {x=, y=}, kp?, ki?, kd?)`
+    Rotates robot to face a target point.
+    Defaults: `kp=1.0`, `ki=1.0`, `kd=0.1`.
+- `bangbang_trajectory(id, team, v_max, a_max, {{x,y}, {x,y}, ...})`
+    Follows a waypoint trajectory with bang-bang constraints.
+    Can use indexed points (`{x, y}`) or keyed points (`{x=, y=}`).
+- `kickx(id, team)`
+    Trigger straight kick.
+- `kickz(id, team)`
+    Trigger chip kick.
+- `dribbler(id, team, speed)`
+    Set dribbler speed, clamped to `[0.0, 10.0]`.
+
+#### State and referee
+
+- `get_robot_state(id, team) -> table`
+    Returns: `{id, team, x, y, vel_x, vel_y, orientation, omega, active}`.
+- `get_ball_state() -> table`
+    Returns: `{x, y, vel_x, vel_y}`.
+- `get_blue_team_state() -> table[]`
+    Array of robot state tables for the blue team.
+- `get_yellow_team_state() -> table[]`
+    Array of robot state tables for the yellow team.
+- `get_ref_message() -> string`
+    Returns current referee message/state as a string.
+
+#### Field drawing helpers
+
+- `draw_point(x, y)`
+    Draw a point marker on the field view.
+- `draw_line({{x,y}, {x,y}, ...})`
+    Draw a polyline on the field view (2 or more points).
+    Can use indexed points (`{x, y}`) or keyed points (`{x=, y=}`).
+- `highlight_robot(id, team)`
+    Highlight a robot in the field view.
+
+#### grSim helpers
+
+- `grsim.teleport_robot(id, team, x, y, dir)`
+    Teleport robot in simulation.
+- `grsim.teleport_ball(x, y)`
+    Teleport ball in simulation.
 
 ## Project structure
 
