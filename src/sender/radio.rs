@@ -1,8 +1,8 @@
 // radio.rs — Radio dispatcher (serial port + grSim)
 // Port of radio/radio.cpp
 
-use crate::grsim::Grsim;
-use crate::packet_serializer;
+use crate::sender::grsim::Grsim;
+use crate::sender::packet_serializer;
 use crate::types::{KickerCommand, MotionCommand, RobotCommand};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
