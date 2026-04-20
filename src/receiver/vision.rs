@@ -1,9 +1,9 @@
 // vision.rs — Multicast UDP receiver for SSL Vision data
 
-use crate::tracker::Tracker;
+use crate::gui::{RobotUpdateData, VisionUpdate};
+use crate::receiver::tracker::Tracker;
 use crate::types::Vec2D;
 use crate::world::World;
-use crate::gui::{VisionUpdate, RobotUpdateData};
 use protobuf::Message;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, RwLock};
@@ -43,19 +43,19 @@ pub async fn run_vision(
         )?;
         socket.set_reuse_address(true)?;
         socket.set_nonblocking(true)?;
-        
+
         // Important for Windows/Localhost: Enable loopback
         socket.set_multicast_loop_v4(true)?;
 
         let addr = std::net::SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
         socket.bind(&socket2::SockAddr::from(addr))?;
-        
+
         // Join multicast group on default interface (0.0.0.0)
         match socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::new(0, 0, 0, 0)) {
             Ok(_) => info!("Joined multicast group on default interface"),
             Err(e) => warn!("Failed to join multicast on default interface: {e}"),
         }
-        
+
         // Also try joining on Loopback interface (127.0.0.1) explicitly for local sims
         let _ = socket.join_multicast_v4(&multicast_ip, &Ipv4Addr::new(127, 0, 0, 1));
 
@@ -69,7 +69,7 @@ pub async fn run_vision(
 
     let mut buf = vec![0u8; 65536];
     let mut tracker = Tracker::new();
-    
+
     // PPS Calculation variables
     let mut packet_count: u32 = 0;
     let mut last_pps_calc = std::time::Instant::now();
@@ -93,7 +93,7 @@ pub async fn run_vision(
                 match res {
                     Ok((len, _src)) => {
                         let data = &buf[..len];
-                        
+
                         packet_count += 1;
                         let now = std::time::Instant::now();
                         if now.duration_since(last_pps_calc).as_secs() >= 1 {
@@ -132,7 +132,7 @@ pub async fn run_vision(
                                     for robot in &detection.robots_yellow {
                                         process_robot(&mut tracker, &mut world_writer, robot, 1);
                                     }
-                                    
+
                                     // Create update struct
                                     let mut current_update = VisionUpdate {
                                         ball: Some(world_writer.ball.position),

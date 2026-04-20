@@ -3,7 +3,7 @@
 mod api;
 
 use crate::game_controller::GameState;
-use crate::radio::Radio;
+use crate::sender::radio::Radio;
 use crate::types::{DrawCommand, MotionCommand};
 use crate::world::World;
 use mlua::prelude::*;

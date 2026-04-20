@@ -3,7 +3,7 @@ mod draw_gui;
 mod state;
 
 use crate::game_controller::GameState;
-use crate::radio::Radio;
+use crate::sender::radio::Radio;
 use crate::types::DrawCommand;
 use crate::world::World;
 use mlua::prelude::*;

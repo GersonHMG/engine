@@ -1,7 +1,7 @@
 // logger.rs — CSV frame logger
 // Port of logger/logger.cpp
 
-use crate::radio::Radio;
+use crate::sender::radio::Radio;
 use crate::world::World;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
