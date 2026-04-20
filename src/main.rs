@@ -1,50 +1,31 @@
 // Sysmic Robotics — RoboCup SSL Engine (Rust)
-// Entry point — Iced GUI with async engine loop
 
 mod types;
 mod proto;
-mod vision;
-mod tracker;
+mod receiver;
 mod game_controller;
 mod world;
 mod environment;
 mod motion;
-mod packet_serializer;
-mod grsim;
-mod radio;
+mod sender;
 mod lua_interface;
-mod console;
 mod logger;
 mod gui;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
-use serde::Deserialize;
 
 use tracing::{info, warn};
 
 use crate::game_controller::GameState;
 use crate::lua_interface::LuaInterface;
-use crate::radio::Radio;
+use crate::receiver::vision;
+use crate::sender::radio::Radio;
 use crate::world::World;
 use crate::logger::Logger;
 use crate::types::MotionCommand;
 use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, VisionUpdate};
 
-#[derive(Deserialize, Clone, Debug)]
-pub struct ControllerParams {
-    pub lat_kp: f64,
-    pub lat_ki: f64,
-    pub lat_kd: f64,
-    pub speed_kp: f64,
-    pub head_kp: f64,
-    pub target_speed: f64,
-    pub lookahead: f64,
-    pub bangbang_a_max: f64,
-    pub bangbang_v_max: f64,
-    pub pid_kp: f64,
-    pub pid_max_v: f64,
-}
 
 #[derive(Default)]
 struct VisionState {
@@ -110,8 +91,10 @@ async fn run_engine(
     // Configuration Defaults
     let vision_ip = "224.5.23.2".to_string();
     let vision_port = 10020u16;
+    
     let blue_team_size = 6;
     let yellow_team_size = 6;
+
     let use_radio = false;
     let radio_port = "/dev/ttyUSB0".to_string();
     let radio_baud = 115200;
@@ -161,12 +144,6 @@ async fn run_engine(
         if let Err(e) = game_controller::run_game_controller("224.5.23.1", 10003, game_state_for_ref).await {
             warn!("GameController task error: {e}");
         }
-    });
-
-    // Spawn Console reader
-    let lua_for_console = Arc::clone(&lua_iface);
-    let _console_handle = tokio::task::spawn_blocking(move || {
-        console::run_console(lua_for_console);
     });
 
     // Run script from command line arg if provided
