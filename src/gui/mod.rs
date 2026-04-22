@@ -6,15 +6,16 @@ pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
 
-use iced::widget::{column, container, row, text, scrollable};
+use iced::widget::{button, column, container, row, scrollable, slider, text};
 use iced::{Element, Length, Subscription, Theme};
 use iced::event::{self, Event};
 use iced::keyboard;
 use iced::mouse;
 use iced::window;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+use tracing::warn;
 
 use crate::types::Vec2D;
 
@@ -49,6 +50,21 @@ pub struct RobotUpdateData {
     pub cmd_vx: f64,
     pub cmd_vy: f64,
     pub cmd_angular: f64,
+}
+
+#[derive(Debug, Clone)]
+struct ReplayFrame {
+    elapsed_ms: u64,
+    robots_blue: Vec<RobotData>,
+    robots_yellow: Vec<RobotData>,
+    ball: (f64, f64),
+}
+
+#[derive(Default)]
+struct ReplayFrameBuilder {
+    robots_blue: HashMap<u32, RobotData>,
+    robots_yellow: HashMap<u32, RobotData>,
+    ball: (f64, f64),
 }
 
 // --- Lua draw commands (sent from engine to GUI) ---
@@ -99,6 +115,11 @@ pub enum Message {
     Tick,
     EventOccurred(Event),
     ScriptFileSelected(Option<String>),
+    ReplayFilePick,
+    ReplayFileSelected(Option<String>),
+    ReplayPlay,
+    ReplayPause,
+    ReplaySeek(u32),
 
     // Window events
     WindowOpened(window::Id),
@@ -142,6 +163,15 @@ pub struct EngineApp {
     main_window_id: window::Id,
     panel_windows: HashMap<SidebarPanel, window::Id>,
     window_to_panel: HashMap<window::Id, SidebarPanel>,
+
+    // Replay mode UI state
+    replay_mode: bool,
+    replay_file_path: Option<String>,
+    replay_is_playing: bool,
+    replay_frames: Vec<ReplayFrame>,
+    replay_frame_index: usize,
+    replay_elapsed_ms: u64,
+    replay_last_tick: std::time::Instant,
 }
 
 impl EngineApp {
@@ -175,6 +205,13 @@ impl EngineApp {
             main_window_id: main_id,
             panel_windows: HashMap::new(),
             window_to_panel: HashMap::new(),
+            replay_mode: false,
+            replay_file_path: None,
+            replay_is_playing: false,
+            replay_frames: Vec::new(),
+            replay_frame_index: 0,
+            replay_elapsed_ms: 0,
+            replay_last_tick: std::time::Instant::now(),
         };
 
         (app, open_task.map(Message::WindowOpened))
@@ -241,14 +278,115 @@ impl EngineApp {
     }
 
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
+        if self.replay_mode {
+            match &message {
+                Message::Sidebar(SidebarMessage::ToggleReplayMode)
+                | Message::ReplayFilePick
+                | Message::ReplayFileSelected(_)
+                | Message::ReplayPlay
+                | Message::ReplayPause
+                | Message::ReplaySeek(_)
+                | Message::Tick
+                | Message::EventOccurred(_)
+                | Message::WindowOpened(_)
+                | Message::WindowClosed(_) => {}
+                _ => return iced::Task::none(),
+            }
+        }
+
         match message {
             // --- Sidebar ---
+            Message::Sidebar(SidebarMessage::ToggleReplayMode) => {
+                self.replay_mode = !self.replay_mode;
+
+                if self.replay_mode {
+                    let panel_ids: Vec<window::Id> = self.panel_windows.values().cloned().collect();
+                    self.panel_windows.clear();
+                    self.window_to_panel.clear();
+                    self.sidebar.active_panel = None;
+                    self.key_chars.clear();
+                    self.replay_is_playing = false;
+                    self.replay_last_tick = std::time::Instant::now();
+
+                    let tasks: Vec<iced::Task<Message>> = panel_ids
+                        .into_iter()
+                        .map(window::close)
+                        .collect();
+                    return iced::Task::batch(tasks);
+                }
+
+                self.replay_is_playing = false;
+            }
             Message::Sidebar(SidebarMessage::TogglePanel(panel)) => {
+                if self.replay_mode {
+                    return iced::Task::none();
+                }
                 if self.panel_windows.contains_key(&panel) {
                     return self.close_panel_window(panel);
                 } else {
                     return self.open_panel_window(panel);
                 }
+            }
+
+            Message::ReplayFilePick => {
+                return iced::Task::perform(
+                    async {
+                        let result = rfd::AsyncFileDialog::new()
+                            .add_filter("CSV Files", &["csv"])
+                            .pick_file()
+                            .await;
+                        result.map(|f| f.path().to_string_lossy().to_string())
+                    },
+                    Message::ReplayFileSelected,
+                );
+            }
+            Message::ReplayFileSelected(Some(path)) => {
+                self.replay_file_path = Some(path);
+                self.replay_is_playing = false;
+                self.replay_last_tick = std::time::Instant::now();
+
+                match Self::load_replay_frames(self.replay_file_path.as_deref().unwrap_or_default()) {
+                    Ok(frames) => {
+                        self.replay_frames = frames;
+                        self.replay_frame_index = 0;
+                        self.replay_elapsed_ms = self.replay_frames.first().map(|f| f.elapsed_ms).unwrap_or(0);
+                        self.apply_replay_frame();
+                    }
+                    Err(e) => {
+                        self.replay_frames.clear();
+                        self.replay_frame_index = 0;
+                        self.replay_elapsed_ms = 0;
+                        warn!("Replay: failed to load CSV: {e}");
+                    }
+                }
+            }
+            Message::ReplayFileSelected(None) => {}
+            Message::ReplayPlay => {
+                if !self.replay_frames.is_empty() {
+                    if self.replay_frame_index + 1 >= self.replay_frames.len() {
+                        self.replay_frame_index = 0;
+                        self.replay_elapsed_ms = self.replay_frames[0].elapsed_ms;
+                        self.apply_replay_frame();
+                    }
+                    self.replay_is_playing = true;
+                    self.replay_last_tick = std::time::Instant::now();
+                }
+            }
+            Message::ReplayPause => {
+                self.replay_is_playing = false;
+            }
+            Message::ReplaySeek(index) => {
+                if self.replay_frames.is_empty() {
+                    return iced::Task::none();
+                }
+
+                self.replay_is_playing = false;
+                self.replay_last_tick = std::time::Instant::now();
+
+                let idx = (index as usize).min(self.replay_frames.len().saturating_sub(1));
+                self.replay_frame_index = idx;
+                self.replay_elapsed_ms = self.replay_frames[idx].elapsed_ms;
+                self.apply_replay_frame();
             }
 
             // --- Toolbar ---
@@ -455,6 +593,12 @@ impl EngineApp {
 
             // --- Tick (periodic update) ---
             Message::Tick => {
+                if self.replay_mode {
+                    self.tick_replay();
+                    self.field_canvas.request_redraw();
+                    return iced::Task::none();
+                }
+
                 let elapsed = self.last_vision_time.elapsed();
                 self.field_data.vision_connected = elapsed.as_millis() < 1000;
                 if !self.field_data.vision_connected {
@@ -637,10 +781,48 @@ impl EngineApp {
 
     fn view_main(&self) -> Element<'_, Message> {
         // Sidebar
-        let sidebar = self.sidebar.view().map(Message::Sidebar);
+        let sidebar = self.sidebar.view(self.replay_mode).map(Message::Sidebar);
 
         // Toolbar
-        let toolbar = self.toolbar.view().map(Message::Toolbar);
+        let toolbar: Element<'_, Message> = if self.replay_mode {
+            let replay_file_name = self
+                .replay_file_path
+                .as_ref()
+                .map(|p| p.replace('\\', "/").rsplit('/').next().unwrap_or("No file").to_string())
+                .unwrap_or_else(|| "No CSV selected".to_string());
+
+            let open_btn = button(text("Open CSV").size(12))
+                .on_press(Message::ReplayFilePick)
+                .style(button::secondary);
+
+            container(
+                row![
+                    text("Replay Mode").size(12).color(iced::Color::from_rgb(0.8, 0.8, 0.8)),
+                    open_btn,
+                    text(replay_file_name).size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
+                ]
+                .spacing(8)
+                .padding(4)
+                .align_y(iced::Alignment::Center),
+            )
+            .width(Length::Fill)
+            .height(Length::Fixed(36.0))
+            .style(|theme: &iced::Theme| {
+                let palette = theme.extended_palette();
+                container::Style {
+                    background: Some(iced::Background::Color(palette.background.weak.color)),
+                    border: iced::Border {
+                        color: palette.background.strong.color,
+                        width: 1.0,
+                        radius: 0.0.into(),
+                    },
+                    ..Default::default()
+                }
+            })
+            .into()
+        } else {
+            self.toolbar.view().map(Message::Toolbar)
+        };
 
         // Field canvas
         let canvas: Element<'_, Message> = self.field_canvas.view(&self.field_data);
@@ -652,24 +834,106 @@ impl EngineApp {
             "0.00, 0.00".to_string()
         };
 
-        let canvas_area = column![
-            toolbar,
-            iced::widget::stack![
-                canvas,
-                container(
-                    container(
-                        text(mouse_pos_text).size(12).color(iced::Color::WHITE),
-                    )
-                    .padding(4)
-                    .style(|_theme: &iced::Theme| container::Style {
-                        background: Some(iced::Background::Color(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                        border: iced::Border { radius: 4.0.into(), ..Default::default() },
-                        ..Default::default()
-                    })
+        let mouse_overlay = container(
+            container(
+                text(mouse_pos_text).size(12).color(iced::Color::WHITE),
+            )
+            .padding(4)
+            .style(|_theme: &iced::Theme| container::Style {
+                background: Some(iced::Background::Color(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
+                border: iced::Border { radius: 4.0.into(), ..Default::default() },
+                ..Default::default()
+            })
+        )
+        .padding(8);
+
+        let field_stack: Element<'_, Message> = if self.replay_mode {
+            let can_control_replay = !self.replay_frames.is_empty();
+
+            let play_btn = if can_control_replay {
+                button(text("Play").size(12))
+                    .on_press(Message::ReplayPlay)
+                    .style(button::success)
+            } else {
+                button(text("Play").size(12)).style(button::secondary)
+            };
+
+            let pause_btn = if can_control_replay {
+                button(text("Pause").size(12))
+                    .on_press(Message::ReplayPause)
+                    .style(button::danger)
+            } else {
+                button(text("Pause").size(12)).style(button::secondary)
+            };
+
+            let status_text = if self.replay_frames.is_empty() {
+                "Replay: no frames"
+            } else if self.replay_is_playing {
+                "Replay: playing"
+            } else {
+                "Replay: paused"
+            };
+
+            let frame_text = if self.replay_frames.is_empty() {
+                "Frame 0/0".to_string()
+            } else {
+                format!("Frame {}/{}", self.replay_frame_index + 1, self.replay_frames.len())
+            };
+
+            let time_text = if self.replay_frames.is_empty() {
+                "0.00s".to_string()
+            } else {
+                format!("{:.2}s", self.replay_frames[self.replay_frame_index].elapsed_ms as f64 / 1000.0)
+            };
+
+            let timeline: Element<'_, Message> = if can_control_replay {
+                slider(
+                    0..=self.replay_frames.len().saturating_sub(1) as u32,
+                    self.replay_frame_index as u32,
+                    Message::ReplaySeek,
                 )
-                .padding(8),
-            ],
-        ];
+                .step(1u32)
+                .width(Length::Fill)
+                .into()
+            } else {
+                container(text("Load a CSV replay to enable timeline").size(11).color(iced::Color::from_rgb(0.8, 0.8, 0.8)))
+                    .width(Length::Fill)
+                    .into()
+            };
+
+            let replay_controls = container(
+                container(column![
+                    row![
+                        play_btn,
+                        pause_btn,
+                        text(status_text).size(12).color(iced::Color::WHITE),
+                        text(frame_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
+                        text(time_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
+                    ]
+                    .spacing(8)
+                    .align_y(iced::Alignment::Center),
+                    timeline,
+                ]
+                .spacing(6))
+                .padding([6, 10])
+                .style(|_theme: &iced::Theme| container::Style {
+                    background: Some(iced::Background::Color(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.55))),
+                    border: iced::Border { radius: 6.0.into(), ..Default::default() },
+                    ..Default::default()
+                }),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .align_x(iced::alignment::Horizontal::Center)
+            .align_y(iced::alignment::Vertical::Bottom)
+            .padding(8);
+
+            iced::widget::stack![canvas, mouse_overlay, replay_controls].into()
+        } else {
+            iced::widget::stack![canvas, mouse_overlay].into()
+        };
+
+        let canvas_area = column![toolbar, field_stack];
 
         // Main content area = sidebar + canvas
         let main_row = row![
@@ -679,16 +943,22 @@ impl EngineApp {
                 .height(Length::Fill),
         ];
 
-        // Bottom panel
-        let bottom = self.bottom_panel.view().map(Message::BottomPanel);
-
         // Full layout
-        let layout = column![
-            container(main_row.width(Length::Fill).height(Length::Fill))
-                .width(Length::Fill)
-                .height(Length::Fill),
-            bottom,
-        ];
+        let layout = if self.replay_mode {
+            column![
+                container(main_row.width(Length::Fill).height(Length::Fill))
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+            ]
+        } else {
+            let bottom = self.bottom_panel.view().map(Message::BottomPanel);
+            column![
+                container(main_row.width(Length::Fill).height(Length::Fill))
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+                bottom,
+            ]
+        };
 
         container(layout)
             .width(Length::Fill)
@@ -714,7 +984,7 @@ impl EngineApp {
     }
 
     fn poll_keyboard_control(&mut self) {
-        if !self.control_panel.active || self.control_panel.mode != panels::control::ControlMode::Keyboard {
+        if self.replay_mode || !self.control_panel.active || self.control_panel.mode != panels::control::ControlMode::Keyboard {
             return;
         }
 
@@ -744,5 +1014,172 @@ impl EngineApp {
             vy,
             omega,
         });
+    }
+
+    fn tick_replay(&mut self) {
+        self.field_data.vision_connected = true;
+        self.vision_panel.connected = true;
+        self.vision_panel.pps = 0;
+        self.toolbar.pps = 0;
+        self.field_data.lua_draw_commands.clear();
+
+        if self.replay_frames.is_empty() {
+            self.field_data.robots_blue.clear();
+            self.field_data.robots_yellow.clear();
+            self.field_data.ball = (0.0, 0.0);
+            return;
+        }
+
+        if self.replay_is_playing {
+            let now = std::time::Instant::now();
+            let delta_ms = now.duration_since(self.replay_last_tick).as_millis() as u64;
+            self.replay_last_tick = now;
+            self.replay_elapsed_ms = self.replay_elapsed_ms.saturating_add(delta_ms);
+
+            while self.replay_frame_index + 1 < self.replay_frames.len()
+                && self.replay_frames[self.replay_frame_index + 1].elapsed_ms <= self.replay_elapsed_ms
+            {
+                self.replay_frame_index += 1;
+            }
+
+            if self.replay_frame_index + 1 >= self.replay_frames.len() {
+                self.replay_is_playing = false;
+                self.replay_elapsed_ms = self.replay_frames[self.replay_frame_index].elapsed_ms;
+            }
+        } else {
+            self.replay_last_tick = std::time::Instant::now();
+        }
+
+        self.apply_replay_frame();
+    }
+
+    fn apply_replay_frame(&mut self) {
+        if let Some(frame) = self.replay_frames.get(self.replay_frame_index) {
+            self.field_data.robots_blue = frame.robots_blue.clone();
+            self.field_data.robots_yellow = frame.robots_yellow.clone();
+            self.field_data.ball = frame.ball;
+            self.field_data.robot_trace.clear();
+            self.robot_trace.clear();
+        }
+    }
+
+    fn load_replay_frames(path: &str) -> Result<Vec<ReplayFrame>, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read file '{}': {e}", path))?;
+
+        let mut by_time: BTreeMap<u64, ReplayFrameBuilder> = BTreeMap::new();
+
+        for (line_idx, line) in content.lines().enumerate() {
+            if line_idx == 0 {
+                // CSV header
+                continue;
+            }
+
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let cols: Vec<&str> = line.split(',').collect();
+            if cols.len() < 11 {
+                continue;
+            }
+
+            let elapsed = match cols[0].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let robot_id = match cols[1].trim().parse::<i32>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let team = match cols[2].trim().parse::<i32>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let vx_cmd = match cols[3].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let vy_cmd = match cols[4].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let angular_cmd = match cols[5].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let pos_x = match cols[6].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let pos_y = match cols[7].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let theta = match cols[8].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let vx_actual = match cols[9].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let vy_actual = match cols[10].trim().parse::<f64>() {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let elapsed_ms = (elapsed.max(0.0) * 1000.0).round() as u64;
+            let frame = by_time.entry(elapsed_ms).or_default();
+
+            if robot_id == -1 && team == -1 {
+                frame.ball = (pos_x, pos_y);
+                continue;
+            }
+
+            if robot_id < 0 {
+                continue;
+            }
+
+            let robot = RobotData {
+                id: robot_id as u32,
+                x: pos_x,
+                y: pos_y,
+                theta,
+                vx: vx_actual,
+                vy: vy_actual,
+                cmd_vx: vx_cmd,
+                cmd_vy: vy_cmd,
+                cmd_angular: angular_cmd,
+            };
+
+            match team {
+                0 => {
+                    frame.robots_blue.insert(robot.id, robot);
+                }
+                1 => {
+                    frame.robots_yellow.insert(robot.id, robot);
+                }
+                _ => {}
+            }
+        }
+
+        let mut frames = Vec::new();
+        for (elapsed_ms, builder) in by_time {
+            let mut robots_blue: Vec<RobotData> = builder.robots_blue.into_values().collect();
+            let mut robots_yellow: Vec<RobotData> = builder.robots_yellow.into_values().collect();
+            robots_blue.sort_by_key(|r| r.id);
+            robots_yellow.sort_by_key(|r| r.id);
+            frames.push(ReplayFrame {
+                elapsed_ms,
+                robots_blue,
+                robots_yellow,
+                ball: builder.ball,
+            });
+        }
+
+        Ok(frames)
     }
 }

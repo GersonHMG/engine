@@ -16,6 +16,7 @@ pub enum SidebarPanel {
 #[derive(Debug, Clone)]
 pub enum SidebarMessage {
     TogglePanel(SidebarPanel),
+    ToggleReplayMode,
 }
 
 pub struct Sidebar {
@@ -37,34 +38,52 @@ impl Sidebar {
         }
     }
 
-    pub fn view(&self) -> Element<SidebarMessage> {
-        let make_btn = |label: &'static str, panel: SidebarPanel, is_active: bool| -> Element<SidebarMessage> {
-            button(
+    pub fn view(&self, replay_mode: bool) -> Element<SidebarMessage> {
+        let make_btn = |label: &'static str, panel: SidebarPanel, is_active: bool, enabled: bool| -> Element<SidebarMessage> {
+            let btn = button(
                 text(label)
                     .size(14)
                     .center()
                     .width(Length::Fill),
             )
-            .on_press(SidebarMessage::TogglePanel(panel))
             .width(Length::Fixed(36.0))
             .height(Length::Fixed(36.0))
             .style(if is_active {
                 button::primary
             } else {
                 button::secondary
-            })
-            .into()
+            });
+
+            if enabled {
+                btn.on_press(SidebarMessage::TogglePanel(panel)).into()
+            } else {
+                btn.into()
+            }
         };
 
         let ap = self.active_panel;
+        let replay_btn = if replay_mode {
+            button(text("R").size(14).center().width(Length::Fill))
+                .on_press(SidebarMessage::ToggleReplayMode)
+                .width(Length::Fixed(36.0))
+                .height(Length::Fixed(36.0))
+                .style(button::danger)
+        } else {
+            button(text("R").size(14).center().width(Length::Fill))
+                .on_press(SidebarMessage::ToggleReplayMode)
+                .width(Length::Fixed(36.0))
+                .height(Length::Fixed(36.0))
+                .style(button::success)
+        };
 
         let content = column![
-            make_btn("👁", SidebarPanel::Vision, ap == Some(SidebarPanel::Vision)),
-            make_btn("📡", SidebarPanel::Radio, ap == Some(SidebarPanel::Radio)),
-            make_btn("📈", SidebarPanel::Kalman, ap == Some(SidebarPanel::Kalman)),
-            make_btn("⏺", SidebarPanel::Recording, ap == Some(SidebarPanel::Recording)),
-            make_btn("🎮", SidebarPanel::Control, ap == Some(SidebarPanel::Control)),
-            make_btn("📊", SidebarPanel::Charts, ap == Some(SidebarPanel::Charts)),
+            make_btn("👁", SidebarPanel::Vision, ap == Some(SidebarPanel::Vision), !replay_mode),
+            make_btn("📡", SidebarPanel::Radio, ap == Some(SidebarPanel::Radio), !replay_mode),
+            make_btn("📈", SidebarPanel::Kalman, ap == Some(SidebarPanel::Kalman), !replay_mode),
+            make_btn("⏺", SidebarPanel::Recording, ap == Some(SidebarPanel::Recording), !replay_mode),
+            make_btn("🎮", SidebarPanel::Control, ap == Some(SidebarPanel::Control), !replay_mode),
+            make_btn("📊", SidebarPanel::Charts, ap == Some(SidebarPanel::Charts), !replay_mode),
+            replay_btn,
         ]
         .spacing(4)
         .padding(4);
