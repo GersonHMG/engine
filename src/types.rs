@@ -159,12 +159,6 @@ impl Default for BallState {
     }
 }
 
-impl BallState {
-    pub fn is_moving(&self) -> bool {
-        self.velocity.length() > 0.01
-    }
-}
-
 // ─── MotionCommand ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy)]
@@ -250,29 +244,6 @@ impl RobotCommand {
     }
 }
 
-// ─── PathTestState ──────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone)]
-pub struct PathTestState {
-    pub id: i32,
-    pub team: i32,
-    pub controller: String,
-    pub points: Vec<Vec2D>,
-    pub current_target_idx: usize,
-}
-
-impl PathTestState {
-    pub fn new(id: i32, team: i32, controller: String, points: Vec<Vec2D>) -> Self {
-        Self {
-            id,
-            team,
-            controller,
-            points,
-            current_target_idx: 0,
-        }
-    }
-}
-
 // ─── DrawCommand (Lua → GUI overlay) ────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize)]
@@ -331,12 +302,6 @@ mod tests {
     fn robot_state_default_inactive() {
         let r = RobotState::default();
         assert!(!r.active);
-    }
-
-    #[test]
-    fn ball_state_not_moving() {
-        let b = BallState::default();
-        assert!(!b.is_moving());
     }
 
     #[test]
