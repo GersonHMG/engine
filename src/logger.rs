@@ -1,27 +1,22 @@
 // logger.rs — CSV frame logger
 // Port of logger/logger.cpp
 
-use crate::sender::radio::Radio;
-use crate::world::World;
+use crate::types::{BallState, RobotCommand, RobotState};
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use std::sync::{Arc, Mutex, RwLock};
 use std::time::Instant;
 use tracing::{debug, warn};
 
 pub struct Logger {
-    world: Arc<RwLock<World>>,
-    radio: Arc<Mutex<Radio>>,
     writer: Option<BufWriter<File>>,
     is_logging: bool,
     timer: Instant,
 }
 
 impl Logger {
-    pub fn new(world: Arc<RwLock<World>>, radio: Arc<Mutex<Radio>>) -> Self {
+    pub fn new() -> Self {
         Self {
-            world,
-            radio,
             writer: None,
             is_logging: false,
             timer: Instant::now(),
@@ -69,7 +64,13 @@ impl Logger {
         debug!("Logger stopped.");
     }
 
-    pub fn log_frame(&mut self) {
+    pub fn log_frame(
+        &mut self,
+        blue_robots: &[RobotState],
+        yellow_robots: &[RobotState],
+        ball: &BallState,
+        command_map: &HashMap<i32, RobotCommand>,
+    ) {
         if !self.is_logging {
             return;
         }
@@ -82,53 +83,44 @@ impl Logger {
         let elapsed = self.timer.elapsed().as_secs_f64();
         let num_robots = 6;
 
-        // Get command map snapshot
-        let command_map = if let Ok(r) = self.radio.lock() {
-            r.get_command_map().clone()
-        } else {
-            return;
-        };
-
-        let world = if let Ok(w) = self.world.read() {
-            // Log robots
-            for team in 0..=1 {
-                for id in 0..num_robots {
-                    let state = w.get_robot_state(id, team);
-                    let (vx, vy, angular) = command_map
-                        .get(&id)
-                        .filter(|c| c.id == id && c.team == team)
-                        .map(|c| (c.motion.vx, c.motion.vy, c.motion.angular))
-                        .unwrap_or((0.0, 0.0, 0.0));
-
-                    let _ = writeln!(
-                        writer,
-                        "{elapsed:.3},{id},{team},{vx},{vy},{angular},{},{},{},{},{}",
-                        state.position.x,
-                        state.position.y,
-                        state.orientation,
-                        state.velocity.x,
-                        state.velocity.y
-                    );
-                }
-            }
-
-            // Log ball
-            let ball = w.get_ball_state();
-            let _ = writeln!(
-                writer,
-                "{elapsed:.3},-1,-1,0,0,0,{},{},0,{},{}",
-                ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y
-            );
-
-            let _ = writer.flush();
-            Some(())
-        } else {
-            None
-        };
-
-        if world.is_none() {
-            warn!("Logger: failed to acquire world lock");
+        // Build a quick lookup from the receiver snapshot.
+        let mut robot_lookup: HashMap<(i32, i32), &RobotState> = HashMap::new();
+        for robot in blue_robots {
+            robot_lookup.insert((robot.id, 0), robot);
         }
+        for robot in yellow_robots {
+            robot_lookup.insert((robot.id, 1), robot);
+        }
+
+        for team in 0..=1 {
+            for id in 0..num_robots {
+                let state = robot_lookup.get(&(id, team)).copied();
+                let (pos_x, pos_y, orientation, vx_actual, vy_actual) = if let Some(s) = state {
+                    (s.position.x, s.position.y, s.orientation, s.velocity.x, s.velocity.y)
+                } else {
+                    (0.0, 0.0, 0.0, 0.0, 0.0)
+                };
+
+                let (vx_cmd, vy_cmd, angular_cmd) = command_map
+                    .get(&id)
+                    .filter(|c| c.id == id && c.team == team)
+                    .map(|c| (c.motion.vx, c.motion.vy, c.motion.angular))
+                    .unwrap_or((0.0, 0.0, 0.0));
+
+                let _ = writeln!(
+                    writer,
+                    "{elapsed:.3},{id},{team},{vx_cmd},{vy_cmd},{angular_cmd},{pos_x},{pos_y},{orientation},{vx_actual},{vy_actual}"
+                );
+            }
+        }
+
+        let _ = writeln!(
+            writer,
+            "{elapsed:.3},-1,-1,0,0,0,{},{},0,{},{}",
+            ball.position.x, ball.position.y, ball.velocity.x, ball.velocity.y
+        );
+
+        let _ = writer.flush();
     }
 
     pub fn is_logging(&self) -> bool {

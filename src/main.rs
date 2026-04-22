@@ -104,7 +104,7 @@ async fn run_engine(
     let game_state = Arc::new(Mutex::new(GameState::new()));
     let radio = Arc::new(Mutex::new(Radio::new(use_radio, &radio_port, radio_baud)));
     let vision_state = Arc::new(Mutex::new(VisionState::default()));
-    let logger = Arc::new(Mutex::new(Logger::new(Arc::clone(&world), Arc::clone(&radio))));
+    let logger = Arc::new(Mutex::new(Logger::new()));
 
     let lua_iface = Arc::new(Mutex::new(LuaInterface::new(
         Arc::clone(&radio),
@@ -160,6 +160,18 @@ async fn run_engine(
 
     loop {
         let frame_start = Instant::now();
+
+        // Receiver snapshot at frame start for logging.
+        let (log_blue_robots, log_yellow_robots, log_ball) = {
+            let w = match world.read() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("World lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            (w.get_blue_team_state(), w.get_yellow_team_state(), w.get_ball_state())
+        };
 
         // Process GUI commands
         while let Ok(cmd) = command_rx.try_recv() {
@@ -272,7 +284,24 @@ async fn run_engine(
             let _ = lua_draw_gui_tx.try_send(Vec::new());
         }
 
-        // Log Frame (CSV Recording)
+        // Prepare radio frame
+        {
+            let mut r = radio.lock().unwrap();
+            r.prepare_frame();
+        }
+
+        // Radio snapshot at frame end (before send) for logging.
+        let log_command_map = {
+            let r = match radio.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("Radio lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            r.get_command_map().clone()
+        };
+
         {
             let mut l = match logger.lock() {
                 Ok(guard) => guard,
@@ -281,13 +310,7 @@ async fn run_engine(
                     poisoned.into_inner()
                 }
             };
-            l.log_frame();
-        }
-
-        // Prepare radio frame
-        {
-            let mut r = radio.lock().unwrap();
-            r.prepare_frame();
+            l.log_frame(&log_blue_robots, &log_yellow_robots, &log_ball, &log_command_map);
         }
 
         // Send radio commands
