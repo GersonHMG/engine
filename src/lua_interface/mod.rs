@@ -53,7 +53,8 @@ impl LuaInterface {
     }
 
     pub fn run_script(&mut self, script_path: &str) {
-        self.is_paused = false;
+        // Keep newly loaded scripts paused until the user explicitly resumes.
+        self.is_paused = true;
 
         // Reinitialize Lua state
         self.lua = Lua::new();
@@ -72,7 +73,7 @@ impl LuaInterface {
 
         match self.lua.load(std::path::Path::new(script_path)).exec() {
             Ok(()) => {
-                info!("[Lua] Script loaded successfully!");
+                info!("[Lua] Script loaded successfully (paused).");
                 self.have_script = true;
             }
             Err(e) => {
