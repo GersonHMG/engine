@@ -135,6 +135,9 @@ impl ControlPanel {
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
+            text("Keys: W/S Vx, A/D Vy, Q/E ω, K kick")
+                .size(11)
+                .color(iced::Color::from_rgb(0.7, 0.75, 0.8)),
         ]
         .spacing(8)
         .padding(12);

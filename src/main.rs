@@ -23,7 +23,7 @@ use crate::receiver::vision;
 use crate::sender::radio::Radio;
 use crate::world::World;
 use crate::logger::Logger;
-use crate::types::MotionCommand;
+use crate::types::{KickerCommand, MotionCommand};
 use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, VisionUpdate};
 
 
@@ -240,6 +240,12 @@ async fn run_engine(
                     let mut r = radio.lock().unwrap();
                     let cmd = MotionCommand { id, team, vx, vy, angular: omega };
                     r.add_motion_command(cmd);
+                }
+                EngineCommand::SendKickCommand { id, team } => {
+                    let mut r = radio.lock().unwrap();
+                    let mut kicker = KickerCommand::new(id, team);
+                    kicker.kick_x = true;
+                    r.add_kicker_command(kicker);
                 }
                 EngineCommand::LoadScript { path } => {
                     let mut lua = lua_iface.lock().unwrap();
