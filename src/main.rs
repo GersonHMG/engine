@@ -19,12 +19,14 @@ use tracing::{info, warn};
 
 use crate::game_controller::GameState;
 use crate::lua_interface::LuaInterface;
+use crate::lua_interface::ScriptExecState;
 use crate::receiver::vision;
 use crate::sender::radio::Radio;
 use crate::world::World;
 use crate::logger::Logger;
 use crate::types::{KickerCommand, MotionCommand};
-use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, VisionUpdate};
+use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, VisionUpdate};
+use crate::gui::toolbar::ScriptStatus;
 
 
 #[derive(Default)]
@@ -35,6 +37,15 @@ struct VisionState {
     port: u16,
 }
 
+fn map_script_state(state: ScriptExecState) -> ScriptStatus {
+    match state {
+        ScriptExecState::NoScript => ScriptStatus::NoScript,
+        ScriptExecState::Running => ScriptStatus::Running,
+        ScriptExecState::Paused => ScriptStatus::Paused,
+        ScriptExecState::Failed => ScriptStatus::Failed,
+    }
+}
+
 fn main() -> iced::Result {
     // Initialize logging
     tracing_subscriber::fmt::init();
@@ -42,11 +53,13 @@ fn main() -> iced::Result {
     // Create channels between GUI and engine
     let (vision_tx, vision_rx) = tokio::sync::mpsc::channel::<VisionUpdate>(256);
     let (lua_draw_tx, lua_draw_rx) = tokio::sync::mpsc::channel::<Vec<LuaDrawCmd>>(256);
+    let (lua_status_tx, lua_status_rx) = tokio::sync::mpsc::channel::<LuaScriptStatusUpdate>(64);
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<EngineCommand>(256);
 
     let gui_channels = GuiChannels {
         vision_rx,
         lua_draw_rx,
+        lua_status_rx,
         command_tx: command_tx.clone(),
     };
 
@@ -54,13 +67,14 @@ fn main() -> iced::Result {
     let command_rx = Arc::new(Mutex::new(Some(command_rx)));
     let vision_tx_clone = vision_tx.clone();
     let lua_draw_tx_clone = lua_draw_tx.clone();
+    let lua_status_tx_clone = lua_status_tx.clone();
     let command_rx_clone = command_rx.clone();
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         rt.block_on(async move {
             let rx = command_rx_clone.lock().unwrap().take().expect("command_rx already taken");
-            run_engine(vision_tx_clone, lua_draw_tx_clone, rx).await;
+            run_engine(vision_tx_clone, lua_draw_tx_clone, lua_status_tx_clone, rx).await;
         });
     });
 
@@ -86,6 +100,7 @@ fn main() -> iced::Result {
 async fn run_engine(
     vision_gui_tx: tokio::sync::mpsc::Sender<VisionUpdate>,
     lua_draw_gui_tx: tokio::sync::mpsc::Sender<Vec<LuaDrawCmd>>,
+    lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
 ) {
     // Configuration Defaults
@@ -113,6 +128,11 @@ async fn run_engine(
     )));
 
     let last_script_path = Arc::new(Mutex::new(String::new()));
+    let mut last_script_state = ScriptExecState::NoScript;
+    let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+        status: map_script_state(last_script_state),
+        script_path: None,
+    });
 
     // Spawn Vision receiver task
     {
@@ -148,8 +168,15 @@ async fn run_engine(
 
     // Run script from command line arg if provided
     if let Some(script_path) = std::env::args().nth(1) {
-        let mut lua = lua_iface.lock().unwrap();
-        lua.run_script(&script_path);
+        let state = {
+            let mut lua = lua_iface.lock().unwrap();
+            lua.run_script(&script_path)
+        };
+        last_script_state = state;
+        let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+            status: map_script_state(state),
+            script_path: Some(script_path.clone()),
+        });
         let mut last = last_script_path.lock().unwrap();
         *last = script_path;
     }
@@ -248,28 +275,57 @@ async fn run_engine(
                     r.add_kicker_command(kicker);
                 }
                 EngineCommand::LoadScript { path } => {
-                    let mut lua = lua_iface.lock().unwrap();
-                    lua.run_script(&path);
+                    let state = {
+                        let mut lua = lua_iface.lock().unwrap();
+                        lua.run_script(&path)
+                    };
+                    last_script_state = state;
+                    let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+                        status: map_script_state(state),
+                        script_path: Some(path.clone()),
+                    });
                     let mut last = last_script_path.lock().unwrap();
                     *last = path;
                 }
                 EngineCommand::PauseScript => {
-                    let mut lua = lua_iface.lock().unwrap();
-                    lua.pause_script();
+                    let state = {
+                        let mut lua = lua_iface.lock().unwrap();
+                        lua.pause_script()
+                    };
+                    last_script_state = state;
+                    let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+                        status: map_script_state(state),
+                        script_path: None,
+                    });
                 }
                 EngineCommand::ResumeScript => {
-                    let mut lua = lua_iface.lock().unwrap();
-                    lua.resume_script();
+                    let state = {
+                        let mut lua = lua_iface.lock().unwrap();
+                        lua.resume_script()
+                    };
+                    last_script_state = state;
+                    let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+                        status: map_script_state(state),
+                        script_path: None,
+                    });
                 }
             }
         }
 
         // Call Lua process()
-        let draw_cmds = {
+        let (draw_cmds, script_state) = {
             let mut lua = lua_iface.lock().unwrap();
-            lua.call_process();
-            lua.take_draw_commands()
+            let state = lua.call_process();
+            (lua.take_draw_commands(), state)
         };
+
+        if script_state != last_script_state {
+            last_script_state = script_state;
+            let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+                status: map_script_state(script_state),
+                script_path: None,
+            });
+        }
 
         // Send draw commands to GUI
         if !draw_cmds.is_empty() {

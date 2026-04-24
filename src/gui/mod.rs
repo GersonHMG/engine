@@ -95,7 +95,14 @@ pub enum EngineCommand {
 pub struct GuiChannels {
     pub vision_rx: mpsc::Receiver<VisionUpdate>,
     pub lua_draw_rx: mpsc::Receiver<Vec<LuaDrawCmd>>,
+    pub lua_status_rx: mpsc::Receiver<LuaScriptStatusUpdate>,
     pub command_tx: mpsc::Sender<EngineCommand>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LuaScriptStatusUpdate {
+    pub status: toolbar::ScriptStatus,
+    pub script_path: Option<String>,
 }
 
 // --- Main Application Message ---
@@ -152,6 +159,7 @@ pub struct EngineApp {
     // Channels (wrapped in Arc<Mutex> for Iced)
     vision_rx: Arc<Mutex<mpsc::Receiver<VisionUpdate>>>,
     lua_draw_rx: Arc<Mutex<mpsc::Receiver<Vec<LuaDrawCmd>>>>,
+    lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
     command_tx: mpsc::Sender<EngineCommand>,
 
     // Keyboard state for manual control
@@ -180,7 +188,7 @@ impl EngineApp {
     /// Boot function for iced::daemon — opens the main window and returns initial state + tasks
     pub fn boot(channels: GuiChannels) -> (Self, iced::Task<Message>) {
         let (main_id, open_task) = window::open(window::Settings {
-            size: iced::Size::new(800.0, 700.0),
+            size: iced::Size::new(900.0, 800.0),
             ..Default::default()
         });
 
@@ -201,6 +209,7 @@ impl EngineApp {
             last_pps_time: std::time::Instant::now(),
             vision_rx: Arc::new(Mutex::new(channels.vision_rx)),
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
+            lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
             command_tx: channels.command_tx,
             key_chars: std::collections::HashSet::new(),
             kick_key_was_down: false,
@@ -409,23 +418,21 @@ impl EngineApp {
             Message::Toolbar(ToolbarMessage::ToggleScript) => {
                 if self.toolbar.script_status == toolbar::ScriptStatus::Running {
                     let _ = self.command_tx.try_send(EngineCommand::PauseScript);
-                    self.toolbar.script_status = toolbar::ScriptStatus::Paused;
                 } else {
-                    let _ = self.command_tx.try_send(EngineCommand::ResumeScript);
-                    self.toolbar.script_status = toolbar::ScriptStatus::Running;
+                    if self.toolbar.script_status != toolbar::ScriptStatus::NoScript {
+                        let _ = self.command_tx.try_send(EngineCommand::ResumeScript);
+                    }
                 }
             }
             Message::Toolbar(ToolbarMessage::ReloadScript) => {
                 if !self.toolbar.script_path.is_empty() {
                     let path = self.toolbar.script_path.clone();
                     let _ = self.command_tx.try_send(EngineCommand::LoadScript { path });
-                    self.toolbar.script_status = toolbar::ScriptStatus::Loaded;
                 }
             }
             Message::ScriptFileSelected(Some(path)) => {
                 let _ = self.command_tx.try_send(EngineCommand::LoadScript { path: path.clone() });
                 self.toolbar.script_path = path;
-                self.toolbar.script_status = toolbar::ScriptStatus::Loaded;
             }
             Message::ScriptFileSelected(None) => {}
 
@@ -691,6 +698,19 @@ impl EngineApp {
                                 LuaDrawCmd::Line { points } => LuaDrawCommand::Line { points: points.clone() },
                             })
                             .collect();
+                    }
+                }
+
+                // Drain Lua script status channel
+                if let Ok(mut rx) = self.lua_status_rx.try_lock() {
+                    while let Ok(update) = rx.try_recv() {
+                        let status = update.status.clone();
+                        self.toolbar.script_status = status.clone();
+                        if let Some(path) = update.script_path {
+                            self.toolbar.script_path = path;
+                        } else if status == toolbar::ScriptStatus::NoScript {
+                            self.toolbar.script_path.clear();
+                        }
                     }
                 }
 

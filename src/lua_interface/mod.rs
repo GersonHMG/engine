@@ -10,6 +10,14 @@ use mlua::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{error, info};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScriptExecState {
+    NoScript,
+    Running,
+    Paused,
+    Failed,
+}
+
 pub struct LuaInterface {
     lua: Lua,
     radio: Arc<Mutex<Radio>>,
@@ -18,6 +26,7 @@ pub struct LuaInterface {
     draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
     have_script: bool,
     is_paused: bool,
+    has_failed: bool,
 }
 
 impl LuaInterface {
@@ -36,6 +45,7 @@ impl LuaInterface {
             draw_commands: Arc::new(Mutex::new(Vec::new())),
             have_script: false,
             is_paused: false,
+            has_failed: false,
         };
 
         interface.register_functions();
@@ -52,9 +62,10 @@ impl LuaInterface {
         );
     }
 
-    pub fn run_script(&mut self, script_path: &str) {
+    pub fn run_script(&mut self, script_path: &str) -> ScriptExecState {
         // Keep newly loaded scripts paused until the user explicitly resumes.
         self.is_paused = true;
+        self.has_failed = false;
 
         // Reinitialize Lua state
         self.lua = Lua::new();
@@ -79,13 +90,16 @@ impl LuaInterface {
             Err(e) => {
                 error!("[Lua] Error loading script: {e}");
                 self.have_script = false;
+                self.has_failed = true;
             }
         }
+
+        self.script_state()
     }
 
-    pub fn call_process(&mut self) {
+    pub fn call_process(&mut self) -> ScriptExecState {
         if !self.have_script {
-            return;
+            return self.script_state();
         }
 
         if !self.is_paused {
@@ -96,11 +110,13 @@ impl LuaInterface {
                     Err(e) => {
                         error!("[Lua] Runtime error in process(): {e}");
                         self.is_paused = true;
+                        self.has_failed = true;
                     }
                 },
                 Err(_) => {
                     error!("[Lua] Error: process() is not defined in script!");
                     self.is_paused = true;
+                    self.has_failed = true;
                 }
             }
         } else {
@@ -115,19 +131,47 @@ impl LuaInterface {
                 }
             }
         }
+
+        self.script_state()
     }
 
-    pub fn pause_script(&mut self) {
+    pub fn pause_script(&mut self) -> ScriptExecState {
+        if !self.have_script {
+            return self.script_state();
+        }
+
         self.is_paused = true;
+        self.has_failed = false;
         if let Ok(mut r) = self.radio.lock() {
             let cmd = MotionCommand::new(0, 0, 0.0, 0.0);
             r.add_motion_command(cmd);
         }
         info!("[Lua] Script paused.");
+
+        self.script_state()
     }
 
-    pub fn resume_script(&mut self) {
+    pub fn resume_script(&mut self) -> ScriptExecState {
+        if !self.have_script {
+            return self.script_state();
+        }
+
         self.is_paused = false;
+        self.has_failed = false;
+
+        self.script_state()
+    }
+
+    pub fn script_state(&self) -> ScriptExecState {
+        if self.has_failed {
+            ScriptExecState::Failed
+        } else if !self.have_script {
+            ScriptExecState::NoScript
+        } else if self.is_paused {
+            ScriptExecState::Paused
+        } else {
+            ScriptExecState::Running
+        }
     }
 
     /// Take all queued draw commands (drains the buffer).
