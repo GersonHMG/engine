@@ -6,7 +6,7 @@ pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
 
-use iced::widget::{button, column, container, progress_bar, row, scrollable, slider, text};
+use iced::widget::{button, column, container, row, scrollable, slider, text};
 use iced::{Element, Length, Subscription, Theme};
 use iced::event::{self, Event};
 use iced::keyboard;
@@ -29,8 +29,6 @@ use panels::kalman::{KalmanPanel, KalmanMessage};
 use panels::recording::{RecordingPanel, RecordingMessage, RecordingStatus};
 use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{ChartsPanel, ChartsMessage, DataSample, export_csv_async};
-
-const STARTUP_LOADER_DURATION_MS: u64 = 1500;
 
 // --- Vision update (sent from vision task to GUI) ---
 #[derive(Debug, Clone)]
@@ -176,7 +174,6 @@ pub struct EngineApp {
     replay_frame_index: usize,
     replay_elapsed_ms: u64,
     replay_last_tick: std::time::Instant,
-    startup_started_at: std::time::Instant,
 }
 
 impl EngineApp {
@@ -218,7 +215,6 @@ impl EngineApp {
             replay_frame_index: 0,
             replay_elapsed_ms: 0,
             replay_last_tick: std::time::Instant::now(),
-            startup_started_at: std::time::Instant::now(),
         };
 
         (app, open_task.map(Message::WindowOpened))
@@ -788,33 +784,6 @@ impl EngineApp {
     }
 
     fn view_main(&self) -> Element<'_, Message> {
-        if self.startup_progress() < 1.0 {
-            let progress = self.startup_progress();
-            let progress_text = format!("{:.0}%", progress * 100.0);
-
-            let loader_content = column![
-                text("Sysmic Engine").size(28),
-                text("Opening modules...")
-                    .size(14)
-                    .color(iced::Color::from_rgb(0.75, 0.8, 0.9)),
-                container(progress_bar(0.0..=1.0, progress))
-                    .width(Length::Fixed(320.0))
-                    .height(Length::Fixed(12.0)),
-                text(progress_text)
-                    .size(12)
-                    .color(iced::Color::from_rgb(0.7, 0.75, 0.85)),
-            ]
-            .spacing(12)
-            .padding(18);
-
-            return container(loader_content)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_x(iced::alignment::Horizontal::Center)
-                .align_y(iced::alignment::Vertical::Center)
-                .into();
-        }
-
         // Sidebar
         let sidebar = self.sidebar.view(self.replay_mode).map(Message::Sidebar);
 
@@ -1104,11 +1073,6 @@ impl EngineApp {
             self.field_data.robot_trace.clear();
             self.robot_trace.clear();
         }
-    }
-
-    fn startup_progress(&self) -> f32 {
-        let elapsed_ms = self.startup_started_at.elapsed().as_millis() as u64;
-        (elapsed_ms as f32 / STARTUP_LOADER_DURATION_MS as f32).clamp(0.0, 1.0)
     }
 
     fn load_replay_frames(path: &str) -> Result<Vec<ReplayFrame>, String> {
