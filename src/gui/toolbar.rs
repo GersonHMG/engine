@@ -15,11 +15,10 @@ pub enum ToolbarMessage {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScriptStatus {
-    Idle,
-    Loaded,
+    NoScript,
     Running,
     Paused,
-    Error,
+    Failed,
 }
 
 pub struct Toolbar {
@@ -33,7 +32,7 @@ impl Toolbar {
     pub fn new() -> Self {
         Self {
             script_path: String::new(),
-            script_status: ScriptStatus::Idle,
+            script_status: ScriptStatus::NoScript,
             pps: 0,
             pps_history: vec![0; PPS_HISTORY],
         }
@@ -88,6 +87,13 @@ impl Toolbar {
                 .to_string()
         };
 
+        let (status_text, status_color) = match self.script_status {
+            ScriptStatus::Running => ("Running", Color::from_rgb(0.2, 0.85, 0.25)),
+            ScriptStatus::Paused => ("Paused", Color::from_rgb(0.95, 0.55, 0.15)),
+            ScriptStatus::NoScript => ("No script", Color::from_rgb(0.6, 0.6, 0.6)),
+            ScriptStatus::Failed => ("Failed", Color::from_rgb(0.9, 0.2, 0.2)),
+        };
+
         let pps_text = format!("{} PPS", self.pps);
 
         // PPS sparkline (small inline canvas)
@@ -103,6 +109,7 @@ impl Toolbar {
             reload_btn,
             text("|").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
             text(script_name).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
+            text(status_text).size(12).color(status_color),
             iced::widget::Space::new().width(Length::Fill),
             text(pps_text).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
             pps_sparkline,
