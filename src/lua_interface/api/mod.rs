@@ -1,5 +1,6 @@
 mod control;
 mod draw_gui;
+mod grsim;
 mod state;
 
 use crate::game_controller::GameState;
@@ -18,5 +19,6 @@ pub(super) fn register_api_functions(
 ) {
     draw_gui::register_draw_gui_functions(lua, draw_commands);
     state::register_robot_state_functions(lua, Arc::clone(&world), game_state);
-    control::register_control_functions(lua, radio, world);
+    control::register_control_functions(lua, Arc::clone(&radio), world);
+    grsim::register_grsim_functions(lua, radio);
 }

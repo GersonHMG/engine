@@ -119,15 +119,9 @@ Conventions:
     Move robot toward a target point using the default motion controller.
 - `move_direct(id, team, {x=, y=})`
     Move robot directly toward a point (no path planning).
-- `motion(id, team, {x=, y=}, kp_x?, ki_x?, kp_y?, ki_y?)`
-    PID-like motion command with optional gains.
-    Defaults: `kp_x=0.5`, `ki_x=0.1`, `kp_y=0.5`, `ki_y=0.1`.
 - `face_to(id, team, {x=, y=}, kp?, ki?, kd?)`
     Rotates robot to face a target point.
     Defaults: `kp=1.0`, `ki=1.0`, `kd=0.1`.
-- `bangbang_trajectory(id, team, v_max, a_max, {{x,y}, {x,y}, ...})`
-    Follows a waypoint trajectory with bang-bang constraints.
-    Can use indexed points (`{x, y}`) or keyed points (`{x=, y=}`).
 - `kickx(id, team)`
     Trigger straight kick.
 - `kickz(id, team)`
