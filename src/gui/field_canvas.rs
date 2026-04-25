@@ -39,7 +39,11 @@ pub struct RobotData {
 pub enum LuaDrawCommand {
     Point { x: f64, y: f64 },
     HighlightRobot { id: i32, team: i32 },
-    Line { points: Vec<(f64, f64)> },
+    Line {
+        points: Vec<(f64, f64)>,
+        draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -331,8 +335,14 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
                         );
                     }
                 }
-                LuaDrawCommand::Line { points } => {
+                LuaDrawCommand::Line {
+                    points,
+                    draw_points_between,
+                    color,
+                } => {
                     if points.len() >= 2 {
+                        let [r, g, b] = color.unwrap_or([0.0, 1.0, 0.0]);
+                        let line_color = Color::from_rgb(r, g, b);
                         let screen_pts: Vec<Point> = points
                             .iter()
                             .map(|(x, y)| self.field_to_screen(bounds, *x, *y))
@@ -346,12 +356,30 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
                         frame.stroke(
                             &path,
                             Stroke::default()
-                                .with_color(Color::from_rgb(0.0, 1.0, 0.0))
+                                .with_color(line_color)
                                 .with_width(2.0),
                         );
-                        for pt in &screen_pts {
-                            let dot = Path::circle(*pt, (30.0 * s).max(3.0));
-                            frame.fill(&dot, Color::from_rgb(0.0, 1.0, 0.0));
+
+                        if *draw_points_between {
+                            let spacing_px = 18.0f32;
+                            let dot_radius = (20.0 * s).max(2.0);
+                            for segment in screen_pts.windows(2) {
+                                let start = segment[0];
+                                let end = segment[1];
+                                let dx = end.x - start.x;
+                                let dy = end.y - start.y;
+                                let len = (dx * dx + dy * dy).sqrt();
+                                if len <= spacing_px {
+                                    continue;
+                                }
+                                let steps = (len / spacing_px).floor() as i32;
+                                for i in 1..steps {
+                                    let t = i as f32 / steps as f32;
+                                    let p = Point::new(start.x + dx * t, start.y + dy * t);
+                                    let dot = Path::circle(p, dot_radius);
+                                    frame.fill(&dot, line_color);
+                                }
+                            }
                         }
                     }
                 }

@@ -73,7 +73,11 @@ struct ReplayFrameBuilder {
 pub enum LuaDrawCmd {
     Point { x: f64, y: f64 },
     HighlightRobot { id: i32, team: i32 },
-    Line { points: Vec<(f64, f64)> },
+    Line {
+        points: Vec<(f64, f64)>,
+        draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
 }
 
 // --- Commands from GUI to engine ---
@@ -695,7 +699,15 @@ impl EngineApp {
                             .map(|cmd| match cmd {
                                 LuaDrawCmd::Point { x, y } => LuaDrawCommand::Point { x: *x, y: *y },
                                 LuaDrawCmd::HighlightRobot { id, team } => LuaDrawCommand::HighlightRobot { id: *id, team: *team },
-                                LuaDrawCmd::Line { points } => LuaDrawCommand::Line { points: points.clone() },
+                                LuaDrawCmd::Line {
+                                    points,
+                                    draw_points_between,
+                                    color,
+                                } => LuaDrawCommand::Line {
+                                    points: points.clone(),
+                                    draw_points_between: *draw_points_between,
+                                    color: *color,
+                                },
                             })
                             .collect();
                     }
