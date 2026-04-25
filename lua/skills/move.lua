@@ -1,4 +1,3 @@
-
 local move = {}
 
 function move.is_on_point(robot_id, team, target, tolerance)
