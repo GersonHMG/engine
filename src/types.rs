@@ -251,7 +251,11 @@ impl RobotCommand {
 pub enum DrawCommand {
     Point { x: f64, y: f64 },
     HighlightRobot { id: i32, team: i32 },
-    Line { points: Vec<[f64; 2]> },
+    Line {
+        points: Vec<[f64; 2]>,
+        draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
