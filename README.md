@@ -152,9 +152,11 @@ Conventions:
 
 - `draw_point(x, y)`
     Draw a point marker on the field view.
-- `draw_line({{x,y}, {x,y}, ...})`
+- `draw_line({{x,y}, {x,y}, ...}[, draw_points_between][, color])`
     Draw a polyline on the field view (2 or more points).
     Can use indexed points (`{x, y}`) or keyed points (`{x=, y=}`).
+    `draw_points_between` is optional (`true`/`false`) and draws small interpolated points between line vertices.
+    `color` is optional and can be `{r,g,b}` or `{r=, g=, b=}` with values in `[0.0, 1.0]`.
 - `highlight_robot(id, team)`
     Highlight a robot in the field view.
 

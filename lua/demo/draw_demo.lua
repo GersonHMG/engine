@@ -34,7 +34,7 @@ function process()
     highlight_robot(robotId, team)
     
     local line_coords = get_line_coordinates()
-    draw_line(line_coords)
+    draw_line(line_coords, true, {1.0, 0.0, 0.0}) -- Red line for the square path
 
     -- Draw individual target points (the 4 corners)
     for i, p in ipairs(path) do

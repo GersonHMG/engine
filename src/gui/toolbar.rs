@@ -90,7 +90,7 @@ impl Toolbar {
         let (status_text, status_color) = match self.script_status {
             ScriptStatus::Running => ("Running", Color::from_rgb(0.2, 0.85, 0.25)),
             ScriptStatus::Paused => ("Paused", Color::from_rgb(0.95, 0.55, 0.15)),
-            ScriptStatus::NoScript => ("No script", Color::from_rgb(0.6, 0.6, 0.6)),
+            ScriptStatus::NoScript => ("", Color::from_rgb(0.6, 0.6, 0.6)),
             ScriptStatus::Failed => ("Failed", Color::from_rgb(0.9, 0.2, 0.2)),
         };
 
