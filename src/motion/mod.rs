@@ -45,58 +45,7 @@ impl Motion {
         let delta = 1.0 / 60.0;
         self.bangbang.compute_motion(robot, path, delta)
     }
-
-    /// Execute bang-bang trajectory from an explicit path with custom limits.
-    pub fn bangbang_trajectory(
-        &self,
-        robot: &RobotState,
-        id: i32,
-        team: i32,
-        v_max: f64,
-        a_max: f64,
-        path: Vec<Vec2D>,
-    ) -> MotionCommand {
-        if v_max <= 0.0 || a_max <= 0.0 {
-            return MotionCommand::zero();
-        }
-
-        let delta = 1.0 / 60.0;
-        let controller = BangBangControl::new(a_max, v_max);
-        let mut cmd = controller.compute_motion(robot, path, delta);
-        cmd.id = id;
-        cmd.team = team;
-        cmd
-    }
-
-    /// Motion with PID velocity control and obstacle avoidance.
-    pub fn motion(
-        &self,
-        robot: &RobotState,
-        target: Vec2D,
-        world: &World,
-        kp_x: f64,
-        ki_x: f64,
-        kp_y: f64,
-        ki_y: f64,
-    ) -> MotionCommand {
-        let env = Environment::new(world, robot);
-        let path = self.planner.get_path(robot.position, target, &env);
-        let delta = 1.0 / 60.0;
-        let ref_vel = self.bangbang.compute_motion(robot, path, delta);
-
-        let orientation = robot.orientation;
-        let _local_velocity = Vec2D::new(
-            robot.velocity.x * (-orientation).cos() - robot.velocity.y * (-orientation).sin(),
-            robot.velocity.x * (-orientation).sin() + robot.velocity.y * (-orientation).cos(),
-        );
-
-        // PID controllers (not actually modifying output in original C++ code either)
-        let mut _pid_x = PID::new(kp_x, ki_x, 0.0);
-        let mut _pid_y = PID::new(kp_y, ki_y, 0.0);
-
-        MotionCommand::new(robot.id, robot.team, ref_vel.vx, ref_vel.vy)
-    }
-
+    
     /// Rotate to face a target point using PID.
     pub fn face_to(
         &self,
