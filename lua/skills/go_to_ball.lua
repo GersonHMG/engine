@@ -10,7 +10,7 @@ end
 function go_to_ball.process(robotId, team)
     -- Move to ball
     local ball_pos = get_ball_state()
-    local tolerance = 0.3
+    local tolerance = 0.2
     if go_to_ball.is_on_point(robotId, team, ball_pos, tolerance) then
         return true
     end
