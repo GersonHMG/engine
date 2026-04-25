@@ -6,4 +6,4 @@ local team = 0
 
 function process()
     kick_skill.process(robotId, team)
-end
+end  
