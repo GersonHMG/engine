@@ -89,46 +89,4 @@ impl World {
             robot.commanded_angular = cmd_angular;
         }
     }
-
-    pub fn to_json(&self) -> serde_json::Value {
-        let mut robots_arr = Vec::new();
-
-        for robot in self.blue_robots.values() {
-            if !robot.active {
-                continue;
-            }
-            robots_arr.push(json!({
-                "id": robot.id,
-                "team": "blue",
-                "position": { "x": robot.position.x, "y": robot.position.y },
-                "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
-                "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
-                "cmd_angular": robot.commanded_angular,
-                "orientation": robot.orientation,
-            }));
-        }
-
-        for robot in self.yellow_robots.values() {
-            if !robot.active {
-                continue;
-            }
-            robots_arr.push(json!({
-                "id": robot.id,
-                "team": "yellow",
-                "position": { "x": robot.position.x, "y": robot.position.y },
-                "velocity": { "x": robot.velocity.x, "y": robot.velocity.y },
-                "cmd_v": { "x": robot.commanded_velocity.x, "y": robot.commanded_velocity.y },
-                "cmd_angular": robot.commanded_angular,
-                "orientation": robot.orientation,
-            }));
-        }
-
-        json!({
-            "robots": robots_arr,
-            "ball": {
-                "position": { "x": self.ball.position.x, "y": self.ball.position.y },
-                "velocity": { "x": self.ball.velocity.x, "y": self.ball.velocity.y },
-            },
-        })
-    }
 }
