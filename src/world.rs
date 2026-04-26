@@ -2,7 +2,6 @@
 // Port of world/world.cpp
 
 use crate::types::{BallState, RobotState, Vec2D};
-use serde_json::json;
 use std::collections::HashMap;
 use std::time::Instant;
 

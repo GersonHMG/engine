@@ -141,7 +141,7 @@ function kick_to_point.process(robotId, team, target)
     local robot_pos = get_robot_state(robotId, team)
     if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, ball_pos, 0.1) then
         local point = get_kick_point(target, 0.05)
-        move_to(robotId, team, {x = point.x, y = point.y})
+        move_direct(robotId, team, {x = point.x, y = point.y})
         if has_the_ball(robotId, team) then
             kickx(robotId, team)
         end
