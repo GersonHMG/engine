@@ -6,8 +6,7 @@ use crate::world::World;
 
 /// Environment captures obstacle positions for collision checks.
 pub struct Environment {
-    robots: Vec<Vec2D>,
-    ball_position: Vec2D,
+    robots: Vec<Vec2D>
 }
 
 impl Environment {
@@ -32,11 +31,8 @@ impl Environment {
             }
         }
 
-        let ball_position = world.get_ball_state().position;
-
         Self {
-            robots,
-            ball_position,
+            robots
         }
     }
 
