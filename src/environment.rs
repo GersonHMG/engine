@@ -64,19 +64,7 @@ impl Environment {
             }
         }
 
-        // Ball collision
-        if (self.ball_position - *point).length() <= 0.1 {
-            return true;
-        }
-
         false
     }
 
-    pub fn get_robots(&self) -> &[Vec2D] {
-        &self.robots
-    }
-
-    pub fn get_ball_position(&self) -> &Vec2D {
-        &self.ball_position
-    }
 }
