@@ -1,7 +1,9 @@
 // path_planner.rs — Fast path planner with obstacle avoidance
 // Port of motion/path_planner.cpp
 
-use crate::environment::Environment;
+pub mod environment;
+
+use self::environment::Environment;
 use crate::types::Vec2D;
 
 struct Trajectory {

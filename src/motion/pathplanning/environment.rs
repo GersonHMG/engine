@@ -6,7 +6,8 @@ use crate::world::World;
 
 /// Environment captures obstacle positions for collision checks.
 pub struct Environment {
-    robots: Vec<Vec2D>
+    robots: Vec<Vec2D>,
+    ball: Vec2D,
 }
 
 impl Environment {
@@ -31,13 +32,16 @@ impl Environment {
             }
         }
 
-        Self {
-            robots
-        }
+        let ball = world.get_ball_state().position;
+
+        Self { robots, ball }
     }
 
     /// Check if a point collides with any obstacle.
     pub fn collides(&self, point: &Vec2D) -> bool {
+        const ROBOT_COLLISION_RADIUS: f64 = 0.2;
+        const BALL_COLLISION_RADIUS: f64 = 0.12;
+
         // Field bounds
         if point.x < -4.5 || point.x > 4.5 || point.y < -3.0 || point.y > 3.0 {
             return true;
@@ -55,12 +59,16 @@ impl Environment {
 
         // Robot collision
         for robot_pos in &self.robots {
-            if (*point - *robot_pos).length() <= 0.2 {
+            if (*point - *robot_pos).length() <= ROBOT_COLLISION_RADIUS {
                 return true;
             }
         }
 
+        // Ball collision
+        if (*point - self.ball).length() <= BALL_COLLISION_RADIUS {
+            return true;
+        }
+
         false
     }
-
 }
