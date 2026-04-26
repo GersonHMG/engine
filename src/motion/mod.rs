@@ -4,7 +4,7 @@
 pub mod controllers;
 pub mod pathplanning;
 
-use crate::environment::Environment;
+use crate::motion::pathplanning::environment::Environment;
 use crate::motion::pathplanning::FastPathPlanner;
 use crate::motion::controllers::pid::pid::PID;
 use crate::motion::controllers::bangbang::BangBangControl;
