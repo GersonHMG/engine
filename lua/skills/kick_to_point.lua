@@ -1,7 +1,7 @@
 local kick_to_point = {}
 
 
-function kick_to_point.get_kick_point(kick_target, offset_dist)
+local function get_kick_point(kick_target, offset_dist)
     -- Get current ball position
     local ball_pos = get_ball_state()
 
@@ -23,12 +23,12 @@ function kick_to_point.get_kick_point(kick_target, offset_dist)
     return point
 end
 
-function kick_to_point.is_on_point(robot_id, team, target, tolerance)
+local function is_on_point(robot_id, team, target, tolerance)
     local r_state = get_robot_state(robot_id, team)
     return math.sqrt((r_state.x - target.x)^2 + (r_state.y - target.y)^2) <= tolerance
 end
 
-function is_facing_point(robotId, team, target_point, tolerance)
+local function is_facing_point(robotId, team, target_point, tolerance)
     -- Fetch the robot's current state (adjust this function to match your API)
     local robot_state = get_robot_state(robotId, team) 
     
@@ -48,7 +48,7 @@ function is_facing_point(robotId, team, target_point, tolerance)
     return angle_diff <= tolerance
 end
 
-function is_on_kicking_line(robot_pos, ball_pos, target_pos, tolerance)
+local function is_on_kicking_line(robot_pos, ball_pos, target_pos, tolerance)
     -- Vector from Ball to Target (the direction we want to kick)
     local dx_bt = target_pos.x - ball_pos.x
     local dy_bt = target_pos.y - ball_pos.y
@@ -71,7 +71,6 @@ function is_on_kicking_line(robot_pos, ball_pos, target_pos, tolerance)
     if dot_product < 0 then
         return false 
     end
-    print("here")
     -- 2. Check the perpendicular distance to the line
     -- Using the 2D cross product magnitude
     local distance_to_line = math.abs(dir_x * dy_br - dir_y * dx_br)
@@ -82,9 +81,9 @@ end
 
 --- Checks if a specific robot currently possesses the ball.
 --- @param robotId number
---- @param team string/number
+--- @param team number
 --- @return boolean
-function has_the_ball(robotId, team)
+local function has_the_ball(robotId, team)
     -- Fetch current states (adjust function names to match your API)
     local robot_state = get_robot_state(robotId, team)
     local ball_state = get_ball_state()
@@ -135,13 +134,13 @@ function kick_to_point.process(robotId, team, target)
     draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0}) -- Green point for the target
     local ball_pos = get_ball_state()
     
-    local point = kick_to_point.get_kick_point(target, 0.09+0.05)
+    local point = get_kick_point(target, 0.09+0.05)
 
     -- Visualize the target point for debugging
     draw_point(point.x, point.y)
     local robot_pos = get_robot_state(robotId, team)
     if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, ball_pos, 0.1) then
-        local point = kick_to_point.get_kick_point(target, 0.05)
+        local point = get_kick_point(target, 0.05)
         move_to(robotId, team, {x = point.x, y = point.y})
         if has_the_ball(robotId, team) then
             kickx(robotId, team)
