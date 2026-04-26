@@ -144,13 +144,19 @@ Conventions:
 
 #### Field drawing helpers
 
-- `draw_point(x, y)`
+- `draw_point(x, y[, draw_x][, color])`
     Draw a point marker on the field view.
+    `draw_x` is optional (`true`/`false`) and draws an 'X' instead of a circle when `true`.
+    `color` is optional and can be `{r,g,b}` or `{r=, g=, b=}` with values in `[0.0, 1.0]`. Defaults to green.
 - `draw_line({{x,y}, {x,y}, ...}[, draw_points_between][, color])`
     Draw a polyline on the field view (2 or more points).
     Can use indexed points (`{x, y}`) or keyed points (`{x=, y=}`).
     `draw_points_between` is optional (`true`/`false`) and draws small interpolated points between line vertices.
     `color` is optional and can be `{r,g,b}` or `{r=, g=, b=}` with values in `[0.0, 1.0]`.
+- `draw_text(x, y, text[, color])`
+    Draw text at a field coordinate.
+    `text` is a string to display.
+    `color` is optional and can be `{r,g,b}` or `{r=, g=, b=}` with values in `[0.0, 1.0]`. Defaults to white.
 - `highlight_robot(id, team)`
     Highlight a robot in the field view.
 
