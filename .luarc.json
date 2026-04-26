@@ -1,0 +1,27 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LuaLS/vscode-lua/master/setting/schema.json",
+  "runtime": {
+    "version": "Lua 5.4"
+  },
+  "diagnostics": {
+    "globals": [
+      "send_velocity",
+      "move_to",
+      "move_direct",
+      "face_to",
+      "kickx",
+      "kickz",
+      "dribbler",
+      "get_robot_state",
+      "get_ball_state",
+      "get_blue_team_state",
+      "get_yellow_team_state",
+      "get_ref_message",
+      "draw_point",
+      "highlight_robot",
+      "draw_line",
+      "draw_text",
+      "grsim"
+    ]
+  }
+}
