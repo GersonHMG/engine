@@ -67,7 +67,7 @@ impl Motion {
         let angular_velocity = pid.compute(error, delta);
 
         let mut cmd = MotionCommand::with_id_team(robot.id, robot.team);
-        cmd.angular = angular_velocity;
+        cmd.angular = Some(angular_velocity);
         cmd
     }
 
