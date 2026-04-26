@@ -24,7 +24,7 @@ pub(super) fn register_control_functions(
                     return Ok(());
                 }
                 let mut cmd = MotionCommand::new(id, team, vx, vy);
-                cmd.angular = omega;
+                cmd.angular = Some(omega);
                 r.lock()
                     .map_err(|e| LuaError::external(format!("{e}")))?
                     .add_motion_command(cmd);
