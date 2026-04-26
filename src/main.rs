@@ -265,7 +265,7 @@ async fn run_engine(
                 }
                 EngineCommand::SendRobotCommand { id, team, vx, vy, omega } => {
                     let mut r = radio.lock().unwrap();
-                    let cmd = MotionCommand { id, team, vx, vy, angular: omega };
+                    let cmd = MotionCommand { id, team, vx: Some(vx), vy: Some(vy), angular: Some(omega) };
                     r.add_motion_command(cmd);
                 }
                 EngineCommand::SendKickCommand { id, team } => {
