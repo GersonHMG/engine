@@ -125,7 +125,7 @@ impl LuaInterface {
                 for team in 0..2 {
                     for id in 0..6 {
                         let mut cmd = MotionCommand::new(id, team, 0.0, 0.0);
-                        cmd.angular = 0.0;
+                        cmd.angular = Some(0.0);
                         r.add_motion_command(cmd);
                     }
                 }
