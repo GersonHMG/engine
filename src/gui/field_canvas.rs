@@ -37,11 +37,22 @@ pub struct RobotData {
 
 #[derive(Debug, Clone)]
 pub enum LuaDrawCommand {
-    Point { x: f64, y: f64 },
+    Point {
+        x: f64,
+        y: f64,
+        draw_x: bool,
+        color: Option<[f32; 3]>,
+    },
     HighlightRobot { id: i32, team: i32 },
     Line {
         points: Vec<(f64, f64)>,
         draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
+    Text {
+        x: f64,
+        y: f64,
+        text: String,
         color: Option<[f32; 3]>,
     },
 }
@@ -312,11 +323,40 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         // Draw Lua commands
         for cmd in &self.data.lua_draw_commands {
             match cmd {
-                LuaDrawCommand::Point { x, y } => {
+                LuaDrawCommand::Point { x, y, draw_x, color } => {
                     let pos = self.field_to_screen(bounds, *x, *y);
-                    let r = (40.0 * s).max(4.0);
-                    let path = Path::circle(pos, r);
-                    frame.fill(&path, Color::from_rgb(0.0, 1.0, 0.0));
+                    let [r, g, b] = color.unwrap_or([0.0, 1.0, 0.0]);
+                    let point_color = Color::from_rgb(r, g, b);
+
+                    if *draw_x {
+                        // Draw an X shape
+                        let size = (40.0 * s).max(4.0);
+                        let path1 = Path::line(
+                            Point::new(pos.x - size, pos.y - size),
+                            Point::new(pos.x + size, pos.y + size),
+                        );
+                        let path2 = Path::line(
+                            Point::new(pos.x - size, pos.y + size),
+                            Point::new(pos.x + size, pos.y - size),
+                        );
+                        frame.stroke(
+                            &path1,
+                            Stroke::default()
+                                .with_color(point_color)
+                                .with_width(2.0),
+                        );
+                        frame.stroke(
+                            &path2,
+                            Stroke::default()
+                                .with_color(point_color)
+                                .with_width(2.0),
+                        );
+                    } else {
+                        // Draw a circle
+                        let r_circle = (40.0 * s).max(4.0);
+                        let path = Path::circle(pos, r_circle);
+                        frame.fill(&path, point_color);
+                    }
                 }
                 LuaDrawCommand::HighlightRobot { id, team } => {
                     let robots = if *team == 0 {
@@ -382,6 +422,20 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
                             }
                         }
                     }
+                }
+                LuaDrawCommand::Text { x, y, text, color } => {
+                    let pos = self.field_to_screen(bounds, *x, *y);
+                    let [r, g, b] = color.unwrap_or([1.0, 1.0, 1.0]);
+                    let text_color = Color::from_rgb(r, g, b);
+                    frame.fill_text(Text {
+                        content: text.clone(),
+                        position: pos,
+                        color: text_color,
+                        size: iced::Pixels((14.0 * (s / 0.08)).max(10.0)),
+                        align_x: iced::alignment::Horizontal::Center.into(),
+                        align_y: iced::alignment::Vertical::Center.into(),
+                        ..Text::default()
+                    });
                 }
             }
         }

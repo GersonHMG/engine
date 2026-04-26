@@ -249,11 +249,22 @@ impl RobotCommand {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum DrawCommand {
-    Point { x: f64, y: f64 },
+    Point {
+        x: f64,
+        y: f64,
+        draw_x: bool,
+        color: Option<[f32; 3]>,
+    },
     HighlightRobot { id: i32, team: i32 },
     Line {
         points: Vec<[f64; 2]>,
         draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
+    Text {
+        x: f64,
+        y: f64,
+        text: String,
         color: Option<[f32; 3]>,
     },
 }

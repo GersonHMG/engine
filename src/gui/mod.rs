@@ -71,11 +71,22 @@ struct ReplayFrameBuilder {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type")]
 pub enum LuaDrawCmd {
-    Point { x: f64, y: f64 },
+    Point {
+        x: f64,
+        y: f64,
+        draw_x: bool,
+        color: Option<[f32; 3]>,
+    },
     HighlightRobot { id: i32, team: i32 },
     Line {
         points: Vec<(f64, f64)>,
         draw_points_between: bool,
+        color: Option<[f32; 3]>,
+    },
+    Text {
+        x: f64,
+        y: f64,
+        text: String,
         color: Option<[f32; 3]>,
     },
 }
@@ -697,7 +708,12 @@ impl EngineApp {
                     while let Ok(cmds) = rx.try_recv() {
                         self.field_data.lua_draw_commands = cmds.iter()
                             .map(|cmd| match cmd {
-                                LuaDrawCmd::Point { x, y } => LuaDrawCommand::Point { x: *x, y: *y },
+                                LuaDrawCmd::Point { x, y, draw_x, color } => LuaDrawCommand::Point {
+                                    x: *x,
+                                    y: *y,
+                                    draw_x: *draw_x,
+                                    color: *color,
+                                },
                                 LuaDrawCmd::HighlightRobot { id, team } => LuaDrawCommand::HighlightRobot { id: *id, team: *team },
                                 LuaDrawCmd::Line {
                                     points,
@@ -706,6 +722,12 @@ impl EngineApp {
                                 } => LuaDrawCommand::Line {
                                     points: points.clone(),
                                     draw_points_between: *draw_points_between,
+                                    color: *color,
+                                },
+                                LuaDrawCmd::Text { x, y, text, color } => LuaDrawCommand::Text {
+                                    x: *x,
+                                    y: *y,
+                                    text: text.clone(),
                                     color: *color,
                                 },
                             })

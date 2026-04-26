@@ -1,22 +1,38 @@
-local go_to_ball = {}
+local kick_to_point = {}
 
 
-function go_to_ball.is_on_point(robot_id, team, target, tolerance)
-    local r_state = get_robot_state(robot_id, team)
-    return math.sqrt((r_state.x - target.x)^2 + (r_state.y - target.y)^2) <= tolerance
+function kick_to_point.get_kick_point(kick_target, offset_dist)
+    -- Get current ball position
+    local ball_pos = get_ball_state()
+
+    -- Calculate direction from target to ball
+    local dx = ball_pos.x - kick_target.x
+    local dy = ball_pos.y - kick_target.y
+    local dist = math.sqrt(dx^2 + dy^2)
+    
+    -- Prevent division by zero
+    if dist == 0 then dist = 0.001 end
+    
+    -- Calculate the final approach point
+    local point = {
+        x = ball_pos.x + ((dx / dist) * offset_dist),
+        y = ball_pos.y + ((dy / dist) * offset_dist),
+        -- Calculate angle to face the target (using math.atan2 for safety)
+        theta = math.atan2(kick_target.y - ball_pos.y, kick_target.x - ball_pos.x)
+    }
+    
+    -- Return the calculated point back to the caller
+    return point
 end
 
+function kick_to_point.process(robotId, team, target)
+    -- Get the point to move to before kicking
+    local point = kick_to_point.get_kick_point(target, 0.3)
+    -- Visualize the target point for debugging
+    draw_point(point.x, point.y) 
 
-function go_to_ball.process(robotId, team)
-    -- Move to ball
-    local ball_pos = get_ball_state()
-    local tolerance = 0.2
-    if go_to_ball.is_on_point(robotId, team, ball_pos, tolerance) then
-        return true
-    end
-    
-    move_to(robotId, team, ball_pos)
+
     return false
 end
 
-return go_to_ball
+return kick_to_point

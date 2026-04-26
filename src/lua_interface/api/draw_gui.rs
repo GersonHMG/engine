@@ -19,14 +19,42 @@ pub(super) fn register_draw_gui_functions(
 ) {
     let globals = lua.globals();
 
-    // ── draw_point(x, y) ──
+    // ── draw_point(x, y[, draw_x][, color]) ──
     {
         let dc = Arc::clone(&draw_commands);
         let f = lua
-            .create_function(move |_, (x, y): (f64, f64)| {
+            .create_function(move |_, (x, y, arg3, arg4): (f64, f64, Option<LuaValue>, Option<LuaValue>)| {
+                let mut draw_x = false;
+                let mut color = None;
+
+                if let Some(value) = arg3 {
+                    match value {
+                        LuaValue::Boolean(v) => draw_x = v,
+                        LuaValue::Table(tbl) => color = Some(parse_line_color(&tbl)?),
+                        LuaValue::Nil => {}
+                        _ => {
+                            return Err(LuaError::external(
+                                "draw_point third argument must be a boolean or color table",
+                            ))
+                        }
+                    }
+                }
+
+                if let Some(value) = arg4 {
+                    match value {
+                        LuaValue::Table(tbl) => color = Some(parse_line_color(&tbl)?),
+                        LuaValue::Nil => {}
+                        _ => {
+                            return Err(LuaError::external(
+                                "draw_point fourth argument must be a color table",
+                            ))
+                        }
+                    }
+                }
+
                 dc.lock()
                     .map_err(|e| LuaError::external(format!("{e}")))?
-                    .push(DrawCommand::Point { x, y });
+                    .push(DrawCommand::Point { x, y, draw_x, color });
                 Ok(())
             })
             .unwrap();
@@ -101,5 +129,33 @@ pub(super) fn register_draw_gui_functions(
             })
             .unwrap();
         globals.set("draw_line", f).unwrap();
+    }
+
+    // ── draw_text(x, y, text[, color]) ──
+    {
+        let dc = Arc::clone(&draw_commands);
+        let f = lua
+            .create_function(move |_, (x, y, text, color_arg): (f64, f64, String, Option<LuaValue>)| {
+                let color = if let Some(value) = color_arg {
+                    match value {
+                        LuaValue::Table(tbl) => Some(parse_line_color(&tbl)?),
+                        LuaValue::Nil => None,
+                        _ => {
+                            return Err(LuaError::external(
+                                "draw_text color argument must be a color table",
+                            ))
+                        }
+                    }
+                } else {
+                    None
+                };
+
+                dc.lock()
+                    .map_err(|e| LuaError::external(format!("{e}")))?
+                    .push(DrawCommand::Text { x, y, text, color });
+                Ok(())
+            })
+            .unwrap();
+        globals.set("draw_text", f).unwrap();
     }
 }
