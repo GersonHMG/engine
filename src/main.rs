@@ -5,7 +5,6 @@ mod proto;
 mod receiver;
 mod game_controller;
 mod world;
-mod environment;
 mod motion;
 mod sender;
 mod lua_interface;
