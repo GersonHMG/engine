@@ -104,7 +104,7 @@ impl Logger {
                 let (vx_cmd, vy_cmd, angular_cmd) = command_map
                     .get(&id)
                     .filter(|c| c.id == id && c.team == team)
-                    .map(|c| (c.motion.vx, c.motion.vy, c.motion.angular))
+                    .map(|c| (c.motion.vx.unwrap_or(0.0), c.motion.vy.unwrap_or(0.0), c.motion.angular.unwrap_or(0.0)))
                     .unwrap_or((0.0, 0.0, 0.0));
 
                 let _ = writeln!(

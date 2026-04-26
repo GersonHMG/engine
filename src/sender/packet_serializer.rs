@@ -16,9 +16,9 @@ pub fn serialize(command_map: &HashMap<i32, RobotCommand>, num_robots: usize) ->
             let k = &cmd.kicker;
 
             // Scale velocities by 100 to capture decimal part
-            let mut vx = (m.vx * 100.0) as i32;
-            let mut vy = (m.vy * 100.0) as i32;
-            let mut vth = (m.angular * 100.0) as i32;
+            let mut vx = (m.vx.unwrap_or(0.0) * 100.0) as i32;
+            let mut vy = (m.vy.unwrap_or(0.0) * 100.0) as i32;
+            let mut vth = (m.angular.unwrap_or(0.0) * 100.0) as i32;
             let dribb = k.dribbler as i32;
             let kick: i32 = if k.kick_x { 1 } else { 0 };
             let callback: i32 = 0;

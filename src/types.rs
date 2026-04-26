@@ -165,28 +165,58 @@ impl Default for BallState {
 pub struct MotionCommand {
     pub id: i32,
     pub team: i32,
-    pub vx: f64,
-    pub vy: f64,
-    pub angular: f64,
+    pub vx: Option<f64>,      // Change to Option
+    pub vy: Option<f64>,      // Change to Option
+    pub angular: Option<f64>, // Change to Option
 }
 
 impl MotionCommand {
+    /// Creates a command with linear velocities. Angular velocity is left uncommanded (None).
     pub fn new(id: i32, team: i32, vx: f64, vy: f64) -> Self {
         Self {
             id,
             team,
-            vx,
-            vy,
-            angular: 0.0,
+            vx: Some(vx),
+            vy: Some(vy),
+            angular: None,
         }
     }
 
+    /// Creates an empty command for a robot. No movement is commanded yet (all None).
     pub fn with_id_team(id: i32, team: i32) -> Self {
-        Self::new(id, team, 0.0, 0.0)
+        Self {
+            id,
+            team,
+            vx: None,
+            vy: None,
+            angular: None,
+        }
     }
 
+    /// Actively commands a "halt" state. Sets all velocities to Some(0.0) to force a stop.
     pub fn zero() -> Self {
-        Self::new(0, 0, 0.0, 0.0)
+        Self {
+            id: 0,
+            team: 0,
+            vx: Some(0.0),
+            vy: Some(0.0),
+            angular: Some(0.0),
+        }
+    }
+
+    // --- Builder Methods ---
+
+    /// Chainable method to add or update the angular velocity command.
+    pub fn with_angular(mut self, angular: f64) -> Self {
+        self.angular = Some(angular);
+        self
+    }
+
+    /// Chainable method to add or update the linear velocity commands.
+    pub fn with_linear(mut self, vx: f64, vy: f64) -> Self {
+        self.vx = Some(vx);
+        self.vy = Some(vy);
+        self
     }
 }
 
@@ -195,7 +225,7 @@ impl fmt::Display for MotionCommand {
         write!(
             f,
             "MotionCmd(id={}, team={}, vx={:.2}, vy={:.2}, w={:.2})",
-            self.id, self.team, self.vx, self.vy, self.angular
+            self.id, self.team, self.vx.unwrap_or(0.0), self.vy.unwrap_or(0.0), self.angular.unwrap_or(0.0)
         )
     }
 }
