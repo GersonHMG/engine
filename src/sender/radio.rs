@@ -104,10 +104,16 @@ impl Radio {
             .entry(id)
             .or_insert_with(|| RobotCommand::new(id, motion.team));
 
-        // Override the default zero vector with the incoming values.
-        entry.motion.vx = motion.vx;
-        entry.motion.vy = motion.vy;
-        entry.motion.angular = motion.angular;
+        // Overwrite only if a value was explicitly provided
+        if let Some(vx) = motion.vx {
+            entry.motion.vx = Some(vx);
+        }
+        if let Some(vy) = motion.vy {
+            entry.motion.vy = Some(vy);
+        }
+        if let Some(angular) = motion.angular {
+            entry.motion.angular = Some(angular);
+        }
     }
 
     pub fn add_kicker_command(&mut self, kicker: KickerCommand) {
@@ -139,8 +145,8 @@ impl Radio {
             world.set_commanded_velocity(
                 cmd.id,
                 cmd.team,
-                crate::types::Vec2D::new(cmd.motion.vx, cmd.motion.vy),
-                cmd.motion.angular,
+                crate::types::Vec2D::new(cmd.motion.vx.unwrap_or(0.0), cmd.motion.vy.unwrap_or(0.0)),
+                cmd.motion.angular.unwrap_or(0.0),
             );
         }
 
@@ -162,11 +168,11 @@ impl Radio {
                 self.grsim.communicate_grsim(
                     cmd.id,
                     cmd.team,
-                    m.angular,
+                    m.angular.unwrap_or(0.0),
                     if k.kick_x { 3.0 } else { 0.0 },
                     if k.kick_z { 3.0 } else { 0.0 },
-                    m.vx,
-                    m.vy,
+                    m.vx.unwrap_or(0.0),
+                    m.vy.unwrap_or(0.0),
                     k.dribbler as i32,
                     false,
                 );
@@ -178,7 +184,7 @@ impl Radio {
         self.active_robots.retain(|&(id, _team)| {
             if let Some(cmd) = self.command_map.get(&id) {
                 let m = &cmd.motion;
-                m.vx != 0.0 || m.vy != 0.0 || m.angular != 0.0
+                m.vx.unwrap_or(0.0) != 0.0 || m.vy.unwrap_or(0.0) != 0.0 || m.angular.unwrap_or(0.0) != 0.0
             } else {
                 false
             }
