@@ -1,13 +1,17 @@
 // Sysmic Robotics — RoboCup SSL Engine (Rust)
 
+#[path = "utils/types.rs"]
 mod types;
+#[path = "protobuf/proto.rs"]
 mod proto;
 mod receiver;
+#[path = "receiver/game_controller.rs"]
 mod game_controller;
 mod world;
 mod motion;
 mod sender;
 mod lua_interface;
+#[path = "logger/logger.rs"]
 mod logger;
 mod gui;
 

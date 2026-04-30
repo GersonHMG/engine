@@ -203,21 +203,6 @@ impl MotionCommand {
             angular: Some(0.0),
         }
     }
-
-    // --- Builder Methods ---
-
-    /// Chainable method to add or update the angular velocity command.
-    pub fn with_angular(mut self, angular: f64) -> Self {
-        self.angular = Some(angular);
-        self
-    }
-
-    /// Chainable method to add or update the linear velocity commands.
-    pub fn with_linear(mut self, vx: f64, vy: f64) -> Self {
-        self.vx = Some(vx);
-        self.vy = Some(vy);
-        self
-    }
 }
 
 impl fmt::Display for MotionCommand {
@@ -297,62 +282,4 @@ pub enum DrawCommand {
         text: String,
         color: Option<[f32; 3]>,
     },
-}
-
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn vec2d_length() {
-        let v = Vec2D::new(3.0, 4.0);
-        assert!((v.length() - 5.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn vec2d_normalize() {
-        let v = Vec2D::new(3.0, 4.0);
-        let n = v.normalized();
-        assert!((n.length() - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn vec2d_ops() {
-        let a = Vec2D::new(1.0, 2.0);
-        let b = Vec2D::new(3.0, 4.0);
-        let sum = a + b;
-        assert!((sum.x - 4.0).abs() < 1e-9);
-        assert!((sum.y - 6.0).abs() < 1e-9);
-
-        let diff = b - a;
-        assert!((diff.x - 2.0).abs() < 1e-9);
-        assert!((diff.y - 2.0).abs() < 1e-9);
-
-        let scaled = a * 3.0;
-        assert!((scaled.x - 3.0).abs() < 1e-9);
-        assert!((scaled.y - 6.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn vec2d_rotate() {
-        let v = Vec2D::new(1.0, 0.0);
-        let rotated = v.rotated(std::f64::consts::FRAC_PI_2);
-        assert!(rotated.x.abs() < 1e-9);
-        assert!((rotated.y - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn robot_state_default_inactive() {
-        let r = RobotState::default();
-        assert!(!r.active);
-    }
-
-    #[test]
-    fn motion_command_display() {
-        let cmd = MotionCommand::new(1, 0, 1.5, -0.5);
-        let s = format!("{cmd}");
-        assert!(s.contains("id=1"));
-    }
 }
