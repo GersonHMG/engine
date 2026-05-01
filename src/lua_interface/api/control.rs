@@ -1,6 +1,8 @@
 use crate::motion::Motion;
+use crate::motion::pathplanning::environment::Environment;
+use crate::motion::pathplanning::FastPathPlanner;
 use crate::sender::radio::Radio;
-use crate::types::{KickerCommand, MotionCommand, Vec2D};
+use crate::types::{KickerCommand, MotionCommand, RobotState, Vec2D};
 use crate::world::World;
 use mlua::prelude::*;
 use std::sync::{Arc, Mutex, RwLock};
@@ -58,6 +60,46 @@ pub(super) fn register_control_functions(
         globals.set("move_to", f).unwrap();
     }
 
+    // ── move_to_path(id, team, {x=, y=}) -> { {x=, y=}, ... } ──
+    {
+        let r = Arc::clone(&radio);
+        let w = Arc::clone(&world);
+        let f = lua
+            .create_function(move |lua, (id, team, point): (i32, i32, LuaTable)| {
+                let x: f64 = point.get("x")?;
+                let y: f64 = point.get("y")?;
+                let w = w.read().map_err(|e| LuaError::external(format!("{e}")))?;
+                let rs = w.get_robot_state(id, team);
+
+                let result = lua.create_table()?;
+                if !rs.active {
+                    return Ok(result);
+                }
+
+                let target = Vec2D::new(x, y);
+                let env = Environment::new(&w, &rs);
+                let planner = FastPathPlanner::default();
+                let path = planner.get_path(rs.position, target, &env);
+
+                let motion = Motion::new();
+                let cmd = motion.move_to(&rs, target, &w);
+                r.lock()
+                    .map_err(|e| LuaError::external(format!("{e}")))?
+                    .add_motion_command(cmd);
+
+                for (i, point) in path.iter().enumerate() {
+                    let t = lua.create_table()?;
+                    t.set("x", point.x)?;
+                    t.set("y", point.y)?;
+                    result.set(i + 1, t)?;
+                }
+
+                Ok(result)
+            })
+            .unwrap();
+        globals.set("move_to_path", f).unwrap();
+    }
+
     // ── move_direct(id, team, {x=, y=}) ──
     {
         let r = Arc::clone(&radio);
@@ -80,6 +122,34 @@ pub(super) fn register_control_functions(
             })
             .unwrap();
         globals.set("move_direct", f).unwrap();
+    }
+
+    // ── plan_path({x=, y=}, {x=, y=}) ──
+    {
+        let w = Arc::clone(&world);
+        let f = lua
+            .create_function(move |lua, (from_tbl, to_tbl): (LuaTable, LuaTable)| {
+                let from = Vec2D::new(from_tbl.get("x")?, from_tbl.get("y")?);
+                let to = Vec2D::new(to_tbl.get("x")?, to_tbl.get("y")?);
+
+                let w = w.read().map_err(|e| LuaError::external(format!("{e}")))?;
+                let planner = FastPathPlanner::default();
+                let self_robot = RobotState::new(-1, 0);
+                let env = Environment::new(&w, &self_robot);
+                let path = planner.get_path(from, to, &env);
+
+                let result = lua.create_table()?;
+                for (i, point) in path.iter().enumerate() {
+                    let t = lua.create_table()?;
+                    t.set("x", point.x)?;
+                    t.set("y", point.y)?;
+                    result.set(i + 1, t)?;
+                }
+
+                Ok(result)
+            })
+            .unwrap();
+        globals.set("plan_path", f).unwrap();
     }
 
     // ── face_to(id, team, {x=, y=}, kp?, ki?, kd?) ──
