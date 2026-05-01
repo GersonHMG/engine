@@ -87,19 +87,20 @@ function kick_to_point.process(robotId, team, target)
     draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0}) -- Green point for the target
     local ball_pos = get_ball_state()
     
-    local point = get_kick_point(target, 0.09+0.05)
+    local point = get_kick_point(target, 0.09+0.20)
 
     -- Visualize the target point for debugging
     draw_point(point.x, point.y)
     local robot_pos = get_robot_state(robotId, team)
     if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, ball_pos, 0.1) then
-        local point = get_kick_point(target, 0.05)
+        local point = get_kick_point(target, 0.045)
         move_direct(robotId, team, {x = point.x, y = point.y})
+        
         if has_the_ball(robotId, team) then
             kickx(robotId, team)
+            return true
         end
-
-        return true
+        return false
     end
 
     -- Move to the calculated point
@@ -108,5 +109,6 @@ function kick_to_point.process(robotId, team, target)
 
     return false
 end
+
 
 return kick_to_point
