@@ -85,10 +85,18 @@ jobs:
       contents: write
 
     steps:
+      # 1. Checkout the code so the release job has access to the lua folder
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+
+      # 2. Compress the lua folder into a zip file
+      - name: Zip Lua folder
+        run: zip -r lua-scripts.zip lua/
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -96,4 +104,5 @@ jobs:
           files: |
             artifacts/engine-linux-x86_64/engine
             artifacts/engine-windows-x86_64.exe/engine.exe
+            lua-scripts.zip # 3. Add the zip file to the release
           generate_release_notes: true
