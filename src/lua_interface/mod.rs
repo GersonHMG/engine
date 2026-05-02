@@ -7,6 +7,8 @@ use crate::sender::radio::Radio;
 use crate::types::{DrawCommand, MotionCommand};
 use crate::world::World;
 use mlua::prelude::*;
+use mlua::Variadic;
+use tokio::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use tracing::{error, info};
 
@@ -24,6 +26,7 @@ pub struct LuaInterface {
     world: Arc<RwLock<World>>,
     game_state: Arc<Mutex<GameState>>,
     draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
+    log_tx: Option<mpsc::Sender<String>>,
     have_script: bool,
     is_paused: bool,
     has_failed: bool,
@@ -34,6 +37,7 @@ impl LuaInterface {
         radio: Arc<Mutex<Radio>>,
         world: Arc<RwLock<World>>,
         game_state: Arc<Mutex<GameState>>,
+        log_tx: Option<mpsc::Sender<String>>,
     ) -> Self {
         let lua = Lua::new();
 
@@ -43,6 +47,7 @@ impl LuaInterface {
             world,
             game_state,
             draw_commands: Arc::new(Mutex::new(Vec::new())),
+            log_tx,
             have_script: false,
             is_paused: false,
             has_failed: false,
@@ -60,6 +65,46 @@ impl LuaInterface {
             Arc::clone(&self.game_state),
             Arc::clone(&self.draw_commands),
         );
+        self.register_print();
+    }
+
+    fn register_print(&mut self) {
+        let log_tx = self.log_tx.clone();
+        let print_fn = self.lua.create_function(move |_, args: Variadic<LuaValue>| {
+            let mut parts = Vec::with_capacity(args.len());
+            for value in args {
+                parts.push(lua_value_to_string(&value));
+            }
+
+            if let Some(tx) = &log_tx {
+                let line = parts.join(" ");
+                let _ = tx.try_send(format!("[Lua][print] {line}"));
+            }
+            Ok(())
+        });
+
+        match print_fn {
+            Ok(func) => {
+                let _ = self.lua.globals().set("print", func);
+            }
+            Err(e) => {
+                self.log_error(format!("Failed to register print(): {e}"));
+            }
+        }
+    }
+
+    fn log_info(&self, message: String) {
+        info!("[Lua] {message}");
+        if let Some(tx) = &self.log_tx {
+            let _ = tx.try_send(format!("[Lua][info] {message}"));
+        }
+    }
+
+    fn log_error(&self, message: String) {
+        error!("[Lua] {message}");
+        if let Some(tx) = &self.log_tx {
+            let _ = tx.try_send(format!("[Lua][error] {message}"));
+        }
     }
 
     pub fn run_script(&mut self, script_path: &str) -> ScriptExecState {
@@ -76,19 +121,19 @@ impl LuaInterface {
             let dir_str = dir.to_string_lossy().replace('\\', "/");
             let path_cmd = format!("package.path = '{}/?.lua;' .. package.path", dir_str);
             if let Err(e) = self.lua.load(&path_cmd).exec() {
-                error!("[Lua] Failed to set package path: {e}");
+                self.log_error(format!("Failed to set package path: {e}"));
             }
         }
 
-        info!("[Lua] Loading script: {script_path}");
+        self.log_info(format!("Loading script: {script_path}"));
 
         match self.lua.load(std::path::Path::new(script_path)).exec() {
             Ok(()) => {
-                info!("[Lua] Script loaded successfully (paused).");
+                self.log_info("Script loaded successfully (paused).".to_string());
                 self.have_script = true;
             }
             Err(e) => {
-                error!("[Lua] Error loading script: {e}");
+                self.log_error(format!("Error loading script: {e}"));
                 self.have_script = false;
                 self.has_failed = true;
             }
@@ -108,13 +153,13 @@ impl LuaInterface {
                 Ok(process) => match process.call::<()>(()) {
                     Ok(()) => {}
                     Err(e) => {
-                        error!("[Lua] Runtime error in process(): {e}");
+                        self.log_error(format!("Runtime error in process(): {e}"));
                         self.is_paused = true;
                         self.has_failed = true;
                     }
                 },
                 Err(_) => {
-                    error!("[Lua] Error: process() is not defined in script!");
+                    self.log_error("Error: process() is not defined in script!".to_string());
                     self.is_paused = true;
                     self.has_failed = true;
                 }
@@ -146,7 +191,7 @@ impl LuaInterface {
             let cmd = MotionCommand::new(0, 0, 0.0, 0.0);
             r.add_motion_command(cmd);
         }
-        info!("[Lua] Script paused.");
+        self.log_info("Script paused.".to_string());
 
         self.script_state()
     }
@@ -158,6 +203,8 @@ impl LuaInterface {
 
         self.is_paused = false;
         self.has_failed = false;
+
+        self.log_info("Script resumed.".to_string());
 
         self.script_state()
     }
@@ -181,5 +228,22 @@ impl LuaInterface {
         } else {
             Vec::new()
         }
+    }
+}
+
+fn lua_value_to_string(value: &LuaValue) -> String {
+    match value {
+        LuaValue::Nil => "nil".to_string(),
+        LuaValue::Boolean(v) => v.to_string(),
+        LuaValue::Integer(v) => v.to_string(),
+        LuaValue::Number(v) => v.to_string(),
+        LuaValue::String(v) => v.to_string_lossy().to_string(),
+        LuaValue::Table(_) => "{table}".to_string(),
+        LuaValue::Function(_) => "{function}".to_string(),
+        LuaValue::Thread(_) => "{thread}".to_string(),
+        LuaValue::UserData(_) => "{userdata}".to_string(),
+        LuaValue::LightUserData(_) => "{lightuserdata}".to_string(),
+        LuaValue::Error(e) => format!("{e}"),
+        LuaValue::Other(_) => "{other}".to_string(),
     }
 }
