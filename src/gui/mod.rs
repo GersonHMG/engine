@@ -5,8 +5,10 @@ pub mod sidebar;
 pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
+pub mod lua_console;
 
 use iced::widget::{button, column, container, row, scrollable, slider, text};
+use iced::widget::operation::snap_to_end;
 use iced::{Element, Length, Subscription, Theme};
 use iced::event::{self, Event};
 use iced::keyboard;
@@ -23,6 +25,7 @@ use field_canvas::{FieldCanvas, FieldData, LuaDrawCommand, RobotData};
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
 use toolbar::{Toolbar, ToolbarMessage};
 use bottom_panel::{BottomPanel, BottomPanelMessage};
+use lua_console::LuaConsolePanel;
 use panels::vision::{VisionPanel, VisionMessage};
 use panels::radio::{RadioPanel, RadioMessage};
 use panels::kalman::{KalmanPanel, KalmanMessage};
@@ -111,6 +114,7 @@ pub struct GuiChannels {
     pub vision_rx: mpsc::Receiver<VisionUpdate>,
     pub lua_draw_rx: mpsc::Receiver<Vec<LuaDrawCmd>>,
     pub lua_status_rx: mpsc::Receiver<LuaScriptStatusUpdate>,
+    pub lua_log_rx: mpsc::Receiver<String>,
     pub command_tx: mpsc::Sender<EngineCommand>,
 }
 
@@ -143,6 +147,7 @@ pub enum Message {
     ReplayPlay,
     ReplayPause,
     ReplaySeek(u32),
+    LuaConsoleResizeStart,
 
     // Window events
     WindowOpened(window::Id),
@@ -175,6 +180,7 @@ pub struct EngineApp {
     vision_rx: Arc<Mutex<mpsc::Receiver<VisionUpdate>>>,
     lua_draw_rx: Arc<Mutex<mpsc::Receiver<Vec<LuaDrawCmd>>>>,
     lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
+    lua_log_rx: Arc<Mutex<mpsc::Receiver<String>>>,
     command_tx: mpsc::Sender<EngineCommand>,
 
     // Keyboard state for manual control
@@ -188,6 +194,13 @@ pub struct EngineApp {
     main_window_id: window::Id,
     panel_windows: HashMap<SidebarPanel, window::Id>,
     window_to_panel: HashMap<window::Id, SidebarPanel>,
+
+    // Lua console panel
+    lua_console_panel: LuaConsolePanel,
+    lua_console_resizing: bool,
+    lua_console_resize_start_y: f32,
+    lua_console_resize_start_height: f32,
+    window_height: f32,
 
     // Replay mode UI state
     replay_mode: bool,
@@ -225,6 +238,7 @@ impl EngineApp {
             vision_rx: Arc::new(Mutex::new(channels.vision_rx)),
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
             lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
+            lua_log_rx: Arc::new(Mutex::new(channels.lua_log_rx)),
             command_tx: channels.command_tx,
             key_chars: std::collections::HashSet::new(),
             kick_key_was_down: false,
@@ -232,6 +246,11 @@ impl EngineApp {
             main_window_id: main_id,
             panel_windows: HashMap::new(),
             window_to_panel: HashMap::new(),
+            lua_console_panel: LuaConsolePanel::new(),
+            lua_console_resizing: false,
+            lua_console_resize_start_y: 0.0,
+            lua_console_resize_start_height: 0.0,
+            window_height: 800.0,
             replay_mode: false,
             replay_file_path: None,
             replay_is_playing: false,
@@ -255,6 +274,7 @@ impl EngineApp {
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
+                SidebarPanel::LuaConsole => "Lua Console".to_string(),
             }
         } else {
             "Sysmic Engine".to_string()
@@ -331,6 +351,7 @@ impl EngineApp {
                     self.panel_windows.clear();
                     self.window_to_panel.clear();
                     self.sidebar.active_panel = None;
+                    self.lua_console_panel.open = false;
                     self.key_chars.clear();
                     self.kick_key_was_down = false;
                     self.replay_is_playing = false;
@@ -349,10 +370,22 @@ impl EngineApp {
                 if self.replay_mode {
                     return iced::Task::none();
                 }
+                if panel == SidebarPanel::LuaConsole {
+                    self.lua_console_panel.open = !self.lua_console_panel.open;
+                    return iced::Task::none();
+                }
                 if self.panel_windows.contains_key(&panel) {
                     return self.close_panel_window(panel);
                 } else {
                     return self.open_panel_window(panel);
+                }
+            }
+
+            Message::LuaConsoleResizeStart => {
+                if let Some(pos) = self.last_cursor_position {
+                    self.lua_console_resizing = true;
+                    self.lua_console_resize_start_y = pos.y;
+                    self.lua_console_resize_start_height = self.lua_console_panel.height();
                 }
             }
 
@@ -740,6 +773,9 @@ impl EngineApp {
                     while let Ok(update) = rx.try_recv() {
                         let status = update.status.clone();
                         self.toolbar.script_status = status.clone();
+                        if status == toolbar::ScriptStatus::Failed {
+                            self.lua_console_panel.open = true;
+                        }
                         if let Some(path) = update.script_path {
                             self.toolbar.script_path = path;
                         } else if status == toolbar::ScriptStatus::NoScript {
@@ -748,12 +784,51 @@ impl EngineApp {
                     }
                 }
 
+                // Drain Lua log channel
+                let mut log_added = false;
+                if let Ok(mut rx) = self.lua_log_rx.try_lock() {
+                    while let Ok(line) = rx.try_recv() {
+                        if self.lua_console_panel.push_line(line) {
+                            log_added = true;
+                        }
+                    }
+                }
+
+                let mut scroll_task = iced::Task::none();
+                if log_added && self.lua_console_panel.open {
+                    scroll_task = snap_to_end(self.lua_console_panel.scroll_id());
+                }
+
                 self.field_canvas.request_redraw();
+                return scroll_task;
             }
 
             // --- Global events (keyboard + mouse) ---
             Message::EventOccurred(event) => {
                 match event {
+                    Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                        if self.lua_console_resizing {
+                            self.lua_console_resizing = false;
+                            return iced::Task::none();
+                        }
+                        self.field_canvas.handle_drag_end();
+                    }
+                    Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                        if let Some(pos) = self.last_cursor_position {
+                            if self.lua_console_panel.open && !self.replay_mode {
+                                let bottom_height = if self.replay_mode { 0.0 } else { 52.0 };
+                                let main_row_height = (self.window_height - bottom_height).max(0.0);
+                                let panel_top = main_row_height - self.lua_console_panel.height();
+                                if pos.y >= panel_top && pos.y <= panel_top + lua_console::RESIZE_EDGE_PX {
+                                    self.lua_console_resizing = true;
+                                    self.lua_console_resize_start_y = pos.y;
+                                    self.lua_console_resize_start_height = self.lua_console_panel.height();
+                                    return iced::Task::none();
+                                }
+                            }
+                            self.field_canvas.handle_drag_start(pos);
+                        }
+                    }
                     Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
                         if let keyboard::Key::Character(c) = &key {
                             let ch = c.chars().next().unwrap_or(' ').to_ascii_lowercase();
@@ -773,18 +848,19 @@ impl EngineApp {
                         };
                         self.field_canvas.handle_scroll(y);
                     }
-                    Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                        if let Some(pos) = self.last_cursor_position {
-                            self.field_canvas.handle_drag_start(pos);
-                        }
-                    }
-                    Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
-                        self.field_canvas.handle_drag_end();
-                    }
                     Event::Mouse(mouse::Event::CursorMoved { position }) => {
                         self.last_cursor_position = Some(iced::Point::new(position.x, position.y));
+                        if self.lua_console_resizing {
+                            let delta = position.y - self.lua_console_resize_start_y;
+                            let new_height = self.lua_console_resize_start_height - delta;
+                            self.lua_console_panel.set_height(new_height);
+                            return iced::Task::none();
+                        }
                         self.field_canvas.handle_drag_move(iced::Point::new(position.x, position.y));
                         self.field_canvas.update_mouse_pos(iced::Point::new(position.x, position.y));
+                    }
+                    Event::Window(window::Event::Resized(size)) => {
+                        self.window_height = size.height;
                     }
                     _ => {}
                 }
@@ -839,7 +915,10 @@ impl EngineApp {
 
     fn view_main(&self) -> Element<'_, Message> {
         // Sidebar
-        let sidebar = self.sidebar.view(self.replay_mode).map(Message::Sidebar);
+        let sidebar = self
+            .sidebar
+            .view(self.replay_mode, self.lua_console_panel.open)
+            .map(Message::Sidebar);
 
         // Toolbar
         let toolbar: Element<'_, Message> = if self.replay_mode {
@@ -991,7 +1070,10 @@ impl EngineApp {
             iced::widget::stack![canvas, mouse_overlay].into()
         };
 
-        let canvas_area = column![toolbar, field_stack];
+        let mut canvas_area = column![toolbar, field_stack];
+        if self.lua_console_panel.open {
+            canvas_area = canvas_area.push(self.lua_console_panel.view(Message::LuaConsoleResizeStart));
+        }
 
         // Main content area = sidebar + canvas
         let main_row = row![
@@ -1032,6 +1114,7 @@ impl EngineApp {
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
+            SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart),
         };
 
         container(scrollable(content))

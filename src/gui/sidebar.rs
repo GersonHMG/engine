@@ -11,6 +11,7 @@ pub enum SidebarPanel {
     Recording,
     Control,
     Charts,
+    LuaConsole,
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +39,7 @@ impl Sidebar {
         }
     }
 
-    pub fn view(&self, replay_mode: bool) -> Element<SidebarMessage> {
+    pub fn view(&self, replay_mode: bool, lua_console_open: bool) -> Element<SidebarMessage> {
         let make_btn = |label: &'static str, panel: SidebarPanel, is_active: bool, enabled: bool| -> Element<SidebarMessage> {
             let btn = button(
                 text(label)
@@ -83,6 +84,7 @@ impl Sidebar {
             make_btn("⏺", SidebarPanel::Recording, ap == Some(SidebarPanel::Recording), !replay_mode),
             make_btn("🎮", SidebarPanel::Control, ap == Some(SidebarPanel::Control), !replay_mode),
             make_btn("📊", SidebarPanel::Charts, ap == Some(SidebarPanel::Charts), !replay_mode),
+            make_btn("🪵", SidebarPanel::LuaConsole, lua_console_open, !replay_mode),
             replay_btn,
         ]
         .spacing(4)
