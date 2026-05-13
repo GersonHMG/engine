@@ -39,6 +39,17 @@ function pase_estrategia.process(robotId, team, targetRobotId)
 
    elseif estado_jugada == "RECIBIENDO_PASE" then
       recivepass.process(targetRobotId, team, robotId)
+      
+      local ball_pos = get_ball_state()
+      local reciver_pos = get_robot_state(targetRobotId, team)
+      local dist_pelota_recive = get_distance(ball_pos, reciver_pos)
+
+      if dist_pelota_recive < 0.15 then
+         estado_jugada = "PREPARANDO_PASE"
+         return true  -- Indicamos que la jugada se ha completado
+      end
+
+      return false  -- La jugada aún no se ha completado
    end
 end
 
