@@ -2,7 +2,7 @@ local pase_estrategia = {}
 
 -- 1. IMPORTAMOS las habilidades y tácticas que necesita esta estrategia
 local pass = require("tactics.active.pass")
-local recivepass = require("tactics.active.receive_pass")
+local recivepass = require("tactics.active.intercept")
 local position_for_pass = require("tactics.non_active.position_for_pass")
 
 -- Variable de estado (como es local, mantendrá su valor ciclo a ciclo)
@@ -42,5 +42,4 @@ function pase_estrategia.process(robotId, team, targetRobotId)
    end
 end
 
--- 3. RETORNAMOS la tabla para que el main la pueda usar
 return pase_estrategia
