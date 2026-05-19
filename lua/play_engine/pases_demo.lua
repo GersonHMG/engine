@@ -1,6 +1,5 @@
 local pases = {}
 
-local state = 0
 local pase = require("play.pass")
 
 -- Keep track of the current roles inside the module
