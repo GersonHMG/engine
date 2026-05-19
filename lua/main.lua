@@ -11,5 +11,5 @@ grsim.teleport_robot(robotId, team, -0.5, -0.5, 0.0)
 grsim.teleport_ball(0.0, 0.0)
 
 function process()
-   loop.process(robotId, team, targetRobotId)
+   loop.process(team)
 end
