@@ -1,10 +1,15 @@
 local robotId = 0
+local targetRobotId = 1
 local team = 0
-local move_ball = require("skills.move_ball")
+
+local loop = require("play_engine.pases_demo")
+
+
+grsim.teleport_robot(targetRobotId, team, 1.0, 1.0, 0.0)
+grsim.teleport_robot(robotId, team, -0.5, -0.5, 0.0)
+
+grsim.teleport_ball(0.0, 0.0)
 
 function process()
-   ---move_ball.process(robotId, team, {x = 0.0, y = 0.0})
-   --local path = plan_path({x = 0.0, y = 0.0}, {x = 2.0, y = 1.0})
-   local path = move_to_path(robotId, team, {x = 0.0, y = 0.0})
-   draw_line(path)
+   loop.process(team)
 end
