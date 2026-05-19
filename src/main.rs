@@ -57,12 +57,14 @@ fn main() -> iced::Result {
     let (vision_tx, vision_rx) = tokio::sync::mpsc::channel::<VisionUpdate>(256);
     let (lua_draw_tx, lua_draw_rx) = tokio::sync::mpsc::channel::<Vec<LuaDrawCmd>>(256);
     let (lua_status_tx, lua_status_rx) = tokio::sync::mpsc::channel::<LuaScriptStatusUpdate>(64);
+    let (lua_log_tx, lua_log_rx) = tokio::sync::mpsc::channel::<String>(512);
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<EngineCommand>(256);
 
     let gui_channels = GuiChannels {
         vision_rx,
         lua_draw_rx,
         lua_status_rx,
+        lua_log_rx,
         command_tx: command_tx.clone(),
     };
 
@@ -71,13 +73,21 @@ fn main() -> iced::Result {
     let vision_tx_clone = vision_tx.clone();
     let lua_draw_tx_clone = lua_draw_tx.clone();
     let lua_status_tx_clone = lua_status_tx.clone();
+    let lua_log_tx_clone = lua_log_tx.clone();
     let command_rx_clone = command_rx.clone();
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         rt.block_on(async move {
             let rx = command_rx_clone.lock().unwrap().take().expect("command_rx already taken");
-            run_engine(vision_tx_clone, lua_draw_tx_clone, lua_status_tx_clone, rx).await;
+            run_engine(
+                vision_tx_clone,
+                lua_draw_tx_clone,
+                lua_status_tx_clone,
+                lua_log_tx_clone,
+                rx,
+            )
+            .await;
         });
     });
 
@@ -104,6 +114,7 @@ async fn run_engine(
     vision_gui_tx: tokio::sync::mpsc::Sender<VisionUpdate>,
     lua_draw_gui_tx: tokio::sync::mpsc::Sender<Vec<LuaDrawCmd>>,
     lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
+    lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
 ) {
     // Configuration Defaults
@@ -128,6 +139,7 @@ async fn run_engine(
         Arc::clone(&radio),
         Arc::clone(&world),
         Arc::clone(&game_state),
+        Some(lua_log_gui_tx),
     )));
 
     let last_script_path = Arc::new(Mutex::new(String::new()));
