@@ -2,7 +2,7 @@ local robotId = 0
 local targetRobotId = 1
 local team = 0
 
-local loop = require("play.pases")
+local loop = require("play_engine.pases_demo")
 
 
 grsim.teleport_robot(targetRobotId, team, 1.0, 1.0, 0.0)
