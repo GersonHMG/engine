@@ -12,10 +12,12 @@ pub struct World {
     pub blue_robots: HashMap<i32, RobotState>,
     pub yellow_robots: HashMap<i32, RobotState>,
     pub ball: BallState,
+    pub field_length_m: f64,
+    pub field_width_m: f64,
 }
 
 impl World {
-    pub fn new(n_blue: i32, n_yellow: i32) -> Self {
+    pub fn new(n_blue: i32, n_yellow: i32, field_length_m: f64, field_width_m: f64) -> Self {
         let mut blue = HashMap::new();
         for id in 0..n_blue {
             blue.insert(id, RobotState::new(id, 0));
@@ -28,7 +30,17 @@ impl World {
             blue_robots: blue,
             yellow_robots: yellow,
             ball: BallState::default(),
+            field_length_m,
+            field_width_m,
         }
+    }
+
+    pub fn field_half_length(&self) -> f64 {
+        self.field_length_m / 2.0
+    }
+
+    pub fn field_half_width(&self) -> f64 {
+        self.field_width_m / 2.0
     }
 
     pub fn get_robot_state(&self, id: i32, team: i32) -> RobotState {
