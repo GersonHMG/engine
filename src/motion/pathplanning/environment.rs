@@ -8,6 +8,8 @@ use crate::world::World;
 pub struct Environment {
     robots: Vec<Vec2D>,
     ball: Vec2D,
+    field_half_length: f64,
+    field_half_width: f64,
 }
 
 impl Environment {
@@ -33,27 +35,51 @@ impl Environment {
         }
 
         let ball = world.get_ball_state().position;
+        let field_half_length = world.field_half_length();
+        let field_half_width = world.field_half_width();
 
-        Self { robots, ball }
+        Self {
+            robots,
+            ball,
+            field_half_length,
+            field_half_width,
+        }
+    }
+
+    pub fn within_field(&self, point: &Vec2D) -> bool {
+        point.x >= -self.field_half_length
+            && point.x <= self.field_half_length
+            && point.y >= -self.field_half_width
+            && point.y <= self.field_half_width
     }
 
     /// Check if a point collides with any obstacle.
     pub fn collides(&self, point: &Vec2D) -> bool {
         const ROBOT_COLLISION_RADIUS: f64 = 0.2;
         const BALL_COLLISION_RADIUS: f64 = 0.12;
+        const GOAL_BOX_DEPTH: f64 = 1.0;
+        const GOAL_BOX_HALF_WIDTH: f64 = 1.0;
 
         // Field bounds
-        if point.x < -4.5 || point.x > 4.5 || point.y < -3.0 || point.y > 3.0 {
+        if !self.within_field(point) {
             return true;
         }
 
         // Yellow goalie box (x: 3.5 to 4.5, y: -1 to 1)
-        if point.x >= 3.5 && point.x <= 4.5 && point.y >= -1.0 && point.y <= 1.0 {
+        if point.x >= self.field_half_length - GOAL_BOX_DEPTH
+            && point.x <= self.field_half_length
+            && point.y >= -GOAL_BOX_HALF_WIDTH
+            && point.y <= GOAL_BOX_HALF_WIDTH
+        {
             return true;
         }
 
         // Blue goalie box (x: -4.5 to -3.5, y: -1 to 1)
-        if point.x >= -4.5 && point.x <= -3.5 && point.y >= -1.0 && point.y <= 1.0 {
+        if point.x >= -self.field_half_length
+            && point.x <= -self.field_half_length + GOAL_BOX_DEPTH
+            && point.y >= -GOAL_BOX_HALF_WIDTH
+            && point.y <= GOAL_BOX_HALF_WIDTH
+        {
             return true;
         }
 
