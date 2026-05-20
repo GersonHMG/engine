@@ -203,6 +203,18 @@ async fn run_engine(
     loop {
         let frame_start = Instant::now();
 
+        // Remove robots that have not updated in 60*4 frames (~4s).
+        {
+            let mut w = match world.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("World lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            w.prune_stale_robots();
+        }
+
         // Receiver snapshot at frame start for logging.
         let (log_blue_robots, log_yellow_robots, log_ball) = {
             let w = match world.read() {
