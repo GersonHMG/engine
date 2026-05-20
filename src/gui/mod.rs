@@ -216,7 +216,7 @@ impl EngineApp {
     /// Boot function for iced::daemon — opens the main window and returns initial state + tasks
     pub fn boot(channels: GuiChannels) -> (Self, iced::Task<Message>) {
         let (main_id, open_task) = window::open(window::Settings {
-            size: iced::Size::new(900.0, 800.0),
+            size: iced::Size::new(900.0, 600.0),
             ..Default::default()
         });
 
