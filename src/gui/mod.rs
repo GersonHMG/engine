@@ -20,6 +20,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::types::Vec2D;
+use crate::config::FieldConfig;
 
 use field_canvas::{FieldCanvas, FieldData, LuaDrawCommand, RobotData};
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
@@ -214,7 +215,7 @@ pub struct EngineApp {
 
 impl EngineApp {
     /// Boot function for iced::daemon — opens the main window and returns initial state + tasks
-    pub fn boot(channels: GuiChannels) -> (Self, iced::Task<Message>) {
+    pub fn boot(channels: GuiChannels, field_config: FieldConfig) -> (Self, iced::Task<Message>) {
         let (main_id, open_task) = window::open(window::Settings {
             size: iced::Size::new(900.0, 600.0),
             ..Default::default()
@@ -231,7 +232,7 @@ impl EngineApp {
             recording_panel: RecordingPanel::default(),
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
-            field_data: FieldData::default(),
+            field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
             last_pps_time: std::time::Instant::now(),

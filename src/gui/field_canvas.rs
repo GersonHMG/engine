@@ -7,8 +7,10 @@ use std::cell::Cell;
 
 
 /// Data needed to render the field
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FieldData {
+    pub field_length_mm: f32,
+    pub field_width_mm: f32,
     pub robots_blue: Vec<RobotData>,
     pub robots_yellow: Vec<RobotData>,
     pub ball: (f64, f64),
@@ -20,6 +22,38 @@ pub struct FieldData {
     pub path_draw_mode: bool,
     /// Robot to highlight in red: (robot_id, team 0=blue 1=yellow)
     pub highlight_robot: Option<(u32, i32)>,
+}
+
+impl Default for FieldData {
+    fn default() -> Self {
+        Self {
+            field_length_mm: DEFAULT_FIELD_LENGTH_MM,
+            field_width_mm: DEFAULT_FIELD_WIDTH_MM,
+            robots_blue: Vec::new(),
+            robots_yellow: Vec::new(),
+            ball: (0.0, 0.0),
+            path_points: Vec::new(),
+            robot_trace: Vec::new(),
+            lua_draw_commands: Vec::new(),
+            vision_connected: false,
+            vis_velocities: false,
+            path_draw_mode: false,
+            highlight_robot: None,
+        }
+    }
+}
+
+impl FieldData {
+    pub fn new(field_length_m: f64, field_width_m: f64) -> Self {
+        let mut data = Self::default();
+        if field_length_m > 0.0 {
+            data.field_length_mm = (field_length_m * 1000.0) as f32;
+        }
+        if field_width_m > 0.0 {
+            data.field_width_mm = (field_width_m * 1000.0) as f32;
+        }
+        data
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -72,8 +106,8 @@ pub struct FieldCanvas {
     last_bounds: Cell<Rectangle>,
 }
 
-const FIELD_LENGTH: f32 = 9000.0;
-const FIELD_WIDTH: f32 = 6000.0;
+const DEFAULT_FIELD_LENGTH_MM: f32 = 9000.0;
+const DEFAULT_FIELD_WIDTH_MM: f32 = 6000.0;
 const MIN_SCALE: f32 = 0.01;
 const MAX_SCALE: f32 = 0.5;
 
@@ -215,8 +249,11 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
 
         // Field outline
         let field_rect = Path::rectangle(
-            Point::new(cx - (FIELD_LENGTH / 2.0) * s, cy - (FIELD_WIDTH / 2.0) * s),
-            Size::new(FIELD_LENGTH * s, FIELD_WIDTH * s),
+            Point::new(
+                cx - (self.data.field_length_mm / 2.0) * s,
+                cy - (self.data.field_width_mm / 2.0) * s,
+            ),
+            Size::new(self.data.field_length_mm * s, self.data.field_width_mm * s),
         );
         frame.stroke(
             &field_rect,
@@ -232,8 +269,8 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
 
         // Center line
         let center_line = Path::line(
-            Point::new(cx, cy - (FIELD_WIDTH / 2.0) * s),
-            Point::new(cx, cy + (FIELD_WIDTH / 2.0) * s),
+            Point::new(cx, cy - (self.data.field_width_mm / 2.0) * s),
+            Point::new(cx, cy + (self.data.field_width_mm / 2.0) * s),
         );
         frame.stroke(
             &center_line,
