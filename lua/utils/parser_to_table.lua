@@ -51,5 +51,6 @@ for linea in archivo:lines() do
     end
 end
 archivo:close()
+return play
 end
 return parsermodule
