@@ -21,11 +21,21 @@ pub enum RobotTeam {
 }
 
 impl RobotTeam {
-    // We only need the base colors now.
+    // Base colors for the filled body
     fn base_color(self) -> Color {
         match self {
             RobotTeam::Blue => Color::from_rgb(0.1, 0.1, 0.9),
-            RobotTeam::Yellow => Color::from_rgb(219.0 / 255.0, 189.0 / 255.0, 55.0 / 255.0),
+            RobotTeam::Yellow => Color::from_rgb(229.0 / 255.0, 199.0 / 255.0, 65.0 / 255.0),
+        }
+    }
+
+    // Brighter variant for the outline
+    fn outline_color(self) -> Color {
+        match self {
+            // Brighter Blue
+            RobotTeam::Blue => Color::from_rgb(0.4, 0.4, 1.0),
+            // Brighter Yellow
+            RobotTeam::Yellow => Color::from_rgb(255.0 / 255.0, 225.0 / 255.0, 110.0 / 255.0),
         }
     }
 }
@@ -49,6 +59,7 @@ impl<'a> RobotGui<'a> {
     pub fn draw(&self, frame: &mut Frame, pos: Point, scale: f32, show_velocities: bool) {
         let radius = 90.0 * scale;
         let team_color = self.team.base_color();
+        let outline_color = self.team.outline_color();
 
         // 1. Draw Green Highlight Circle (if highlighted)
         if self.highlighted {
@@ -67,7 +78,7 @@ impl<'a> RobotGui<'a> {
         // 2. Robot body (flattened at the top)
         let body = Path::new(|builder| {
             let canvas_theta = -(self.data.theta as f32);
-            let flat_angle = std::f32::consts::FRAC_PI_8;
+            let flat_angle = std::f32::consts::FRAC_PI_6;
 
             builder.arc(iced::widget::canvas::path::Arc {
                 center: pos,
@@ -78,7 +89,17 @@ impl<'a> RobotGui<'a> {
 
             builder.close();
         });
+        
+        // Fill the body with the base color
         frame.fill(&body, team_color);
+        
+        // Draw the bright outline over the body
+        frame.stroke(
+            &body,
+            Stroke::default()
+                .with_color(outline_color)
+                .with_width(2.0), // Adjust the outline thickness as needed
+        );
 
         // Heading line (adjusted so 0 radians points UP instead of RIGHT)
         // Note: The + FRAC_PI_2 belongs inside the cos()/sin() functions, not outside!
@@ -92,8 +113,8 @@ impl<'a> RobotGui<'a> {
         frame.stroke(
             &heading,
             Stroke::default()
-                .with_color(Color::from_rgb(1.0, 0.0, 0.0))
-                .with_width(1.0),
+                .with_color(Color::from_rgb(0.8, 0.0, 0.0))
+                .with_width(2.0),
         );
 
         // ID text
