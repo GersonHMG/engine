@@ -1,9 +1,0 @@
-PLAY Two Attackers, Pass
-OROLE 0 closest_to_ball
-    ROLE 1
-    pass 2
-    none
-ROLE 2
-    position_for_pass{R { 1000 0 } { 700 0 } 500 }
-    receive_pass
-    none
