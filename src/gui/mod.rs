@@ -322,15 +322,6 @@ impl EngineApp {
             Message::ScriptFileSelected(None) => {}
 
             // --- Bottom Panel ---
-            Message::BottomPanel(BottomPanelMessage::SetTrace(val)) => {
-                self.bottom_panel.trace_on = val;
-                self.field_data.robot_trace.clear();
-                self.robot_trace.clear();
-            }
-            Message::BottomPanel(BottomPanelMessage::SetVectors(val)) => {
-                self.bottom_panel.vectors_on = val;
-                self.field_data.vis_velocities = val;
-            }
             Message::BottomPanel(BottomPanelMessage::SetManualControl(val)) => {
                 self.bottom_panel.manual_control_on = val;
                 self.control_panel.active = val;
@@ -342,6 +333,16 @@ impl EngineApp {
                     self.field_data.highlight_robot = None;
                 }
             }
+            Message::BottomPanel(BottomPanelMessage::SetTrace(val)) => {
+                self.bottom_panel.trace_on = val;
+                self.field_data.robot_trace.clear();
+                self.robot_trace.clear();
+            }
+            Message::BottomPanel(BottomPanelMessage::SetVectors(val)) => {
+                self.bottom_panel.vectors_on = val;
+                self.field_data.vis_velocities = val;
+            }
+            
             Message::BottomPanel(BottomPanelMessage::IncrementRobotId) => {
                 let new_id = (self.bottom_panel.control_robot_id.parse::<i32>().unwrap_or(0) + 1).min(12);
                 let s = new_id.to_string();
