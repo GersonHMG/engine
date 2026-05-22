@@ -2,16 +2,18 @@ local robotId = 0
 local targetRobotId = 1
 local team = 0
 
-local loop = require("play_engine.pases_demo")
-local motor = require("utils.table_to_tactic")
+local PlayEngine = require("play_engine.play_engine")
 
 grsim.teleport_robot(targetRobotId, team, 1.0, 1.0, 0.0)
 grsim.teleport_robot(robotId, team, -0.5, -0.5, 0.0)
 
 grsim.teleport_ball(0.0, 0.0)
 
+
+-- Instantiate a new play object
+local play_engine = PlayEngine.new("lua/plays/pass.play")
+
+-- Your main engine loop
 function process()
-   motor.cargar_jugada("lua/plays/pass.play")
-   motor.update(team)
-   --loop.process(team)
+    play_engine:process()
 end
