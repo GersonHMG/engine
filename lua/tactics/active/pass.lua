@@ -8,7 +8,6 @@ local kick = require("skills.kick_to_point")
 --- @param team number - Tu equipo
 --- @param targetRobotId number - El ID de tu compañero (el que recibe)
 function pass.process(robotId, team, targetRobotId)
-    
     -- 1. Obtenemos el estado (posición y rotación) del compañero
     local mate_state = get_robot_state(targetRobotId, team)
     
