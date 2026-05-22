@@ -1,6 +1,6 @@
 // gui/bottom_panel.rs — Toggle buttons + robot selector
 
-use iced::widget::{checkbox, column, container, pick_list, row, text, text_input};
+use iced::widget::{button, checkbox, column, container, row, text, text_input, Space};
 use iced::{Element, Length};
 
 use crate::gui::panels::control::Team;
@@ -81,15 +81,47 @@ impl BottomPanel {
                 .align_y(iced::alignment::Vertical::Center),
         ];
 
+        let team_box = |team: Team| {
+            let selected = self.control_team == team;
+            let (r, g, b) = match team {
+                Team::Blue => (0.2, 0.55, 1.0),
+                Team::Yellow => (1.0, 0.85, 0.2),
+            };
+            let bg = if selected {
+                iced::Color::from_rgb(r, g, b)
+            } else {
+                iced::Color::from_rgba(r, g, b, 0.35)
+            };
+            let border_color = if selected {
+                iced::Color::WHITE
+            } else {
+                iced::Color::from_rgb(0.35, 0.35, 0.35)
+            };
+
+            button(
+                Space::new()
+                    .width(Length::Fixed(14.0))
+                    .height(Length::Fixed(14.0)),
+            )
+            .on_press(BottomPanelMessage::TeamSelected(team))
+            .style(move |theme: &iced::Theme, status| {
+                let mut s = iced::widget::button::secondary(theme, status);
+                s.background = Some(iced::Background::Color(bg));
+                s.border.color = border_color;
+                s.border.width = if selected { 1.5 } else { 1.0 };
+                s.border.radius = 2.0.into();
+                s
+            })
+            .padding(0)
+            .width(Length::Fixed(18.0))
+            .height(Length::Fixed(18.0))
+        };
+
         let selector = row![
             text("Team").size(10),
-            pick_list(
-                &[Team::Blue, Team::Yellow][..],
-                Some(self.control_team),
-                BottomPanelMessage::TeamSelected,
-            )
-            .text_size(10)
-            .width(Length::Fixed(70.0)),
+            row![team_box(Team::Blue), team_box(Team::Yellow)]
+                .spacing(4)
+                .align_y(iced::Alignment::Center),
             text("ID").size(10),
             number_input,
         ]
