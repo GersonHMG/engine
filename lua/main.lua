@@ -13,5 +13,5 @@ grsim.teleport_ball(0.0, 0.0)
 function process()
    motor.cargar_jugada("lua/utils/plays/pass.play")
    motor.update(team)
-   loop.process(team)
+   --loop.process(team)
 end
