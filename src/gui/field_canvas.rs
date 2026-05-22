@@ -247,14 +247,14 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         );
         frame.stroke(
             &field_rect,
-            Stroke::default().with_color(Color::WHITE).with_width(2.0),
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
         );
 
         // Center circle
         let center_circle = Path::circle(Point::new(cx, cy), 500.0 * s);
         frame.stroke(
             &center_circle,
-            Stroke::default().with_color(Color::WHITE).with_width(2.0),
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
         );
 
         // Center line
@@ -264,7 +264,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         );
         frame.stroke(
             &center_line,
-            Stroke::default().with_color(Color::WHITE).with_width(2.0),
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
         );
 
         // Draw path waypoints
