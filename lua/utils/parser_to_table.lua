@@ -7,11 +7,28 @@ local function limpiar_parametros(texto)
         return lista_limpia
     end
 
-    for token in texto:gmatch("[%w%-%.%_]+") do
-        local valor = tonumber(token) or token  -- Intentamos convertir a número, si no se puede, queda como string
-        table.insert(lista_limpia, valor)
+    local stack = {{}}
+
+    local texto_espaciado = texto:gsub("{", " { "):gsub("}", " } ")
+
+    for token in texto_espaciado:gmatch("%S+") do
+        if token == "{" then
+            table.insert(stack, {})
+        elseif token == "}" then
+            if #stack > 1 then
+                local tabla_cerrada = table.remove(stack)
+                table.insert(stack[#stack], tabla_cerrada)
+            end
+        else
+            local valor = tonumber(token) or token
+            table.insert(stack[#stack], valor)
+        end
     end
-    return lista_limpia
+
+    if #stack[1] == 1 and type(stack[1][1]) == "table" then
+        return stack[1][1]
+    end
+    return stack[1]    
 end
 
 function parsermodule.parse_play(ruta_archivo)

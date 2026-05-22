@@ -1,0 +1,7 @@
+PLAY Two Attackers, Pass
+ROLE 1
+    pass 2
+    none
+ROLE 2
+    position_for_pass { R { 100 0 } { 70 0 } 50 }
+    none
