@@ -331,8 +331,9 @@ impl EngineApp {
                 self.bottom_panel.vectors_on = val;
                 self.field_data.vis_velocities = val;
             }
-            Message::BottomPanel(BottomPanelMessage::SetHighlight(val)) => {
-                self.bottom_panel.highlight_on = val;
+            Message::BottomPanel(BottomPanelMessage::SetManualControl(val)) => {
+                self.bottom_panel.manual_control_on = val;
+                self.control_panel.active = val;
                 if val {
                     let id = self.bottom_panel.control_robot_id.parse::<u32>().unwrap_or(0);
                     let team = self.bottom_panel.control_team.to_id();
@@ -341,16 +342,12 @@ impl EngineApp {
                     self.field_data.highlight_robot = None;
                 }
             }
-            Message::BottomPanel(BottomPanelMessage::SetManualControl(val)) => {
-                self.bottom_panel.manual_control_on = val;
-                self.control_panel.active = val;
-            }
             Message::BottomPanel(BottomPanelMessage::IncrementRobotId) => {
                 let new_id = (self.bottom_panel.control_robot_id.parse::<i32>().unwrap_or(0) + 1).min(12);
                 let s = new_id.to_string();
                 self.bottom_panel.control_robot_id = s.clone();
                 self.control_panel.robot_id = s.clone();
-                if self.bottom_panel.highlight_on {
+                if self.bottom_panel.manual_control_on {
                     self.field_data.highlight_robot = Some((new_id as u32, self.bottom_panel.control_team.to_id()));
                 }
             }
@@ -359,14 +356,14 @@ impl EngineApp {
                 let s = new_id.to_string();
                 self.bottom_panel.control_robot_id = s.clone();
                 self.control_panel.robot_id = s.clone();
-                if self.bottom_panel.highlight_on {
+                if self.bottom_panel.manual_control_on {
                     self.field_data.highlight_robot = Some((new_id as u32, self.bottom_panel.control_team.to_id()));
                 }
             }
             Message::BottomPanel(BottomPanelMessage::TeamSelected(team)) => {
                 self.bottom_panel.control_team = team;
                 self.control_panel.team = team;
-                if self.bottom_panel.highlight_on {
+                if self.bottom_panel.manual_control_on {
                     let id = self.bottom_panel.control_robot_id.parse::<u32>().unwrap_or(0);
                     self.field_data.highlight_robot = Some((id, team.to_id()));
                 }
@@ -379,7 +376,7 @@ impl EngineApp {
                 let new_id = if filtered.is_empty() { filtered.clone() } else { clamped };
                 self.bottom_panel.control_robot_id = new_id.clone();
                 self.control_panel.robot_id = new_id.clone();
-                if self.bottom_panel.highlight_on {
+                if self.bottom_panel.manual_control_on {
                     let robot_id = new_id.parse::<u32>().unwrap_or(0);
                     let team = self.bottom_panel.control_team.to_id();
                     self.field_data.highlight_robot = Some((robot_id, team));

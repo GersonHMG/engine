@@ -9,7 +9,6 @@ use crate::gui::panels::control::Team;
 pub enum BottomPanelMessage {
     SetTrace(bool),
     SetVectors(bool),
-    SetHighlight(bool),
     SetManualControl(bool),
     TeamSelected(Team),
     RobotIdChanged(String),
@@ -20,7 +19,6 @@ pub enum BottomPanelMessage {
 pub struct BottomPanel {
     pub trace_on: bool,
     pub vectors_on: bool,
-    pub highlight_on: bool,
     pub manual_control_on: bool,
     pub control_robot_id: String,
     pub control_team: Team,
@@ -31,7 +29,6 @@ impl BottomPanel {
         Self {
             trace_on: false,
             vectors_on: false,
-            highlight_on: false,
             manual_control_on: false,
             control_robot_id: "0".to_string(),
             control_team: Team::Blue,
@@ -111,19 +108,13 @@ impl BottomPanel {
             .size(14)
             .text_size(10);
 
-        let highlight_check = checkbox(self.highlight_on)
-            .label("Highlight")
-            .on_toggle(BottomPanelMessage::SetHighlight)
-            .size(14)
-            .text_size(10);
-
         let manual_check = checkbox(self.manual_control_on)
             .label("Manual Control")
             .on_toggle(BottomPanelMessage::SetManualControl)
             .size(14)
             .text_size(10);
 
-        let content = row![selector, trace_check, vectors_check, highlight_check, manual_check,]
+        let content = row![selector, trace_check, vectors_check, manual_check,]
             .spacing(16)
             .padding(8)
             .align_y(iced::Alignment::Center);
