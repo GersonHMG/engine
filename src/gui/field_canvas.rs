@@ -267,6 +267,16 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
             Stroke::default().with_color(Color::WHITE).with_width(1.0),
         );
 
+        // Center horizontal line
+        let center_horizontal_line = Path::line(
+            Point::new(cx - (self.data.field_length_mm / 2.0) * s, cy),
+            Point::new(cx + (self.data.field_length_mm / 2.0) * s, cy),
+        );
+        frame.stroke(
+            &center_horizontal_line,
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+        );
+
         // Draw path waypoints
         if !self.data.path_points.is_empty() {
             let path_pts: Vec<Point> = self
