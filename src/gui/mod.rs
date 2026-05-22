@@ -6,6 +6,11 @@ pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
 pub mod lua_console;
+pub mod replay;
+pub mod robot;
+pub mod types;
+
+pub use types::{EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, Message, RobotUpdateData, VisionUpdate};
 
 use iced::widget::{button, column, container, row, scrollable, slider, text};
 use iced::widget::operation::snap_to_end;
@@ -14,15 +19,15 @@ use iced::event::{self, Event};
 use iced::keyboard;
 use iced::mouse;
 use iced::window;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tracing::warn;
 
-use crate::types::Vec2D;
 use crate::config::FieldConfig;
 
 use field_canvas::{FieldCanvas, FieldData, LuaDrawCommand, RobotData};
+use replay::ReplayState;
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
 use toolbar::{Toolbar, ToolbarMessage};
 use bottom_panel::{BottomPanel, BottomPanelMessage};
@@ -32,128 +37,7 @@ use panels::radio::{RadioPanel, RadioMessage};
 use panels::kalman::{KalmanPanel, KalmanMessage};
 use panels::recording::{RecordingPanel, RecordingMessage, RecordingStatus};
 use panels::control::{ControlPanel, ControlMessage};
-use panels::charts::{ChartsPanel, ChartsMessage, DataSample, export_csv_async};
-
-// --- Vision update (sent from vision task to GUI) ---
-#[derive(Debug, Clone)]
-pub struct VisionUpdate {
-    pub ball: Option<Vec2D>,
-    pub robots_blue: Vec<RobotUpdateData>,
-    pub robots_yellow: Vec<RobotUpdateData>,
-    pub pps: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct RobotUpdateData {
-    pub id: u32,
-    pub x: f64,
-    pub y: f64,
-    pub theta: f64,
-    pub vx: f64,
-    pub vy: f64,
-    pub cmd_vx: f64,
-    pub cmd_vy: f64,
-    pub cmd_angular: f64,
-}
-
-#[derive(Debug, Clone)]
-struct ReplayFrame {
-    elapsed_ms: u64,
-    robots_blue: Vec<RobotData>,
-    robots_yellow: Vec<RobotData>,
-    ball: (f64, f64),
-}
-
-#[derive(Default)]
-struct ReplayFrameBuilder {
-    robots_blue: HashMap<u32, RobotData>,
-    robots_yellow: HashMap<u32, RobotData>,
-    ball: (f64, f64),
-}
-
-// --- Lua draw commands (sent from engine to GUI) ---
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(tag = "type")]
-pub enum LuaDrawCmd {
-    Point {
-        x: f64,
-        y: f64,
-        draw_x: bool,
-        color: Option<[f32; 3]>,
-    },
-    HighlightRobot { id: i32, team: i32 },
-    Line {
-        points: Vec<(f64, f64)>,
-        draw_points_between: bool,
-        color: Option<[f32; 3]>,
-    },
-    Text {
-        x: f64,
-        y: f64,
-        text: String,
-        color: Option<[f32; 3]>,
-    },
-}
-
-// --- Commands from GUI to engine ---
-#[derive(Debug, Clone)]
-pub enum EngineCommand {
-    UpdateVisionConnection { ip: String, port: u16 },
-    UpdateRadioConfig { use_radio: bool, port_name: String, baud_rate: u32 },
-    UpdateTrackerConfig { enabled: bool, process_noise_p: f64, process_noise_v: f64, measurement_noise: f64 },
-    StartRecording { filename: String },
-    StopRecording,
-    SendRobotCommand { id: i32, team: i32, vx: f64, vy: f64, omega: f64 },
-    SendKickCommand { id: i32, team: i32 },
-    LoadScript { path: String },
-    PauseScript,
-    ResumeScript,
-}
-
-// --- GUI channels ---
-pub struct GuiChannels {
-    pub vision_rx: mpsc::Receiver<VisionUpdate>,
-    pub lua_draw_rx: mpsc::Receiver<Vec<LuaDrawCmd>>,
-    pub lua_status_rx: mpsc::Receiver<LuaScriptStatusUpdate>,
-    pub lua_log_rx: mpsc::Receiver<String>,
-    pub command_tx: mpsc::Sender<EngineCommand>,
-}
-
-#[derive(Debug, Clone)]
-pub struct LuaScriptStatusUpdate {
-    pub status: toolbar::ScriptStatus,
-    pub script_path: Option<String>,
-}
-
-// --- Main Application Message ---
-#[derive(Debug, Clone)]
-pub enum Message {
-    // Sub-component messages
-    Sidebar(SidebarMessage),
-    Toolbar(ToolbarMessage),
-    BottomPanel(BottomPanelMessage),
-    Vision(VisionMessage),
-    Radio(RadioMessage),
-    Kalman(KalmanMessage),
-    Recording(RecordingMessage),
-    Control(ControlMessage),
-    Charts(ChartsMessage),
-
-    // Events
-    Tick,
-    EventOccurred(Event),
-    ScriptFileSelected(Option<String>),
-    ReplayFilePick,
-    ReplayFileSelected(Option<String>),
-    ReplayPlay,
-    ReplayPause,
-    ReplaySeek(u32),
-    LuaConsoleResizeStart,
-
-    // Window events
-    WindowOpened(window::Id),
-    WindowClosed(window::Id),
-}
+use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -204,13 +88,7 @@ pub struct EngineApp {
     window_height: f32,
 
     // Replay mode UI state
-    replay_mode: bool,
-    replay_file_path: Option<String>,
-    replay_is_playing: bool,
-    replay_frames: Vec<ReplayFrame>,
-    replay_frame_index: usize,
-    replay_elapsed_ms: u64,
-    replay_last_tick: std::time::Instant,
+    replay: ReplayState,
 }
 
 impl EngineApp {
@@ -252,13 +130,7 @@ impl EngineApp {
             lua_console_resize_start_y: 0.0,
             lua_console_resize_start_height: 0.0,
             window_height: 800.0,
-            replay_mode: false,
-            replay_file_path: None,
-            replay_is_playing: false,
-            replay_frames: Vec::new(),
-            replay_frame_index: 0,
-            replay_elapsed_ms: 0,
-            replay_last_tick: std::time::Instant::now(),
+            replay: ReplayState::default(),
         };
 
         (app, open_task.map(Message::WindowOpened))
@@ -326,7 +198,7 @@ impl EngineApp {
     }
 
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
-        if self.replay_mode {
+        if self.replay.enabled {
             match &message {
                 Message::Sidebar(SidebarMessage::ToggleReplayMode)
                 | Message::ReplayFilePick
@@ -345,9 +217,10 @@ impl EngineApp {
         match message {
             // --- Sidebar ---
             Message::Sidebar(SidebarMessage::ToggleReplayMode) => {
-                self.replay_mode = !self.replay_mode;
+                let enabled = !self.replay.enabled;
+                self.replay.set_enabled(enabled);
 
-                if self.replay_mode {
+                if self.replay.enabled {
                     let panel_ids: Vec<window::Id> = self.panel_windows.values().cloned().collect();
                     self.panel_windows.clear();
                     self.window_to_panel.clear();
@@ -355,8 +228,6 @@ impl EngineApp {
                     self.lua_console_panel.open = false;
                     self.key_chars.clear();
                     self.kick_key_was_down = false;
-                    self.replay_is_playing = false;
-                    self.replay_last_tick = std::time::Instant::now();
 
                     let tasks: Vec<iced::Task<Message>> = panel_ids
                         .into_iter()
@@ -364,11 +235,9 @@ impl EngineApp {
                         .collect();
                     return iced::Task::batch(tasks);
                 }
-
-                self.replay_is_playing = false;
             }
             Message::Sidebar(SidebarMessage::TogglePanel(panel)) => {
-                if self.replay_mode {
+                if self.replay.enabled {
                     return iced::Task::none();
                 }
                 if panel == SidebarPanel::LuaConsole {
@@ -403,52 +272,19 @@ impl EngineApp {
                 );
             }
             Message::ReplayFileSelected(Some(path)) => {
-                self.replay_file_path = Some(path);
-                self.replay_is_playing = false;
-                self.replay_last_tick = std::time::Instant::now();
-
-                match Self::load_replay_frames(self.replay_file_path.as_deref().unwrap_or_default()) {
-                    Ok(frames) => {
-                        self.replay_frames = frames;
-                        self.replay_frame_index = 0;
-                        self.replay_elapsed_ms = self.replay_frames.first().map(|f| f.elapsed_ms).unwrap_or(0);
-                        self.apply_replay_frame();
-                    }
-                    Err(e) => {
-                        self.replay_frames.clear();
-                        self.replay_frame_index = 0;
-                        self.replay_elapsed_ms = 0;
-                        warn!("Replay: failed to load CSV: {e}");
-                    }
+                if let Err(e) = self.replay.load_and_apply(path, &mut self.field_data, &mut self.robot_trace) {
+                    warn!("Replay: failed to load CSV: {e}");
                 }
             }
             Message::ReplayFileSelected(None) => {}
             Message::ReplayPlay => {
-                if !self.replay_frames.is_empty() {
-                    if self.replay_frame_index + 1 >= self.replay_frames.len() {
-                        self.replay_frame_index = 0;
-                        self.replay_elapsed_ms = self.replay_frames[0].elapsed_ms;
-                        self.apply_replay_frame();
-                    }
-                    self.replay_is_playing = true;
-                    self.replay_last_tick = std::time::Instant::now();
-                }
+                self.replay.start_playback(&mut self.field_data, &mut self.robot_trace);
             }
             Message::ReplayPause => {
-                self.replay_is_playing = false;
+                self.replay.pause();
             }
             Message::ReplaySeek(index) => {
-                if self.replay_frames.is_empty() {
-                    return iced::Task::none();
-                }
-
-                self.replay_is_playing = false;
-                self.replay_last_tick = std::time::Instant::now();
-
-                let idx = (index as usize).min(self.replay_frames.len().saturating_sub(1));
-                self.replay_frame_index = idx;
-                self.replay_elapsed_ms = self.replay_frames[idx].elapsed_ms;
-                self.apply_replay_frame();
+                self.replay.seek(index, &mut self.field_data, &mut self.robot_trace);
             }
 
             // --- Toolbar ---
@@ -653,8 +489,11 @@ impl EngineApp {
 
             // --- Tick (periodic update) ---
             Message::Tick => {
-                if self.replay_mode {
-                    self.tick_replay();
+                if self.replay.enabled {
+                    self.vision_panel.connected = true;
+                    self.vision_panel.pps = 0;
+                    self.toolbar.pps = 0;
+                    self.replay.tick(&mut self.field_data, &mut self.robot_trace);
                     self.field_canvas.request_redraw();
                     return iced::Task::none();
                 }
@@ -816,8 +655,8 @@ impl EngineApp {
                     }
                     Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                         if let Some(pos) = self.last_cursor_position {
-                            if self.lua_console_panel.open && !self.replay_mode {
-                                let bottom_height = if self.replay_mode { 0.0 } else { 52.0 };
+                            if self.lua_console_panel.open && !self.replay.enabled {
+                                let bottom_height = if self.replay.enabled { 0.0 } else { 52.0 };
                                 let main_row_height = (self.window_height - bottom_height).max(0.0);
                                 let panel_top = main_row_height - self.lua_console_panel.height();
                                 if pos.y >= panel_top && pos.y <= panel_top + lua_console::RESIZE_EDGE_PX {
@@ -918,13 +757,14 @@ impl EngineApp {
         // Sidebar
         let sidebar = self
             .sidebar
-            .view(self.replay_mode, self.lua_console_panel.open)
+            .view(self.replay.enabled, self.lua_console_panel.open)
             .map(Message::Sidebar);
 
         // Toolbar
-        let toolbar: Element<'_, Message> = if self.replay_mode {
+        let toolbar: Element<'_, Message> = if self.replay.enabled {
             let replay_file_name = self
-                .replay_file_path
+                .replay
+                .file_path
                 .as_ref()
                 .map(|p| p.replace('\\', "/").rsplit('/').next().unwrap_or("No file").to_string())
                 .unwrap_or_else(|| "No CSV selected".to_string());
@@ -985,8 +825,8 @@ impl EngineApp {
         )
         .padding(8);
 
-        let field_stack: Element<'_, Message> = if self.replay_mode {
-            let can_control_replay = !self.replay_frames.is_empty();
+        let field_stack: Element<'_, Message> = if self.replay.enabled {
+            let can_control_replay = self.replay.has_frames();
 
             let play_btn = if can_control_replay {
                 button(text("Play").size(12))
@@ -1004,30 +844,30 @@ impl EngineApp {
                 button(text("Pause").size(12)).style(button::secondary)
             };
 
-            let status_text = if self.replay_frames.is_empty() {
+            let status_text = if self.replay.frames.is_empty() {
                 "Replay: no frames"
-            } else if self.replay_is_playing {
+            } else if self.replay.is_playing {
                 "Replay: playing"
             } else {
                 "Replay: paused"
             };
 
-            let frame_text = if self.replay_frames.is_empty() {
+            let frame_text = if self.replay.frames.is_empty() {
                 "Frame 0/0".to_string()
             } else {
-                format!("Frame {}/{}", self.replay_frame_index + 1, self.replay_frames.len())
+                format!("Frame {}/{}", self.replay.frame_index + 1, self.replay.frames.len())
             };
 
-            let time_text = if self.replay_frames.is_empty() {
+            let time_text = if self.replay.frames.is_empty() {
                 "0.00s".to_string()
             } else {
-                format!("{:.2}s", self.replay_frames[self.replay_frame_index].elapsed_ms as f64 / 1000.0)
+                format!("{:.2}s", self.replay.current_frame_elapsed_ms() as f64 / 1000.0)
             };
 
             let timeline: Element<'_, Message> = if can_control_replay {
                 slider(
-                    0..=self.replay_frames.len().saturating_sub(1) as u32,
-                    self.replay_frame_index as u32,
+                    0..=self.replay.frames.len().saturating_sub(1) as u32,
+                    self.replay.frame_index as u32,
                     Message::ReplaySeek,
                 )
                 .step(1u32)
@@ -1085,7 +925,7 @@ impl EngineApp {
         ];
 
         // Full layout
-        let layout = if self.replay_mode {
+        let layout = if self.replay.enabled {
             column![
                 container(main_row.width(Length::Fill).height(Length::Fill))
                     .width(Length::Fill)
@@ -1126,7 +966,7 @@ impl EngineApp {
     }
 
     fn poll_keyboard_control(&mut self) {
-        if self.replay_mode || !self.control_panel.active || self.control_panel.mode != panels::control::ControlMode::Keyboard {
+        if self.replay.enabled || !self.control_panel.active || self.control_panel.mode != panels::control::ControlMode::Keyboard {
             self.kick_key_was_down = false;
             return;
         }
@@ -1166,170 +1006,4 @@ impl EngineApp {
         }
     }
 
-    fn tick_replay(&mut self) {
-        self.field_data.vision_connected = true;
-        self.vision_panel.connected = true;
-        self.vision_panel.pps = 0;
-        self.toolbar.pps = 0;
-        self.field_data.lua_draw_commands.clear();
-
-        if self.replay_frames.is_empty() {
-            self.field_data.robots_blue.clear();
-            self.field_data.robots_yellow.clear();
-            self.field_data.ball = (0.0, 0.0);
-            return;
-        }
-
-        if self.replay_is_playing {
-            let now = std::time::Instant::now();
-            let delta_ms = now.duration_since(self.replay_last_tick).as_millis() as u64;
-            self.replay_last_tick = now;
-            self.replay_elapsed_ms = self.replay_elapsed_ms.saturating_add(delta_ms);
-
-            while self.replay_frame_index + 1 < self.replay_frames.len()
-                && self.replay_frames[self.replay_frame_index + 1].elapsed_ms <= self.replay_elapsed_ms
-            {
-                self.replay_frame_index += 1;
-            }
-
-            if self.replay_frame_index + 1 >= self.replay_frames.len() {
-                self.replay_is_playing = false;
-                self.replay_elapsed_ms = self.replay_frames[self.replay_frame_index].elapsed_ms;
-            }
-        } else {
-            self.replay_last_tick = std::time::Instant::now();
-        }
-
-        self.apply_replay_frame();
-    }
-
-    fn apply_replay_frame(&mut self) {
-        if let Some(frame) = self.replay_frames.get(self.replay_frame_index) {
-            self.field_data.robots_blue = frame.robots_blue.clone();
-            self.field_data.robots_yellow = frame.robots_yellow.clone();
-            self.field_data.ball = frame.ball;
-            self.field_data.robot_trace.clear();
-            self.robot_trace.clear();
-        }
-    }
-
-    fn load_replay_frames(path: &str) -> Result<Vec<ReplayFrame>, String> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("cannot read file '{}': {e}", path))?;
-
-        let mut by_time: BTreeMap<u64, ReplayFrameBuilder> = BTreeMap::new();
-
-        for (line_idx, line) in content.lines().enumerate() {
-            if line_idx == 0 {
-                // CSV header
-                continue;
-            }
-
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            let cols: Vec<&str> = line.split(',').collect();
-            if cols.len() < 11 {
-                continue;
-            }
-
-            let elapsed = match cols[0].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let robot_id = match cols[1].trim().parse::<i32>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let team = match cols[2].trim().parse::<i32>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            let vx_cmd = match cols[3].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let vy_cmd = match cols[4].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let angular_cmd = match cols[5].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let pos_x = match cols[6].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let pos_y = match cols[7].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let theta = match cols[8].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let vx_actual = match cols[9].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-            let vy_actual = match cols[10].trim().parse::<f64>() {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            let elapsed_ms = (elapsed.max(0.0) * 1000.0).round() as u64;
-            let frame = by_time.entry(elapsed_ms).or_default();
-
-            if robot_id == -1 && team == -1 {
-                frame.ball = (pos_x, pos_y);
-                continue;
-            }
-
-            if robot_id < 0 {
-                continue;
-            }
-
-            let robot = RobotData {
-                id: robot_id as u32,
-                x: pos_x,
-                y: pos_y,
-                theta,
-                vx: vx_actual,
-                vy: vy_actual,
-                cmd_vx: vx_cmd,
-                cmd_vy: vy_cmd,
-                cmd_angular: angular_cmd,
-            };
-
-            match team {
-                0 => {
-                    frame.robots_blue.insert(robot.id, robot);
-                }
-                1 => {
-                    frame.robots_yellow.insert(robot.id, robot);
-                }
-                _ => {}
-            }
-        }
-
-        let mut frames = Vec::new();
-        for (elapsed_ms, builder) in by_time {
-            let mut robots_blue: Vec<RobotData> = builder.robots_blue.into_values().collect();
-            let mut robots_yellow: Vec<RobotData> = builder.robots_yellow.into_values().collect();
-            robots_blue.sort_by_key(|r| r.id);
-            robots_yellow.sort_by_key(|r| r.id);
-            frames.push(ReplayFrame {
-                elapsed_ms,
-                robots_blue,
-                robots_yellow,
-                ball: builder.ball,
-            });
-        }
-
-        Ok(frames)
-    }
 }

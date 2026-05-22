@@ -5,6 +5,9 @@ use iced::widget::canvas::{self, Cache, Canvas, Frame, Geometry, Path, Stroke, T
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 use std::cell::Cell;
 
+pub use super::robot::RobotData;
+use super::robot::{RobotGui, RobotTeam};
+
 
 /// Data needed to render the field
 #[derive(Debug, Clone)]
@@ -54,19 +57,6 @@ impl FieldData {
         }
         data
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct RobotData {
-    pub id: u32,
-    pub x: f64,
-    pub y: f64,
-    pub theta: f64,
-    pub vx: f64,
-    pub vy: f64,
-    pub cmd_vx: f64,
-    pub cmd_vy: f64,
-    pub cmd_angular: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -240,7 +230,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         frame.fill_rectangle(
             Point::ORIGIN,
             bounds.size(),
-            Color::from_rgb(0.663, 0.663, 0.663),
+            Color::from_rgb(0.18, 0.18, 0.18),
         );
 
         let cx = bounds.width / 2.0 + self.pan.x;
@@ -337,13 +327,15 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
         // Draw robots
         for robot in &self.data.robots_blue {
             let highlighted = self.data.highlight_robot == Some((robot.id, 0));
-            let color = if highlighted { Color::from_rgb(0.9, 0.1, 0.1) } else { Color::from_rgb(0.1, 0.1, 0.9) };
-            self.draw_robot(&mut frame, bounds, robot, color);
+            let pos = self.field_to_screen(bounds, robot.x, robot.y);
+            let gui = RobotGui::new(robot, RobotTeam::Blue, highlighted);
+            gui.draw(&mut frame, pos, s, self.data.vis_velocities);
         }
         for robot in &self.data.robots_yellow {
             let highlighted = self.data.highlight_robot == Some((robot.id, 1));
-            let color = if highlighted { Color::from_rgb(0.9, 0.1, 0.1) } else { Color::from_rgb(0.9, 0.9, 0.0) };
-            self.draw_robot(&mut frame, bounds, robot, color);
+            let pos = self.field_to_screen(bounds, robot.x, robot.y);
+            let gui = RobotGui::new(robot, RobotTeam::Yellow, highlighted);
+            gui.draw(&mut frame, pos, s, self.data.vis_velocities);
         }
 
         // Draw ball
@@ -499,81 +491,3 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
     }
 }
 
-impl<'a> FieldProgram<'a> {
-    fn draw_robot(
-        &self,
-        frame: &mut Frame,
-        bounds: Rectangle,
-        robot: &RobotData,
-        team_color: Color,
-    ) {
-        let pos = self.field_to_screen(bounds, robot.x, robot.y);
-        let s = self.scale;
-        let radius = 90.0 * s;
-
-        // Robot body
-        let body = Path::circle(pos, radius);
-        frame.fill(&body, team_color);
-
-        // Heading line
-        let heading_end = Point::new(
-            pos.x + radius * (robot.theta as f32).cos(),
-            pos.y - radius * (robot.theta as f32).sin(),
-        );
-        let heading = Path::line(pos, heading_end);
-        frame.stroke(
-            &heading,
-            Stroke::default().with_color(Color::BLACK).with_width(2.0),
-        );
-
-        // ID text
-        frame.fill_text(Text {
-            content: robot.id.to_string(),
-            position: pos,
-            color: Color::WHITE,
-            size: iced::Pixels((12.0 * (s / 0.08)).max(10.0)),
-            align_x: iced::alignment::Horizontal::Center.into(),
-            align_y: iced::alignment::Vertical::Center.into(),
-            ..Text::default()
-        });
-
-        // Velocity vectors
-        if self.data.vis_velocities {
-            let vel_scale = 1000.0 * s;
-
-            // Actual velocity (red)
-            if robot.vx.abs() > 0.05 || robot.vy.abs() > 0.05 {
-                let end = Point::new(
-                    pos.x + (robot.vx as f32) * vel_scale,
-                    pos.y - (robot.vy as f32) * vel_scale,
-                );
-                let line = Path::line(pos, end);
-                frame.stroke(
-                    &line,
-                    Stroke::default()
-                        .with_color(Color::from_rgba(1.0, 0.0, 0.0, 0.5))
-                        .with_width(3.0),
-                );
-                let dot = Path::circle(end, 3.0);
-                frame.fill(&dot, Color::from_rgba(1.0, 0.0, 0.0, 0.5));
-            }
-
-            // Commanded velocity (green, local→global)
-            if robot.cmd_vx.abs() > 0.05 || robot.cmd_vy.abs() > 0.05 {
-                let theta = robot.theta as f32;
-                let gvx = (robot.cmd_vx as f32) * theta.cos() - (robot.cmd_vy as f32) * theta.sin();
-                let gvy = (robot.cmd_vx as f32) * theta.sin() + (robot.cmd_vy as f32) * theta.cos();
-                let end = Point::new(pos.x + gvx * vel_scale, pos.y - gvy * vel_scale);
-                let line = Path::line(pos, end);
-                frame.stroke(
-                    &line,
-                    Stroke::default()
-                        .with_color(Color::from_rgba(0.0, 1.0, 0.0, 0.5))
-                        .with_width(3.0),
-                );
-                let dot = Path::circle(end, 3.0);
-                frame.fill(&dot, Color::from_rgba(0.0, 1.0, 0.0, 0.5));
-            }
-        }
-    }
-}
