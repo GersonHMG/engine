@@ -32,9 +32,7 @@ function Runner.begin_play()
 end
 
 function Runner.update(teamId)
-    if not play_actual then
-        print("[DEBUG] No hay jugada cargada en memoria")
-    return end
+    if not play_actual then return end
     local asignaciones = asignar_rol(teamId)
     for id_rol, data_rol in pairs(play_actual.roles) do
         local robotId = asignaciones[id_rol]
@@ -44,8 +42,13 @@ function Runner.update(teamId)
             if tactica_actual then
                 local modulo_tactica = tacticas_disp[tactica_actual.action]
                 if modulo_tactica then
-                    local termino_tarea = modulo_tactica.process(robotId, teamId, table.unpack(tactica_actual.param))
-                    if termino_tarea then
+                    local resultado
+                    if type(tactica_actual.param) == "table" and #tactica_actual.param > 0 then
+                        resultado = modulo_tactica.process(robotId, teamId, table.unpack(tactica_actual.param))
+                    else
+                        resultado = modulo_tactica.process(robotId, teamId, tactica_actual.param)
+                    end
+                    if resultado then
                         estado_rol[id_rol] = paso_actual + 1
                     end
                 end
