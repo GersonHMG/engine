@@ -1,6 +1,6 @@
 // gui/bottom_panel.rs — Toggle buttons + robot selector
 
-use iced::widget::{checkbox, column, container, pick_list, row, text, text_input};
+use iced::widget::{button, checkbox, column, container, row, text, text_input, Space};
 use iced::{Element, Length};
 
 use crate::gui::panels::control::Team;
@@ -9,7 +9,6 @@ use crate::gui::panels::control::Team;
 pub enum BottomPanelMessage {
     SetTrace(bool),
     SetVectors(bool),
-    SetHighlight(bool),
     SetManualControl(bool),
     TeamSelected(Team),
     RobotIdChanged(String),
@@ -20,7 +19,6 @@ pub enum BottomPanelMessage {
 pub struct BottomPanel {
     pub trace_on: bool,
     pub vectors_on: bool,
-    pub highlight_on: bool,
     pub manual_control_on: bool,
     pub control_robot_id: String,
     pub control_team: Team,
@@ -31,7 +29,6 @@ impl BottomPanel {
         Self {
             trace_on: false,
             vectors_on: false,
-            highlight_on: false,
             manual_control_on: false,
             control_robot_id: "0".to_string(),
             control_team: Team::Blue,
@@ -41,11 +38,17 @@ impl BottomPanel {
     pub fn view(&self) -> Element<BottomPanelMessage> {
         // Team + ID selector — text_input with stacked ▲/▼ overlaid on the right, like <input type="number">
         let id_val: i32 = self.control_robot_id.parse().unwrap_or(0);
+        let controls_enabled = self.manual_control_on;
+        let disabled_label_color = iced::Color::from_rgb(0.45, 0.45, 0.45);
 
         let spin_up = iced::widget::button(
             text("▲").size(6).align_x(iced::alignment::Horizontal::Center),
         )
-        .on_press_maybe(if id_val < 12 { Some(BottomPanelMessage::IncrementRobotId) } else { None })
+        .on_press_maybe(if controls_enabled && id_val < 12 {
+            Some(BottomPanelMessage::IncrementRobotId)
+        } else {
+            None
+        })
         .style(|theme: &iced::Theme, status| {
             let mut s = iced::widget::button::secondary(theme, status);
             s.border.radius = 0.0.into();
@@ -58,7 +61,11 @@ impl BottomPanel {
         let spin_down = iced::widget::button(
             text("▼").size(6).align_x(iced::alignment::Horizontal::Center),
         )
-        .on_press_maybe(if id_val > 0 { Some(BottomPanelMessage::DecrementRobotId) } else { None })
+        .on_press_maybe(if controls_enabled && id_val > 0 {
+            Some(BottomPanelMessage::DecrementRobotId)
+        } else {
+            None
+        })
         .style(|theme: &iced::Theme, status| {
             let mut s = iced::widget::button::secondary(theme, status);
             s.border.radius = 0.0.into();
@@ -72,28 +79,114 @@ impl BottomPanel {
 
         // Overlay the spin column on the right side of the text_input
         const INPUT_W: f32 = 54.0;
-        let number_input = iced::widget::stack![
+        let id_input = if controls_enabled {
             text_input("0", &self.control_robot_id)
                 .on_input(BottomPanelMessage::RobotIdChanged)
                 .size(10)
-                .width(Length::Fixed(INPUT_W)),
-            container(spin_col)
                 .width(Length::Fixed(INPUT_W))
-                .height(Length::Fill)
-                .align_x(iced::alignment::Horizontal::Right)
-                .align_y(iced::alignment::Vertical::Center),
-        ];
+        } else {
+            text_input("0", &self.control_robot_id)
+                .size(10)
+                .width(Length::Fixed(INPUT_W))
+        };
+
+        let number_input = if controls_enabled {
+            iced::widget::stack![
+                id_input,
+                container(spin_col)
+                    .width(Length::Fixed(INPUT_W))
+                    .height(Length::Fill)
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .align_y(iced::alignment::Vertical::Center),
+            ]
+        } else {
+            let overlay = container(Space::new()).style(|theme: &iced::Theme| {
+                let palette = theme.extended_palette();
+                container::Style {
+                    background: Some(iced::Background::Color(iced::Color::from_rgba(
+                        0.0, 0.0, 0.0, 0.5,
+                    ))),
+                    border: iced::Border {
+                        color: palette.background.strong.color,
+                        width: 1.0,
+                        radius: 2.0.into(),
+                    },
+                    ..Default::default()
+                }
+            });
+
+            iced::widget::stack![
+                id_input,
+                container(spin_col)
+                    .width(Length::Fixed(INPUT_W))
+                    .height(Length::Fill)
+                    .align_x(iced::alignment::Horizontal::Right)
+                    .align_y(iced::alignment::Vertical::Center),
+                overlay
+                    .width(Length::Fixed(INPUT_W))
+                    .height(Length::Fill),
+            ]
+        };
+
+        let team_box = |team: Team, enabled: bool| {
+            let selected = self.control_team == team;
+            let disabled = !enabled;
+            let (r, g, b) = match team {
+                Team::Blue => (0.2, 0.55, 1.0),
+                Team::Yellow => (1.0, 0.85, 0.2),
+            };
+            let mut alpha = if selected { 1.0 } else { 0.35 };
+            if disabled {
+                alpha *= 0.25;
+            }
+            let bg = iced::Color::from_rgba(r, g, b, alpha);
+            let border_color = if selected && enabled {
+                iced::Color::WHITE
+            } else {
+                iced::Color::from_rgb(0.35, 0.35, 0.35)
+            };
+
+            button(
+                Space::new()
+                    .width(Length::Fixed(14.0))
+                    .height(Length::Fixed(14.0)),
+            )
+            .on_press_maybe(if enabled {
+                Some(BottomPanelMessage::TeamSelected(team))
+            } else {
+                None
+            })
+            .style(move |theme: &iced::Theme, status| {
+                let mut s = iced::widget::button::secondary(theme, status);
+                s.background = Some(iced::Background::Color(bg));
+                s.border.color = border_color;
+                s.border.width = if selected { 1.5 } else { 1.0 };
+                s.border.radius = 2.0.into();
+                s
+            })
+            .padding(0)
+            .width(Length::Fixed(18.0))
+            .height(Length::Fixed(18.0))
+        };
+
+        let team_label = if controls_enabled {
+            text("Team").size(10)
+        } else {
+            text("Team").size(10).color(disabled_label_color)
+        };
+
+        let id_label = if controls_enabled {
+            text("ID").size(10)
+        } else {
+            text("ID").size(10).color(disabled_label_color)
+        };
 
         let selector = row![
-            text("Team").size(10),
-            pick_list(
-                &[Team::Blue, Team::Yellow][..],
-                Some(self.control_team),
-                BottomPanelMessage::TeamSelected,
-            )
-            .text_size(10)
-            .width(Length::Fixed(70.0)),
-            text("ID").size(10),
+            team_label,
+            row![team_box(Team::Blue, controls_enabled), team_box(Team::Yellow, controls_enabled)]
+                .spacing(4)
+                .align_y(iced::Alignment::Center),
+            id_label,
             number_input,
         ]
         .spacing(6)
@@ -111,19 +204,13 @@ impl BottomPanel {
             .size(14)
             .text_size(10);
 
-        let highlight_check = checkbox(self.highlight_on)
-            .label("Highlight")
-            .on_toggle(BottomPanelMessage::SetHighlight)
-            .size(14)
-            .text_size(10);
-
         let manual_check = checkbox(self.manual_control_on)
             .label("Manual Control")
             .on_toggle(BottomPanelMessage::SetManualControl)
             .size(14)
             .text_size(10);
 
-        let content = row![selector, trace_check, vectors_check, highlight_check, manual_check,]
+        let content = row![selector, manual_check, trace_check, vectors_check,]
             .spacing(16)
             .padding(8)
             .align_y(iced::Alignment::Center);

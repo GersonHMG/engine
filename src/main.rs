@@ -14,6 +14,7 @@ mod lua_interface;
 #[path = "logger/logger.rs"]
 mod logger;
 mod gui;
+mod config;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
@@ -30,6 +31,7 @@ use crate::logger::Logger;
 use crate::types::{KickerCommand, MotionCommand};
 use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, VisionUpdate};
 use crate::gui::toolbar::ScriptStatus;
+use crate::config::load_field_config_from_exe;
 
 
 #[derive(Default)]
@@ -52,6 +54,8 @@ fn map_script_state(state: ScriptExecState) -> ScriptStatus {
 fn main() -> iced::Result {
     // Initialize logging
     tracing_subscriber::fmt::init();
+
+    let field_config = load_field_config_from_exe();
 
     // Create channels between GUI and engine
     let (vision_tx, vision_rx) = tokio::sync::mpsc::channel::<VisionUpdate>(256);
@@ -86,6 +90,7 @@ fn main() -> iced::Result {
                 lua_status_tx_clone,
                 lua_log_tx_clone,
                 rx,
+                field_config,
             )
             .await;
         });
@@ -99,7 +104,7 @@ fn main() -> iced::Result {
         move || {
             let channels = gui_channels.lock().unwrap().take()
                 .expect("GUI channels already consumed");
-            EngineApp::boot(channels)
+            EngineApp::boot(channels, field_config)
         },
         EngineApp::update,
         EngineApp::view,
@@ -116,6 +121,7 @@ async fn run_engine(
     lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
     lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
+    field_config: crate::config::FieldConfig,
 ) {
     // Configuration Defaults
     let vision_ip = "224.5.23.2".to_string();
@@ -129,7 +135,12 @@ async fn run_engine(
     let radio_baud = 115200;
 
     // Shared state
-    let world = Arc::new(RwLock::new(World::new(blue_team_size, yellow_team_size)));
+    let world = Arc::new(RwLock::new(World::new(
+        blue_team_size,
+        yellow_team_size,
+        field_config.length_m,
+        field_config.width_m,
+    )));
     let game_state = Arc::new(Mutex::new(GameState::new()));
     let radio = Arc::new(Mutex::new(Radio::new(use_radio, &radio_port, radio_baud)));
     let vision_state = Arc::new(Mutex::new(VisionState::default()));
@@ -202,6 +213,18 @@ async fn run_engine(
 
     loop {
         let frame_start = Instant::now();
+
+        // Remove robots that have not updated in 60*4 frames (~4s).
+        {
+            let mut w = match world.write() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    warn!("World lock poisoned, recovering");
+                    poisoned.into_inner()
+                }
+            };
+            w.prune_stale_robots();
+        }
 
         // Receiver snapshot at frame start for logging.
         let (log_blue_robots, log_yellow_robots, log_ball) = {

@@ -3,16 +3,21 @@
 
 use crate::types::{BallState, RobotState, Vec2D};
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+// 60 * 4 frames at ~60 FPS.
+const ROBOT_STALE_MAX_AGE: Duration = Duration::from_secs(3);
 
 pub struct World {
     pub blue_robots: HashMap<i32, RobotState>,
     pub yellow_robots: HashMap<i32, RobotState>,
     pub ball: BallState,
+    pub field_length_m: f64,
+    pub field_width_m: f64,
 }
 
 impl World {
-    pub fn new(n_blue: i32, n_yellow: i32) -> Self {
+    pub fn new(n_blue: i32, n_yellow: i32, field_length_m: f64, field_width_m: f64) -> Self {
         let mut blue = HashMap::new();
         for id in 0..n_blue {
             blue.insert(id, RobotState::new(id, 0));
@@ -25,7 +30,17 @@ impl World {
             blue_robots: blue,
             yellow_robots: yellow,
             ball: BallState::default(),
+            field_length_m,
+            field_width_m,
         }
+    }
+
+    pub fn field_half_length(&self) -> f64 {
+        self.field_length_m / 2.0
+    }
+
+    pub fn field_half_width(&self) -> f64 {
+        self.field_width_m / 2.0
     }
 
     pub fn get_robot_state(&self, id: i32, team: i32) -> RobotState {
@@ -62,20 +77,30 @@ impl World {
             _ => &mut self.yellow_robots,
         };
 
-        if let Some(robot) = robots.get_mut(&id) {
-            robot.position = position;
-            robot.orientation = orientation as f64;
-            robot.velocity = velocity;
-            robot.angular_velocity = omega as f64;
-            let elapsed = robot.last_update.elapsed();
-            robot.active = elapsed.as_millis() <= 2000;
-            robot.last_update = Instant::now();
-        }
+        let robot = robots.entry(id).or_insert_with(|| RobotState::new(id, team));
+        robot.position = position;
+        robot.orientation = orientation as f64;
+        robot.velocity = velocity;
+        robot.angular_velocity = omega as f64;
+        robot.active = true;
+        robot.last_update = Instant::now();
     }
 
     pub fn update_ball(&mut self, velocity: Vec2D, position: Vec2D) {
         self.ball.position = position;
         self.ball.velocity = velocity;
+    }
+
+    pub fn prune_stale_robots(&mut self) {
+        let now = Instant::now();
+        self.blue_robots.retain(|_, robot| {
+            robot.active = now.duration_since(robot.last_update) <= ROBOT_STALE_MAX_AGE;
+            robot.active
+        });
+        self.yellow_robots.retain(|_, robot| {
+            robot.active = now.duration_since(robot.last_update) <= ROBOT_STALE_MAX_AGE;
+            robot.active
+        });
     }
 
     pub fn set_commanded_velocity(&mut self, id: i32, team: i32, cmd_v: Vec2D, cmd_angular: f64) {

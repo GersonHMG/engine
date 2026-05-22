@@ -69,12 +69,7 @@ impl FastPathPlanner {
             let offset = perp * (direction * robot_diameter);
             let subgoal = obs_point + offset;
 
-            if !env.collides(&subgoal)
-                && subgoal.x >= -4.5
-                && subgoal.x <= 4.5
-                && subgoal.y >= -3.0
-                && subgoal.y <= 3.0
-            {
+            if !env.collides(&subgoal) && env.within_field(&subgoal) {
                 return Some(subgoal);
             }
 
