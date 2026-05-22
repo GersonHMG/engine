@@ -47,4 +47,63 @@ function utils.has_the_ball(robotId, team)
     return angle_diff <= ANGLE_THRESHOLD
 end
 
+
+
+
+-- Helper function to calculate Euclidean distance between a robot and the ball
+function utils.getDistance(robotPos, ballPos)
+    local dx = robotPos.x - ballPos.x
+    local dy = robotPos.y - ballPos.y
+    return math.sqrt(dx * dx + dy * dy)
+end
+
+
+--[[
+    Assigns roles to robots based on their proximity to the ball.
+    - Role 0: Always Goalkeeper (assigned to goalkeeperId if provided, otherwise none)
+    - Role 1: Closest robot to the ball (excluding the goalkeeper)
+    - Role 2: Second closest, and so on...
+--]]
+function utils.assign_roles(teamId, goalkeeperId)
+    local roleMap = {}
+    
+    -- 1. Handle the goalkeeper rule (if an ID is provided)
+    if goalkeeperId ~= nil then
+        roleMap[0] = goalkeeperId
+    end
+    
+    -- 2. Get the current ball position from the game state API
+    local ball = get_ball_state()
+    
+    -- 3. Gather all field robots (skipping the goalkeeper) and calculate their distance
+    local fieldRobots = {}
+    local allRobots 
+    
+    if teamId == 0 then
+        allRobots = get_blue_team_state()
+    else
+        allRobots = get_yellow_team_state()
+    end
+
+    for _, robot in ipairs(allRobots) do
+        -- Skip the goalkeeper if one was specified
+        if robot.id ~= goalkeeperId then
+            local distance = utils.getDistance(robot, ball)
+            table.insert(fieldRobots, { id = robot.id, dist = distance })
+        end
+    end
+    
+    -- 4. Sort the field robots by distance (closest first)
+    table.sort(fieldRobots, function(a, b)
+        return a.dist < b.dist
+    end)
+    
+    -- 5. Map the sorted order to Role IDs starting from 1
+    for roleId, robotData in ipairs(fieldRobots) do
+        roleMap[roleId] = robotData.id
+    end
+    
+    return roleMap
+end
+
 return utils
