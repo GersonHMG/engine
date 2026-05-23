@@ -16,6 +16,27 @@ local tacticas_disp = {
 
 local roles_to_id = {}
 local play_actual = {}
+local previous_state = {}
+
+-- debugging helper to print params in a readable way
+local function params_to_string(params)
+    if type(params) == "table" then
+        local result = {}
+        for _, v in pairs(params) do
+            table.insert(result, params_to_string(v))
+        end
+        for k, v in pairs(params) do
+            if type(k) ~= "number" then
+                table.insert(result, tostring(k) .. "=" .. params_to_string(v))
+            end
+        end
+        return "{" .. table.concat(result, ", ") .. "}"
+    elseif params == nil then
+        return ""
+    end
+    return tostring(params)
+end
+------------------------------------------------------------------
 
 -- Cargar la jugada desde un archivo y comenzar la ejecución
 function Runner.load_play(ruta_archivo)
@@ -116,7 +137,21 @@ function Runner.process()
         -- CONVERT "role_x" TO ROBOT IDs IN PARAMS
         -- ---------------------------------------------------------
         local mapped_params = resolve_role_params(current_tactic.param, roles_to_id)
-
+        
+        -- DEBUG PRINTING
+        local actual_tactic = current_tactic.tactic_name
+        
+        if previous_state[robot_id] ~= actual_tactic then
+            if actual_tactic ~= "none" then
+                print(string.format("Robot %s switched to tactic: %s with params: %s",
+                    tostring(robot_id),
+                    tostring(actual_tactic),
+                    params_to_string(mapped_params)
+                ))
+            end
+            previous_state[robot_id] = actual_tactic
+        end
+        ------------
         local is_tactic_done = false
         if type(mapped_params) == "table" and #mapped_params > 0 then
             is_tactic_done = tactic.process(robot_id, TEAM_ID, table.unpack(mapped_params))
