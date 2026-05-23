@@ -140,18 +140,24 @@ function Runner.process()
         
         -- DEBUG PRINTING
         local actual_tactic = current_tactic.tactic_name
-        
+        local text_debug = string.format("R%s: %s", tostring(robot_id), tostring(actual_tactic))
+
         if previous_state[robot_id] ~= actual_tactic then
             if actual_tactic ~= "none" then
-                print(string.format("Robot %s switched to tactic: %s with params: %s",
-                    tostring(robot_id),
-                    tostring(actual_tactic),
-                    params_to_string(mapped_params)
-                ))
+                print(text_debug .. " " .. params_to_string(mapped_params))
             end
             previous_state[robot_id] = actual_tactic
         end
-        ------------
+        
+        local robot_pos = get_robot_state(robot_id, TEAM_ID)
+        if robot_pos then
+            local pos_x = robot_pos.x
+            local pos_y = robot_pos.y + 0.08
+
+            draw_text(pos_x, pos_y, text_debug, {r=1.0, g=1.0, b=1.0})
+        end
+        ------------    
+        
         local is_tactic_done = false
         if type(mapped_params) == "table" and #mapped_params > 0 then
             is_tactic_done = tactic.process(robot_id, TEAM_ID, table.unpack(mapped_params))

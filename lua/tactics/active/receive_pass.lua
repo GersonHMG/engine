@@ -45,6 +45,11 @@ function receive_pass.process(robotId, team)
 
     move_to(robotId, team, {x = target_x, y = target_y})
     face_to(robotId, team, {x = bx, y = by})
+
+    if dist < 0.2 then
+        return true
+    end
+    return false
 end
 
 return receive_pass

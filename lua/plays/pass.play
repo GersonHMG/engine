@@ -5,4 +5,4 @@ ROLE 1
     none
 ROLE 2
     position_for_pass { R { -1 0 } { 0 -3 } }
-    none
+    receive_pass
