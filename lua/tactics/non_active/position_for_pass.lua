@@ -68,7 +68,7 @@ function position_for_pass.process(robotId, team, shape, p1, p2)
     face_to(robotId, team, {x = ball_pos.x, y = ball_pos.y} )
 
     local dist_to_obj = get_distance(robot_pos, best_point)
-    local TOLERANCIA = 0.05
+    local TOLERANCIA = 0.01
 
     if dist_to_obj < TOLERANCIA then
         return true
