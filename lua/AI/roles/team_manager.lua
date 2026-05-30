@@ -1,3 +1,5 @@
+-- Decide when to switch roles
+
 local utils = require("utils.utils")
 
 local TeamManager = {}

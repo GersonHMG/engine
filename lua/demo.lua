@@ -1,4 +1,4 @@
-local demo = require("AI.roles_test")
+local demo = require("AI.scenarios.two_vs_one")
 
 -- Your main engine loop
 function process()
