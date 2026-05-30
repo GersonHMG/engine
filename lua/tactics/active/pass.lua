@@ -1,25 +1,47 @@
-local pass = {}
+local kick = require("skills.kick_to_point")
 
--- Importamos la lógica robusta de chute que ya te funciona
-local kick = require("skills.kick_to_point") 
+local Pass = { State = { playing = "PLAYING", failed = "FAILED", done = "DONE" } }
+Pass.__index = Pass
 
---- Ejecuta el pase hacia un compañero específico
---- @param robotId number - El robot que tiene la pelota (el que da el pase)
---- @param team number - Tu equipo
---- @param targetRobotId number - El ID de tu compañero (el que recibe)
-function pass.process(robotId, team, targetRobotId)
-    -- 1. Obtenemos el estado (posición y rotación) del compañero
-    local mate_state = get_robot_state(targetRobotId, team)
-    
-    -- 2. Armamos la coordenada objetivo basada en dónde está el pana
-    local target_point = {
-        x = mate_state.x,   
-        y = mate_state.y
-    }
-    
-    -- 3. Invocamos tu función de chute hacia esa coordenada
-    -- Esto retornará true si ya pateó, o false si se está acomodando
-    return kick.process(robotId, team, target_point)
+function Pass.new()
+    return setmetatable({ state = Pass.State.playing }, Pass)
 end
 
-return pass
+function Pass:process(robotId, team, targetRobotId)
+    -- Early exit if already finished or failed
+    if self.state ~= Pass.State.playing then
+        return self.state == Pass.State.done
+    end
+
+    local mate = get_robot_state(targetRobotId, team)
+    if not mate then
+        self.state = Pass.State.failed
+        return false
+    end
+
+    -- Pass coordinate directly to kick function
+    if kick.process(robotId, team, { x = mate.x, y = mate.y }) then
+        self.state = Pass.State.done
+    end
+
+    return self.state == Pass.State.done
+end
+
+function Pass:get_state()
+    return self.state
+end
+
+function Pass:reset()
+    self.state = Pass.State.playing
+end
+
+-- Default instance and module export
+local def = Pass.new()
+
+return {
+    State = Pass.State,
+    new = Pass.new,
+    process = function(r, t, tr) return def:process(r, t, tr) end,
+    get_state = function() return def:get_state() end,
+    reset = function() def:reset() end
+}

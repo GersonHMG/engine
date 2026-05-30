@@ -106,4 +106,40 @@ function utils.assign_roles(teamId, goalkeeperId)
     return roleMap
 end
 
+local BallMeta = {
+    State = {
+        stopped = "Stopped",
+        moving = "Moving",
+        unknown = "Unknown" -- Useful if the camera loses the ball
+    }
+}
+
+--- Analyzes the ball's velocity to determine its meta-state
+--- @return string - "Stopped", "Moving", or "Unknown"
+function utils.get_ball_metastate()
+    local ball = get_ball_state()
+    
+    -- If the ball isn't found on the field, return unknown
+    if not ball then
+        return BallMeta.State.unknown
+    end
+
+    -- Extract velocity (default to 0 if your API doesn't provide them when stopped)
+    local vx = ball.vel_x or 0
+    local vy = ball.vel_y or 0
+
+    -- Calculate the total speed (magnitude of the velocity vector)
+    local speed = math.sqrt(vx^2 + vy^2)
+
+    -- Threshold in meters per second. Anything slower than this is considered "Stopped"
+    local STOPPED_THRESHOLD = 0.05 
+
+    if speed < STOPPED_THRESHOLD then
+        return BallMeta.State.stopped
+    else
+        return BallMeta.State.moving
+    end
+end
+
+
 return utils

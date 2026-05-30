@@ -1,55 +1,89 @@
-local receive_pass = {}
+local utils = require("utils.utils")
 
-function get_distance(p1, p2)
-    local dx = p2.x - p1.x
-    local dy = p2.y - p1.y
-    return math.sqrt(dx^2 + dy^2)
+local ReceivePass = { State = { playing = "playing", failed = "failed", done = "done" } }
+ReceivePass.__index = ReceivePass
+
+function ReceivePass.new()
+    return setmetatable({ state = ReceivePass.State.playing }, ReceivePass)
 end
 
---- Executes the receive pass tactic
+--- Executes the receive pass tactic with predictive interception
 --- @param robotId number
 --- @param team number
-function receive_pass.process(robotId, team)
-    local ball_pos = get_ball_state()
-    local robot_pos = get_robot_state(robotId, team)
-
-    local bx = ball_pos.x
-    local by = ball_pos.y
-    local rx = robot_pos.x
-    local ry = robot_pos.y
-    
-    -- The distance (in meters or your units) to place the point near the ball.
-    -- Adjust this based on how close you want the robot to stand.
-    local OFFSET = 0.15
-    
-    local target_x, target_y
-    
-    -- 1. Calculate the vector from the BALL pointing towards the ROBOT
-    local dx = rx - bx
-    local dy = ry - by
-    local dist = math.sqrt(dx^2 + dy^2)
-    
-    -- 2. Check to avoid division by zero if they are occupying the exact same coordinate
-    if dist > 0.001 then
-        -- Normalize the vector (dx/dist, dy/dist) and multiply by the desired offset
-        target_x = bx + (dx / dist) * OFFSET
-        target_y = by + (dy / dist) * OFFSET
-    else
-        target_x = bx
-        target_y = by
+function ReceivePass:process(robotId, team)
+    -- Early exit if already finished or failed
+    if self.state ~= ReceivePass.State.playing then
+        return self.state == ReceivePass.State.done
     end
 
+    local ball = get_ball_state()
+    local robot = get_robot_state(robotId, team)
 
-    -- 4. Move to the calculated interception point and ALWAYS face the ball
-    draw_point(target_x, target_y, true, {r=0.0, g=1.0, b=0.0}) -- Green point for the target
+    if not ball or not robot then
+        self.state = ReceivePass.State.failed
+        return false
+    end
 
+    local dist_to_ball = utils.getDistance(robot, ball)
+    
+    -- Default to waiting in the current position
+    local target_x, target_y = robot.x, robot.y 
+
+    -- Extract ball velocity (Update .vx and .vy if your API uses different names)
+    local bvx, bvy = ball.vel_x or 0, ball.vel_y or 0
+    local ball_speed = math.sqrt(bvx^2 + bvy^2)
+
+    -- If the ball is moving fast enough, calculate interception
+    if ball_speed > 0.1 then
+        -- 1. Get the direction the ball is traveling (normalized vector)
+        local dir_x = bvx / ball_speed
+        local dir_y = bvy / ball_speed
+        
+        -- 2. Get the vector from the ball to our robot
+        local dx = robot.x - ball.x
+        local dy = robot.y - ball.y
+        
+        -- 3. Calculate the dot product to project our robot onto the ball's path
+        local dot = (dx * dir_x) + (dy * dir_y)
+        
+        -- 4. If dot > 0, the ball is traveling towards our general direction
+        if dot > 0 then
+            -- Set target to the closest point on the ball's trajectory line
+            target_x = ball.x + (dir_x * dot)
+            target_y = ball.y + (dir_y * dot)
+        end
+    end
+
+    -- Draw a green dot at our interception/waiting point so you can debug it
+    draw_point(target_x, target_y, true, {r=0.0, g=1.0, b=0.0})
+    
+    -- Move to interception point and always keep eyes on the ball
     move_to(robotId, team, {x = target_x, y = target_y})
-    face_to(robotId, team, {x = bx, y = by})
+    face_to(robotId, team, {x = ball.x, y = ball.y})
 
-    if dist < 0.2 then
-        return true
+    -- Check if we are close enough to consider the receive successful (e.g., we trapped it)
+    if dist_to_ball < 0.15 then
+        self.state = ReceivePass.State.done
     end
-    return false
+
+    return self.state == ReceivePass.State.done
 end
 
-return receive_pass
+function ReceivePass:get_state()
+    return self.state
+end
+
+function ReceivePass:reset()
+    self.state = ReceivePass.State.playing
+end
+
+-- Default instance and module export
+local def = ReceivePass.new()
+
+return {
+    State = ReceivePass.State,
+    new = ReceivePass.new,
+    process = function(r, t) return def:process(r, t) end,
+    get_state = function() return def:get_state() end,
+    reset = function() def:reset() end
+}

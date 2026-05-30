@@ -25,10 +25,6 @@ local function get_kick_point(kick_target, offset_dist)
     return point
 end
 
-local function is_on_point(robot_id, team, target, tolerance)
-    local r_state = get_robot_state(robot_id, team)
-    return math.sqrt((r_state.x - target.x)^2 + (r_state.y - target.y)^2) <= tolerance
-end
 
 local function is_facing_point(robotId, team, target_point, tolerance)
     -- Fetch the robot's current state (adjust this function to match your API)
@@ -87,7 +83,7 @@ function kick_to_point.process(robotId, team, target)
     draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0}) -- Green point for the target
     local ball_pos = get_ball_state()
     
-    local point = get_kick_point(target, 0.09+0.20)
+    local point = get_kick_point(target, 0.09+0.10)
 
     -- Visualize the target point for debugging
     draw_point(point.x, point.y)
