@@ -250,6 +250,29 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
             Stroke::default().with_color(Color::WHITE).with_width(1.0),
         );
 
+        // Keeper areas (meters)
+        let keeper_rect = |x_min: f64, x_max: f64, y_min: f64, y_max: f64| {
+            let top_left = self.field_to_screen(bounds, x_min, y_max);
+            let bottom_right = self.field_to_screen(bounds, x_max, y_min);
+            Path::rectangle(
+                top_left,
+                Size::new(
+                    (bottom_right.x - top_left.x).abs(),
+                    (bottom_right.y - top_left.y).abs(),
+                ),
+            )
+        };
+        let right_keeper = keeper_rect(3.5, 4.5, -1.0, 1.0);
+        let left_keeper = keeper_rect(-4.5, -3.5, -1.0, 1.0);
+        frame.stroke(
+            &right_keeper,
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+        );
+        frame.stroke(
+            &left_keeper,
+            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+        );
+
         // Center circle
         let center_circle = Path::circle(Point::new(cx, cy), 500.0 * s);
         frame.stroke(
