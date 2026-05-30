@@ -8,7 +8,8 @@ use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
 
 pub struct Radio {
-    command_map: HashMap<i32, RobotCommand>,
+    // Keyed by (id, team) tuple to prevent cross-team overwrites
+    command_map: HashMap<(i32, i32), RobotCommand>,
     /// Robots that received a command last frame and need a zero-velocity
     /// default until explicitly overridden again.
     active_robots: HashSet<(i32, i32)>,
@@ -31,11 +32,11 @@ impl Radio {
                 .open()
             {
                 Ok(port) => {
-                    debug!("Radio: serial port opened on {port_name} at {baud_rate} baud");
+                    debug!("Radio: serial port opened on {} at {} baud", port_name, baud_rate);
                     Some(port)
                 }
                 Err(e) => {
-                    warn!("Radio: failed to open serial port {port_name}: {e}");
+                    warn!("Radio: failed to open serial port {}: {}", port_name, e);
                     None
                 }
             }
@@ -59,7 +60,7 @@ impl Radio {
         self.port_name = port_name.to_string();
         self.baud_rate = baud_rate;
 
-        // Close existing port (dropped)
+        // Close existing port (dropped automatically)
         self.serial_port = None;
 
         if use_radio {
@@ -72,11 +73,11 @@ impl Radio {
                 .open()
             {
                 Ok(port) => {
-                    debug!("Radio: reconfigured and opened on {port_name} at {baud_rate} baud");
+                    debug!("Radio: reconfigured and opened on {} at {} baud", port_name, baud_rate);
                     self.serial_port = Some(port);
                 }
                 Err(e) => {
-                    warn!("Radio: failed to open serial port {port_name}: {e}");
+                    warn!("Radio: failed to open serial port {}: {}", port_name, e);
                 }
             }
         } else {
@@ -84,27 +85,24 @@ impl Radio {
         }
     }
 
-    /// Pre-populate the command map with zero-velocity defaults for all
-    /// robots that were actively commanded in the previous frame.  Call
-    /// this at the start of each iteration, before any `add_*` calls.
     pub fn prepare_frame(&mut self) {
         for &(id, team) in &self.active_robots {
             self.command_map
-                .entry(id)
+                .entry((id, team))
                 .or_insert_with(|| RobotCommand::new(id, team));
         }
     }
 
     pub fn add_motion_command(&mut self, motion: MotionCommand) {
         let id = motion.id;
-        self.active_robots.insert((id, motion.team));
+        let team = motion.team;
+        self.active_robots.insert((id, team));
 
         let entry = self
             .command_map
-            .entry(id)
-            .or_insert_with(|| RobotCommand::new(id, motion.team));
+            .entry((id, team))
+            .or_insert_with(|| RobotCommand::new(id, team));
 
-        // Overwrite only if a value was explicitly provided
         if let Some(vx) = motion.vx {
             entry.motion.vx = Some(vx);
         }
@@ -118,10 +116,12 @@ impl Radio {
 
     pub fn add_kicker_command(&mut self, kicker: KickerCommand) {
         let id = kicker.id;
+        let team = kicker.team;
+        
         let entry = self
             .command_map
-            .entry(id)
-            .or_insert_with(|| RobotCommand::new(id, kicker.team));
+            .entry((id, team))
+            .or_insert_with(|| RobotCommand::new(id, team));
 
         let existing = &mut entry.kicker;
         if kicker.kick_x {
@@ -140,7 +140,7 @@ impl Radio {
             return;
         }
 
-        // Inject current commands to World for GUI/Log before sending
+        // 1. Inject current commands to World for GUI/Log before sending
         for cmd in self.command_map.values() {
             world.set_commanded_velocity(
                 cmd.id,
@@ -150,17 +150,35 @@ impl Radio {
             );
         }
 
+        // 2. HARDWARE RADIO LOGIC (Strict Serializer)
         if self.use_radio {
-            let buffer = packet_serializer::serialize(&self.command_map, 6);
-            if let Some(ref mut port) = self.serial_port {
-                if let Err(e) = port.write_all(&buffer) {
-                    warn!("Radio serial write error: {e}");
-                }
-                if let Err(e) = port.flush() {
-                    warn!("Radio serial flush error: {e}");
+            // Group commands by team so Robot 0 (Blue) doesn't overwrite Robot 0 (Yellow)
+            let mut commands_by_team: HashMap<i32, HashMap<i32, RobotCommand>> = HashMap::new();
+
+            for (&(id, team), cmd) in &self.command_map {
+                commands_by_team
+                    .entry(team)
+                    .or_default()
+                    .insert(id, cmd.clone());
+            }
+
+            // Serialize and transmit a separate packet for each team
+            for (team_id, single_team_map) in commands_by_team {
+                // Pass the strict HashMap<i32, RobotCommand> to your firmware serializer
+                let buffer = packet_serializer::serialize(&single_team_map, team_id as usize);
+                
+                if let Some(ref mut port) = self.serial_port {
+                    if let Err(e) = port.write_all(&buffer) {
+                        warn!("Radio serial write error (Team {}): {}", team_id, e);
+                    }
+                    if let Err(e) = port.flush() {
+                        warn!("Radio serial flush error (Team {}): {}", team_id, e);
+                    }
                 }
             }
-        } else {
+        } 
+        // 3. SIMULATOR LOGIC (Supports tuple map directly)
+        else {
             for cmd in self.command_map.values() {
                 let m = &cmd.motion;
                 let k = &cmd.kicker;
@@ -179,10 +197,9 @@ impl Radio {
             }
         }
 
-        // Deregister robots that were sent a pure-zero command (no active
-        // input this frame) so we stop sending to them next iteration.
-        self.active_robots.retain(|&(id, _team)| {
-            if let Some(cmd) = self.command_map.get(&id) {
+        // 4. Deregister stationary robots
+        self.active_robots.retain(|&(id, team)| {
+            if let Some(cmd) = self.command_map.get(&(id, team)) {
                 let m = &cmd.motion;
                 m.vx.unwrap_or(0.0) != 0.0 || m.vy.unwrap_or(0.0) != 0.0 || m.angular.unwrap_or(0.0) != 0.0
             } else {
@@ -195,17 +212,15 @@ impl Radio {
 
     pub fn teleport_robot(&self, id: i32, team: i32, x: f64, y: f64, orientation: f64) {
         self.grsim.communicate_pos_robot(id, team, x, y, orientation);
-        debug!(
-            "[Lua] Teleport robot ID:{id} Team:{team} to ({x}, {y})"
-        );
+        debug!("[Lua] Teleport robot ID:{} Team:{} to ({}, {})", id, team, x, y);
     }
 
     pub fn teleport_ball(&self, x: f64, y: f64) {
         self.grsim.communicate_pos_ball(x, y);
-        debug!("[Lua] Teleport ball to ({x}, {y})");
+        debug!("[Lua] Teleport ball to ({}, {})", x, y);
     }
 
-    pub fn get_command_map(&self) -> &HashMap<i32, RobotCommand> {
+    pub fn get_command_map(&self) -> &HashMap<(i32, i32), RobotCommand> {
         &self.command_map
     }
 }
