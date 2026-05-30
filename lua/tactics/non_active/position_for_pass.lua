@@ -9,7 +9,15 @@ end
 --- @param robotId number
 --- @param team number
 --- @param region table {min_x, max_x, min_y, max_y}
-function position_for_pass.process(robotId, team, region)
+function position_for_pass.process(robotId, team, shape, p1, p2)
+
+    local region = {
+        min_x = math.min(p1[1], p2[1]),
+        max_x = math.max(p1[1], p2[1]),
+        min_y = math.min(p1[2], p2[2]),
+        max_y = math.max(p1[2], p2[2])
+    }
+
     local ball_pos = get_ball_state()
     local robot_pos = get_robot_state(robotId, team)
     
@@ -59,7 +67,14 @@ function position_for_pass.process(robotId, team, region)
     move_to(robotId, team, best_point)
     face_to(robotId, team, {x = ball_pos.x, y = ball_pos.y} )
 
-    return true
+    local dist_to_obj = get_distance(robot_pos, best_point)
+    local TOLERANCIA = 0.01
+
+    if dist_to_obj < TOLERANCIA then
+        return true
+    else
+        return false
+    end
 end
 
 return position_for_pass
