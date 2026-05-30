@@ -1,15 +1,14 @@
 local pass_to_point = require("tactics.active.pass_to_point")
 local shoot_module = require("tactics.active.shoot")
 local utils = require("utils.utils")
-local blackboard = require("AI.blackboard")
 
 local Offense = {}
 Offense.__index = Offense
 
-function Offense.new()
-    -- We keep track of what the robot is currently doing so it doesn't 
-    -- rapidly switch its mind halfway through a kick.
-    return setmetatable({ current_action = nil }, Offense)
+function Offense.new(team_blackboard)
+    local self = setmetatable({ current_action = nil }, Offense)
+    self.blackboard = team_blackboard
+    return self
 end
 
 --- Executes the Offense role decision engine
@@ -57,7 +56,7 @@ function Offense:process(robotId, team, teammateId)
 
     elseif self.current_action == "passing" then
         -- Read the best open coordinate from the shared memory
-        local pass_target = blackboard.get("best_pass_point")
+        local pass_target = self.blackboard:get("best_pass_point")
         -- Make sure the Support role has actually posted a point before passing
         if pass_target then
             local is_done = pass_to_point.process(robotId, team, pass_target)

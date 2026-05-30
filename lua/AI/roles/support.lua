@@ -1,12 +1,14 @@
 local utils = require("utils.utils")
 local receive_pass = require("tactics.active.receive_pass")
-local blackboard = require("AI.blackboard") -- Import the new central class
 
 local Support = {}
 Support.__index = Support
 
-function Support.new()
-    return setmetatable({}, Support)
+function Support.new(team_blackboard)
+    local self = setmetatable({}, Support)
+    -- Save the specific blackboard to this instance
+    self.blackboard = team_blackboard
+    return self
 end
 
 --- Executes the continuous support role to maintain an open passing lane
@@ -43,7 +45,7 @@ function Support:process(robotId, team)
 
         -- PUBLISH TO THE BLACKBOARD:
         -- We save the target coordinate so the Offense role can read it later.
-        blackboard.set("best_pass_point", { x = target_x, y = target_y })
+        self.blackboard:set("best_pass_point", { x = target_x, y = target_y })
         
         draw_point(target_x, target_y, true, {r=0.0, g=0.0, b=1.0})
         move_to(robotId, team, {x = target_x, y = target_y})
