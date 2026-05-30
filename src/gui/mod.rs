@@ -91,11 +91,17 @@ pub struct EngineApp {
     replay: ReplayState,
 }
 
+fn app_icon() -> Option<window::Icon> {
+    // Best-effort icon load; missing/invalid icon falls back to default.
+    window::icon::from_file("icons/sysmic.ico").ok()
+}
+
 impl EngineApp {
     /// Boot function for iced::daemon — opens the main window and returns initial state + tasks
     pub fn boot(channels: GuiChannels, field_config: FieldConfig) -> (Self, iced::Task<Message>) {
         let (main_id, open_task) = window::open(window::Settings {
             size: iced::Size::new(900.0, 600.0),
+            icon: app_icon(),
             ..Default::default()
         });
 
@@ -176,6 +182,7 @@ impl EngineApp {
         let (id, task) = window::open(window::Settings {
             size,
             resizable: true,
+            icon: app_icon(),
             ..Default::default()
         });
 
