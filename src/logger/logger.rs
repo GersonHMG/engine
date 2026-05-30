@@ -69,7 +69,7 @@ impl Logger {
         blue_robots: &[RobotState],
         yellow_robots: &[RobotState],
         ball: &BallState,
-        command_map: &HashMap<i32, RobotCommand>,
+        command_map: &HashMap<(i32, i32), RobotCommand>,
     ) {
         if !self.is_logging {
             return;
@@ -102,8 +102,7 @@ impl Logger {
                 };
 
                 let (vx_cmd, vy_cmd, angular_cmd) = command_map
-                    .get(&id)
-                    .filter(|c| c.id == id && c.team == team)
+                    .get(&(id, team))
                     .map(|c| (c.motion.vx.unwrap_or(0.0), c.motion.vy.unwrap_or(0.0), c.motion.angular.unwrap_or(0.0)))
                     .unwrap_or((0.0, 0.0, 0.0));
 
