@@ -1,0 +1,8 @@
+PLAY Triangle Pass Challenge
+
+ROLE 1
+    bring_ball { 0  1 }
+    none
+
+ROLE 2
+    none

@@ -1,0 +1,14 @@
+PLAY Dual Pass Challenge
+
+ROLE 1
+    bring_ball { 1 0 }
+    pass role_2
+    position_for_pass { R { 1 0 } { 1 0 } }
+    receive_pass
+    none
+
+ROLE 2
+    position_for_pass { R { -1 0 } { -1 0 } }
+    receive_pass
+    pass role_1
+    none

@@ -11,7 +11,7 @@ grsim.teleport_ball(0.0, 0.0)
 
 
 -- Instantiate a new play object
-local play_engine = PlayEngine.new("lua/plays/pass.play")
+local play_engine = PlayEngine.new("lua/plays/triangle_pass.play")
 
 -- Your main engine loop
 function process()
