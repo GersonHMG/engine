@@ -1,19 +1,16 @@
-local robotId = 0
-local targetRobotId = 1
 local team = 0
 
-local PlayEngine = require("play_engine.play_engine")
+-- Import challenge module
+local Challenge = require("challenge")
 
-grsim.teleport_robot(targetRobotId, team, 1.0, 1.0, 0.0)
-grsim.teleport_robot(robotId, team, -0.5, -0.5, 0.0)
+-- Initial setup: teleport robots to starting positions and ball to center
+grsim.teleport_robot(0, team, -0.8, 0.8, 0.0)
+grsim.teleport_robot(1, team, -0.8, -0.8, 0.0)
+grsim.teleport_robot(2, team, 0.8, 0.0, 0.0)
 
 grsim.teleport_ball(0.0, 0.0)
 
-
--- Instantiate a new play object
-local play_engine = PlayEngine.new("lua/plays/triangle_pass.play")
-
 -- Your main engine loop
 function process()
-    play_engine:process()
+    Challenge.process()
 end

@@ -9,7 +9,7 @@ local tacticas_disp = {
     pass = require("tactics.active.pass"),
     position_for_pass = require("tactics.non_active.position_for_pass"),
     receive_pass = require("tactics.active.receive_pass"),
-    bring_ball = require("skills.move_ball"),
+    bring_ball = require("skills.move_ball  "),
     none = {
         process = function() return false end
     }

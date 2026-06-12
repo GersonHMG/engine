@@ -80,7 +80,7 @@ end
 
 function kick_to_point.process(robotId, team, target)
     -- Get the point to move to before kicking
-    draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0}) -- Green point for the target
+    draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0})
     local ball_pos = get_ball_state()
     
     local point = get_kick_point(target, 0.09+0.10)
@@ -88,7 +88,9 @@ function kick_to_point.process(robotId, team, target)
     -- Visualize the target point for debugging
     draw_point(point.x, point.y)
     local robot_pos = get_robot_state(robotId, team)
-    if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, ball_pos, 0.1) then
+    
+    -- More lenient conditions: allow robot to move and aim simultaneously
+    if is_on_kicking_line(robot_pos, ball_pos, point, 0.2) and is_facing_point(robotId, team, target, 0.4) then
         local point = get_kick_point(target, 0.045)
         move_direct(robotId, team, {x = point.x, y = point.y})
         
@@ -99,9 +101,10 @@ function kick_to_point.process(robotId, team, target)
         return false
     end
 
-    -- Move to the calculated point
-    face_to(robotId, team, {x = ball_pos.x, y = ball_pos.y})
+    -- Move toward the target position while facing the receiver
+    -- This allows smooth motion and aiming
     move_to(robotId, team, {x = point.x, y = point.y})
+    face_to(robotId, team, target)
 
     return false
 end

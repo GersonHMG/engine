@@ -7,7 +7,7 @@ end
 
 -- Main process loop
 function move.process(robotId, team, target)
-    local tolerance = 0.1
+    local tolerance = 0.01
     if move.is_on_point(robotId, team, target, tolerance) then
         return true
     end

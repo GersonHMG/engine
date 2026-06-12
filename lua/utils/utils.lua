@@ -14,11 +14,11 @@ function utils.has_the_ball(robotId, team)
     -- ---------------------------------------------------------
     -- The maximum distance to be considered "touching" the dribbler. 
     -- (Roughly the robot's radius + ball's radius + small tolerance)
-    local DISTANCE_THRESHOLD = 0.135
+    local DISTANCE_THRESHOLD = 0.11 
     
     -- The maximum angular spread of the dribbler mouth (in radians).
     -- 0.35 radians is roughly 20 degrees.
-    local ANGLE_THRESHOLD = 0.5
+    local ANGLE_THRESHOLD = 0.35 
     -- ---------------------------------------------------------
 
     -- 1. Calculate the distance between the robot's center and the ball
