@@ -29,7 +29,7 @@ local ReceivePass = require("tactics.active.receive_pass")
 local CONFIG = {
     TEAM = 0, -- Blue team (0 = blue, 1 = yellow)
     ROBOT_IDS = {0, 1, 2}, -- Robot IDs
-    TRIANGLE_RADIUS = 0.8, -- Distance from center to each vertex
+    TRIANGLE_RADIUS = 1, -- Distance from center to each vertex
     FORMATION_CENTER = {
         x = 0,
         y = 0
@@ -315,28 +315,34 @@ local function state_passing()
 
     -- If the holder still has the ball, prepare the pass
     if has_the_ball(holder, CONFIG.TEAM) then
-        Challenge.set_robot_action(holder, "passing")
-
+        -- 1. Calculamos las posiciones primero
         local holder_vertex = Challenge.triangle_vertices[holder_idx]
-        -- Get receiver ID and convert to triangle index (ID + 1)
         local receiver_id = Challenge.get_next_receiver(holder)
         local receiver_vertex = Challenge.triangle_vertices[receiver_id + 1]
         
-        -- Move toward position while aiming at receiver simultaneously
+        -- 2. Nos movemos hacia la posición
         move_to(holder, CONFIG.TEAM, holder_vertex)
-        rotate_to_aim.process(holder, CONFIG.TEAM, receiver_vertex, 0.2)
+        
+        -- 3. Verificamos si ya está apuntando al receptor
+        local is_aimed = rotate_to_aim.process(holder, CONFIG.TEAM, receiver_vertex, 0.05)
 
-        -- Create a new Pass instance for this pass if not already created
-        if not Challenge.pass_instance or Challenge.pass_instance:get_state() == Pass.State.done then
-            Challenge.pass_instance = Pass.new()
-        end
+        -- 4. Solo ejecutamos el pase si ya terminó de apuntar
+        if is_aimed then
+            Challenge.set_robot_action(holder, "passing")
 
-        -- Use Pass tactic to kick to receiver - use receiver_id (calculated, not stored)
-        -- Use Pass tactic to kick to receiver - use receiver_id (calculated, not stored)
-        if Challenge.pass_instance:process(holder, CONFIG.TEAM, receiver_id) then
-            -- El pase se ha ejecutado (el balón está rodando).
-            -- NO actualizamos los roles todavía. Dejamos que el bloque 'else' maneje la recepción.
-            Challenge.pass_start_frame = Challenge.frame
+            -- Create a new Pass instance for this pass if not already created
+            if not Challenge.pass_instance or Challenge.pass_instance:get_state() == Pass.State.done then
+                Challenge.pass_instance = Pass.new()
+            end
+
+            -- Use Pass tactic to kick to receiver
+            if Challenge.pass_instance:process(holder, CONFIG.TEAM, receiver_id) then
+                -- El pase se ha ejecutado (el balón está rodando).
+                Challenge.pass_start_frame = Challenge.frame
+            end
+        else
+            -- Si no está apuntando, actualizamos el estado visual
+            Challenge.set_robot_action(holder, "aiming")
         end
     else
         -- Receiver waiting for pass

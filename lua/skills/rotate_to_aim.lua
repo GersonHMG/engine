@@ -74,7 +74,7 @@ function rotate_to_aim.process(robotId, team, target, tolerance)
 	face_to(robotId, team, target)
 	
 	-- Keep very low velocity to avoid drifting far from position
-	send_velocity(robotId, team, 0, 0, 0)
+	-- send_velocity(robotId, team, 0, 0, 0)
 	
 	return false
 end

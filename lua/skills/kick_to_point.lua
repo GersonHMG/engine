@@ -90,7 +90,7 @@ function kick_to_point.process(robotId, team, target)
     local robot_pos = get_robot_state(robotId, team)
     
     -- More lenient conditions: allow robot to move and aim simultaneously
-    if is_on_kicking_line(robot_pos, ball_pos, point, 0.2) and is_facing_point(robotId, team, target, 0.4) then
+    if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, target, 0.05) then
         local point = get_kick_point(target, 0.045)
         move_direct(robotId, team, {x = point.x, y = point.y})
         
