@@ -1,6 +1,6 @@
 // lua_interface/mod.rs — Lua scripting interface
 
-mod api;
+pub(crate) mod api;
 
 use crate::game_controller::GameState;
 use crate::sender::radio::Radio;

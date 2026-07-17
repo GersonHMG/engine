@@ -144,7 +144,7 @@ async fn run_engine(
     let game_state = Arc::new(Mutex::new(GameState::new()));
     let radio = Arc::new(Mutex::new(Radio::new(use_radio, &radio_port, radio_baud)));
     let vision_state = Arc::new(Mutex::new(VisionState::default()));
-    let logger = Arc::new(Mutex::new(Logger::new()));
+    let logger: Arc<Mutex<Option<Logger>>> = Arc::new(Mutex::new(None));
 
     let lua_iface = Arc::new(Mutex::new(LuaInterface::new(
         Arc::clone(&radio),
@@ -213,6 +213,15 @@ async fn run_engine(
 
     loop {
         let frame_start = Instant::now();
+
+        // Update current elapsed time in logger registry if session is active
+        {
+            let mut reg = crate::logger::get_registry().lock().unwrap();
+            if let Some(start) = reg.session_start() {
+                let elapsed = start.elapsed().as_secs_f64();
+                reg.set_current_elapsed(elapsed);
+            }
+        }
 
         // Remove robots that have not updated in 60*4 frames (~4s).
         {
@@ -288,16 +297,29 @@ async fn run_engine(
                     }
                 }
                 EngineCommand::StartRecording { filename } => {
-                    let mut l = logger.lock().unwrap();
-                    if !l.is_logging() {
-                        l.start_logging(Some(&filename));
-                        info!("Started recording to {}", filename);
+                    let mut l_opt = logger.lock().unwrap();
+                    if l_opt.is_none() {
+                        let cols = vec![
+                            "ElapsedTime", "RobotID", "Team", "Vx_Command", "Vy_Command", "Angular_Command",
+                            "Pos_X", "Pos_Y", "Orientation", "Vx_Actual", "Vy_Actual"
+                        ];
+                        match Logger::new("system_log", cols, true) {
+                            Ok(l) => {
+                                *l_opt = Some(l);
+                                info!("Started recording system_log to {}", filename);
+                            }
+                            Err(e) => {
+                                warn!("Failed to start system logger: {}", e);
+                            }
+                        }
                     }
                 }
                 EngineCommand::StopRecording => {
-                    let mut l = logger.lock().unwrap();
-                    if l.is_logging() {
-                        l.stop_logging();
+                    let mut l_opt = logger.lock().unwrap();
+                    if l_opt.is_some() {
+                        *l_opt = None;
+                        let mut reg = crate::logger::get_registry().lock().unwrap();
+                        reg.stop_session();
                         info!("Stopped recording");
                     }
                 }
@@ -403,14 +425,18 @@ async fn run_engine(
         };
 
         {
-            let mut l = match logger.lock() {
+            let l_opt = match logger.lock() {
                 Ok(guard) => guard,
                 Err(poisoned) => {
                     warn!("Logger lock poisoned, recovering");
                     poisoned.into_inner()
                 }
             };
-            l.log_frame(&log_blue_robots, &log_yellow_robots, &log_ball, &log_command_map);
+            if let Some(ref l) = *l_opt {
+                if let Err(e) = l.log_frame(&log_blue_robots, &log_yellow_robots, &log_ball, &log_command_map) {
+                    warn!("Failed to log frame: {}", e);
+                }
+            }
         }
 
         // Send radio commands

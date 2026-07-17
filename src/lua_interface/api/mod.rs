@@ -2,6 +2,7 @@ mod control;
 mod draw_gui;
 mod grsim;
 mod state;
+pub(crate) mod logger;
 
 use crate::game_controller::GameState;
 use crate::sender::radio::Radio;
@@ -21,4 +22,5 @@ pub(super) fn register_api_functions(
     state::register_robot_state_functions(lua, Arc::clone(&world), game_state);
     control::register_control_functions(lua, Arc::clone(&radio), world);
     grsim::register_grsim_functions(lua, radio);
+    logger::register_logger_functions(lua);
 }
