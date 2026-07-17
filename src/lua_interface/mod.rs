@@ -247,3 +247,32 @@ fn lua_value_to_string(value: &LuaValue) -> String {
         LuaValue::Other(_) => "{other}".to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex, RwLock};
+    use crate::sender::radio::Radio;
+    use crate::world::World;
+    use crate::game_controller::GameState;
+
+    #[test]
+    fn test_trajectory_suite_loading() {
+        let radio = Arc::new(Mutex::new(Radio::new(false, "", 115200)));
+        let world = Arc::new(RwLock::new(World::new(6, 6, 12.0, 9.0)));
+        let game_state = Arc::new(Mutex::new(GameState::new()));
+        
+        let mut interface = LuaInterface::new(radio, world, game_state, None);
+        let state = interface.run_script("lua/run_trajectory_tests.lua");
+        
+        assert_eq!(state, ScriptExecState::Paused);
+        assert!(!interface.has_failed);
+        assert!(interface.have_script);
+
+        // Resume and tick once to ensure it starts executing
+        interface.resume_script();
+        let state2 = interface.call_process();
+        assert_eq!(state2, ScriptExecState::Running);
+        assert!(!interface.has_failed);
+    }
+}
