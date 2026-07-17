@@ -9,6 +9,21 @@ use std::time::Instant;
 use std::sync::{Mutex, OnceLock, mpsc};
 use tracing::{info, warn};
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum LogValue {
+    Float(f64),
+    Str(String),
+}
+
+impl std::fmt::Display for LogValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogValue::Float(v) => write!(f, "{}", v),
+            LogValue::Str(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum LoggerError {
     SessionNotActive,
@@ -52,7 +67,7 @@ pub enum LogMessage {
         log_name: String,
         elapsed_time: f64,
         is_main: bool,
-        data: HashMap<String, f64>,
+        data: HashMap<String, LogValue>,
     },
     LogJson {
         log_name: String,
@@ -66,6 +81,7 @@ pub struct LoggerRegistry {
     pub session_start: Option<Instant>,
     pub current_elapsed: f64,
     pub columns: HashMap<String, Vec<String>>,
+    pub pending_columns: HashMap<String, Vec<String>>,
     pub sender: Option<mpsc::Sender<LogMessage>>,
     pub bg_thread_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -77,6 +93,7 @@ impl LoggerRegistry {
             session_start: None,
             current_elapsed: 0.0,
             columns: HashMap::new(),
+            pending_columns: HashMap::new(),
             sender: None,
             bg_thread_handle: None,
         }
@@ -102,6 +119,13 @@ impl LoggerRegistry {
         self.bg_thread_handle = Some(handle);
 
         info!("Logging session started in directory: {}", self.session_dir.as_ref().unwrap());
+
+        // Register any pending columns that were defined before the session started
+        let pending = std::mem::take(&mut self.pending_columns);
+        for (name, cols) in pending {
+            self.register_columns(&name, cols)?;
+        }
+
         Ok(())
     }
 
@@ -137,6 +161,7 @@ impl LoggerRegistry {
         self.session_start = None;
         self.current_elapsed = 0.0;
         self.columns.clear();
+        self.pending_columns.clear();
         info!("Logging session stopped.");
     }
 
@@ -159,9 +184,8 @@ pub fn get_registry() -> &'static Mutex<LoggerRegistry> {
 pub struct Logger {
     log_name: String,
     #[allow(dead_code)]
-    columns: Vec<String>,
+    _columns: Vec<String>,
     is_main: bool,
-    sender: mpsc::Sender<LogMessage>,
 }
 
 impl Logger {
@@ -175,44 +199,61 @@ impl Logger {
     ) -> Result<Self, LoggerError> {
         let mut reg = get_registry().lock().unwrap();
 
-        if reg.session_dir.is_none() {
+        if is_main && reg.session_dir.is_none() {
             reg.start_session(log_name)?;
         }
 
         let cols: Vec<String> = columns.into_iter().map(|s| s.to_string()).collect();
-        reg.register_columns(log_name, cols.clone())?;
-
-        let sender = reg.sender.clone().ok_or(LoggerError::SessionNotActive)?;
+        if reg.session_dir.is_some() {
+            reg.register_columns(log_name, cols.clone())?;
+        } else {
+            reg.pending_columns.entry(log_name.to_string()).or_default().extend(cols.clone());
+        }
 
         Ok(Self {
             log_name: log_name.to_string(),
-            columns: cols,
+            _columns: cols,
             is_main,
-            sender,
         })
     }
 
     /// Registra valores en las columnas de este logger para el frame actual
-    pub fn log_csv(&self, data: HashMap<String, f64>) -> Result<(), LoggerError> {
-        let elapsed_time = {
+    pub fn log_csv(&self, data: HashMap<String, LogValue>) -> Result<(), LoggerError> {
+        let (elapsed_time, sender) = {
             let reg = get_registry().lock().unwrap();
-            reg.current_elapsed
+            if reg.session_dir.is_none() {
+                return Ok(()); // Silent no-op if session is not active
+            }
+            (reg.current_elapsed, reg.sender.clone())
         };
-        self.sender.send(LogMessage::LogCsv {
-            log_name: self.log_name.clone(),
-            elapsed_time,
-            is_main: self.is_main,
-            data,
-        })?;
+
+        if let Some(s) = sender {
+            s.send(LogMessage::LogCsv {
+                log_name: self.log_name.clone(),
+                elapsed_time,
+                is_main: self.is_main,
+                data,
+            })?;
+        }
         Ok(())
     }
 
     /// Escribe metadatos en el reporte JSON general de la sesión
     pub fn log_json(&self, data: serde_json::Value) -> Result<(), LoggerError> {
-        self.sender.send(LogMessage::LogJson {
-            log_name: self.log_name.clone(),
-            data,
-        })?;
+        let sender = {
+            let reg = get_registry().lock().unwrap();
+            if reg.session_dir.is_none() {
+                return Ok(()); // Silent no-op if session is not active
+            }
+            reg.sender.clone()
+        };
+
+        if let Some(s) = sender {
+            s.send(LogMessage::LogJson {
+                log_name: self.log_name.clone(),
+                data,
+            })?;
+        }
         Ok(())
     }
 
@@ -247,32 +288,32 @@ impl Logger {
                     .unwrap_or((0.0, 0.0, 0.0));
 
                 let mut data = HashMap::new();
-                data.insert("RobotID".to_string(), id as f64);
-                data.insert("Team".to_string(), team as f64);
-                data.insert("Vx_Command".to_string(), vx_cmd);
-                data.insert("Vy_Command".to_string(), vy_cmd);
-                data.insert("Angular_Command".to_string(), angular_cmd);
-                data.insert("Pos_X".to_string(), pos_x);
-                data.insert("Pos_Y".to_string(), pos_y);
-                data.insert("Orientation".to_string(), orientation);
-                data.insert("Vx_Actual".to_string(), vx_actual);
-                data.insert("Vy_Actual".to_string(), vy_actual);
+                data.insert("RobotID".to_string(), LogValue::Float(id as f64));
+                data.insert("Team".to_string(), LogValue::Float(team as f64));
+                data.insert("Vx_Command".to_string(), LogValue::Float(vx_cmd));
+                data.insert("Vy_Command".to_string(), LogValue::Float(vy_cmd));
+                data.insert("Angular_Command".to_string(), LogValue::Float(angular_cmd));
+                data.insert("Pos_X".to_string(), LogValue::Float(pos_x));
+                data.insert("Pos_Y".to_string(), LogValue::Float(pos_y));
+                data.insert("Orientation".to_string(), LogValue::Float(orientation));
+                data.insert("Vx_Actual".to_string(), LogValue::Float(vx_actual));
+                data.insert("Vy_Actual".to_string(), LogValue::Float(vy_actual));
 
                 self.log_csv(data)?;
             }
         }
 
         let mut data = HashMap::new();
-        data.insert("RobotID".to_string(), -1.0);
-        data.insert("Team".to_string(), -1.0);
-        data.insert("Vx_Command".to_string(), 0.0);
-        data.insert("Vy_Command".to_string(), 0.0);
-        data.insert("Angular_Command".to_string(), 0.0);
-        data.insert("Pos_X".to_string(), ball.position.x);
-        data.insert("Pos_Y".to_string(), ball.position.y);
-        data.insert("Orientation".to_string(), 0.0);
-        data.insert("Vx_Actual".to_string(), ball.velocity.x);
-        data.insert("Vy_Actual".to_string(), ball.velocity.y);
+        data.insert("RobotID".to_string(), LogValue::Float(-1.0));
+        data.insert("Team".to_string(), LogValue::Float(-1.0));
+        data.insert("Vx_Command".to_string(), LogValue::Float(0.0));
+        data.insert("Vy_Command".to_string(), LogValue::Float(0.0));
+        data.insert("Angular_Command".to_string(), LogValue::Float(0.0));
+        data.insert("Pos_X".to_string(), LogValue::Float(ball.position.x));
+        data.insert("Pos_Y".to_string(), LogValue::Float(ball.position.y));
+        data.insert("Orientation".to_string(), LogValue::Float(0.0));
+        data.insert("Vx_Actual".to_string(), LogValue::Float(ball.velocity.x));
+        data.insert("Vy_Actual".to_string(), LogValue::Float(ball.velocity.y));
 
         self.log_csv(data)?;
 
@@ -285,8 +326,8 @@ impl Logger {
 struct LogFileState {
     file_path: String,
     columns: Vec<String>,
-    rows: Vec<HashMap<String, f64>>,
-    pending_ticks: HashMap<i64, (Vec<HashMap<String, f64>>, Vec<HashMap<String, f64>>)>,
+    rows: Vec<HashMap<String, LogValue>>,
+    pending_ticks: HashMap<i64, (Vec<HashMap<String, LogValue>>, Vec<HashMap<String, LogValue>>)>,
 }
 
 fn run_file_writer_manager(session_dir: String, rx: mpsc::Receiver<LogMessage>) {
@@ -385,28 +426,32 @@ fn run_file_writer_manager(session_dir: String, rx: mpsc::Receiver<LogMessage>) 
 
 fn consolidate_rows(
     elapsed_time: f64,
-    main_rows: Vec<HashMap<String, f64>>,
-    sec_rows: Vec<HashMap<String, f64>>,
-) -> Vec<HashMap<String, f64>> {
+    main_rows: Vec<HashMap<String, LogValue>>,
+    sec_rows: Vec<HashMap<String, LogValue>>,
+) -> Vec<HashMap<String, LogValue>> {
     let mut final_rows = main_rows;
 
-    if final_rows.is_empty() {
-        for mut s in sec_rows {
-            s.insert("ElapsedTime".to_string(), elapsed_time);
-            final_rows.push(s);
-        }
-        return final_rows;
-    }
-
     for r in &mut final_rows {
-        r.insert("ElapsedTime".to_string(), elapsed_time);
+        r.insert("ElapsedTime".to_string(), LogValue::Float(elapsed_time));
     }
 
     for mut s in sec_rows {
-        if let (Some(&robot_id), Some(&team)) = (s.get("RobotID"), s.get("Team")) {
+        if let (Some(LogValue::Float(robot_id)), Some(LogValue::Float(team))) = (s.get("RobotID"), s.get("Team")) {
             let matched = final_rows.iter_mut().find(|r| {
-                r.get("RobotID").map(|&id| (id - robot_id).abs() < 0.1).unwrap_or(false)
-                    && r.get("Team").map(|&t| (t - team).abs() < 0.1).unwrap_or(false)
+                r.get("RobotID").map(|id| {
+                    if let LogValue::Float(id_f) = id {
+                        (id_f - robot_id).abs() < 0.1
+                    } else {
+                        false
+                    }
+                }).unwrap_or(false)
+                    && r.get("Team").map(|t| {
+                        if let LogValue::Float(team_f) = t {
+                            (team_f - team).abs() < 0.1
+                        } else {
+                            false
+                        }
+                    }).unwrap_or(false)
             });
             if let Some(r) = matched {
                 for (k, v) in s {
@@ -415,7 +460,7 @@ fn consolidate_rows(
                     }
                 }
             } else {
-                s.insert("ElapsedTime".to_string(), elapsed_time);
+                s.insert("ElapsedTime".to_string(), LogValue::Float(elapsed_time));
                 final_rows.push(s);
             }
         } else {
@@ -424,7 +469,7 @@ fn consolidate_rows(
                     first.insert(k, v);
                 }
             } else {
-                s.insert("ElapsedTime".to_string(), elapsed_time);
+                s.insert("ElapsedTime".to_string(), LogValue::Float(elapsed_time));
                 final_rows.push(s);
             }
         }
@@ -433,17 +478,22 @@ fn consolidate_rows(
     final_rows
 }
 
-fn format_val(val: f64, col_name: &str) -> String {
-    if col_name == "ElapsedTime" {
-        format!("{:.3}", val)
-    } else if col_name == "RobotID" || col_name == "Team" {
-        format!("{:.0}", val)
-    } else {
-        format!("{}", val)
+fn format_val(val: &LogValue, col_name: &str) -> String {
+    match val {
+        LogValue::Float(f) => {
+            if col_name == "ElapsedTime" {
+                format!("{:.3}", f)
+            } else if col_name == "RobotID" || col_name == "Team" {
+                format!("{:.0}", f)
+            } else {
+                format!("{}", f)
+            }
+        }
+        LogValue::Str(s) => s.clone(),
     }
 }
 
-fn write_rows_to_file(file_path: &str, columns: &[String], rows: &[HashMap<String, f64>]) {
+fn write_rows_to_file(file_path: &str, columns: &[String], rows: &[HashMap<String, LogValue>]) {
     let file_exists = std::path::Path::new(file_path).exists();
     let file = match fs::OpenOptions::new()
         .create(true)
@@ -467,7 +517,7 @@ fn write_rows_to_file(file_path: &str, columns: &[String], rows: &[HashMap<Strin
     for row in rows {
         let mut line_parts = Vec::new();
         for col in columns {
-            if let Some(&val) = row.get(col) {
+            if let Some(val) = row.get(col) {
                 line_parts.push(format_val(val, col));
             } else {
                 line_parts.push("".to_string());
@@ -478,7 +528,7 @@ fn write_rows_to_file(file_path: &str, columns: &[String], rows: &[HashMap<Strin
     let _ = writer.flush();
 }
 
-fn rewrite_csv_file(file_path: &str, columns: &[String], rows: &[HashMap<String, f64>]) {
+fn rewrite_csv_file(file_path: &str, columns: &[String], rows: &[HashMap<String, LogValue>]) {
     let file = match fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -502,7 +552,7 @@ fn rewrite_csv_file(file_path: &str, columns: &[String], rows: &[HashMap<String,
     for row in rows {
         let mut line_parts = Vec::new();
         for col in columns {
-            if let Some(&val) = row.get(col) {
+            if let Some(val) = row.get(col) {
                 line_parts.push(format_val(val, col));
             } else {
                 line_parts.push("".to_string());
@@ -561,16 +611,16 @@ mod tests {
         let main_rows = vec![
             {
                 let mut m = HashMap::new();
-                m.insert("RobotID".to_string(), 0.0);
-                m.insert("Team".to_string(), 0.0);
-                m.insert("Pos_X".to_string(), 1.0);
+                m.insert("RobotID".to_string(), LogValue::Float(0.0));
+                m.insert("Team".to_string(), LogValue::Float(0.0));
+                m.insert("Pos_X".to_string(), LogValue::Float(1.0));
                 m
             },
             {
                 let mut m = HashMap::new();
-                m.insert("RobotID".to_string(), 1.0);
-                m.insert("Team".to_string(), 0.0);
-                m.insert("Pos_X".to_string(), 2.0);
+                m.insert("RobotID".to_string(), LogValue::Float(1.0));
+                m.insert("Team".to_string(), LogValue::Float(0.0));
+                m.insert("Pos_X".to_string(), LogValue::Float(2.0));
                 m
             }
         ];
@@ -578,9 +628,9 @@ mod tests {
         let sec_rows = vec![
             {
                 let mut m = HashMap::new();
-                m.insert("RobotID".to_string(), 0.0);
-                m.insert("Team".to_string(), 0.0);
-                m.insert("target_theta".to_string(), 3.14);
+                m.insert("RobotID".to_string(), LogValue::Float(0.0));
+                m.insert("Team".to_string(), LogValue::Float(0.0));
+                m.insert("target_theta".to_string(), LogValue::Float(3.14));
                 m
             }
         ];
@@ -589,16 +639,16 @@ mod tests {
         assert_eq!(result.len(), 2);
         
         // Find row for robot 0
-        let r0 = result.iter().find(|r| r.get("RobotID") == Some(&0.0)).unwrap();
-        assert_eq!(r0.get("Pos_X"), Some(&1.0));
-        assert_eq!(r0.get("target_theta"), Some(&3.14));
-        assert_eq!(r0.get("ElapsedTime"), Some(&0.016));
+        let r0 = result.iter().find(|r| r.get("RobotID") == Some(&LogValue::Float(0.0))).unwrap();
+        assert_eq!(r0.get("Pos_X"), Some(&LogValue::Float(1.0)));
+        assert_eq!(r0.get("target_theta"), Some(&LogValue::Float(3.14)));
+        assert_eq!(r0.get("ElapsedTime"), Some(&LogValue::Float(0.016)));
 
         // Find row for robot 1 (should have empty/None for target_theta)
-        let r1 = result.iter().find(|r| r.get("RobotID") == Some(&1.0)).unwrap();
-        assert_eq!(r1.get("Pos_X"), Some(&2.0));
+        let r1 = result.iter().find(|r| r.get("RobotID") == Some(&LogValue::Float(1.0))).unwrap();
+        assert_eq!(r1.get("Pos_X"), Some(&LogValue::Float(2.0)));
         assert_eq!(r1.get("target_theta"), None);
-        assert_eq!(r1.get("ElapsedTime"), Some(&0.016));
+        assert_eq!(r1.get("ElapsedTime"), Some(&LogValue::Float(0.016)));
     }
 
     #[test]
@@ -606,9 +656,9 @@ mod tests {
         let main_rows = vec![
             {
                 let mut m = HashMap::new();
-                m.insert("RobotID".to_string(), 0.0);
-                m.insert("Team".to_string(), 0.0);
-                m.insert("Pos_X".to_string(), 1.0);
+                m.insert("RobotID".to_string(), LogValue::Float(0.0));
+                m.insert("Team".to_string(), LogValue::Float(0.0));
+                m.insert("Pos_X".to_string(), LogValue::Float(1.0));
                 m
             }
         ];
@@ -616,7 +666,7 @@ mod tests {
         let sec_rows = vec![
             {
                 let mut m = HashMap::new();
-                m.insert("custom_var".to_string(), 42.0);
+                m.insert("custom_var".to_string(), LogValue::Float(42.0));
                 m
             }
         ];
@@ -624,8 +674,8 @@ mod tests {
         // Should merge into the first main row
         let result = consolidate_rows(0.016, main_rows, sec_rows);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].get("custom_var"), Some(&42.0));
-        assert_eq!(result[0].get("Pos_X"), Some(&1.0));
+        assert_eq!(result[0].get("custom_var"), Some(&LogValue::Float(42.0)));
+        assert_eq!(result[0].get("Pos_X"), Some(&LogValue::Float(1.0)));
     }
 
     #[test]
@@ -655,12 +705,19 @@ mod tests {
         drop(reg);
 
         let script = r#"
-            local pid_logger = Logger.new("system_log", {"target_theta", "theta_error"}, false)
+            local pid_logger = Logger.new("system_log", {"target_theta", "theta_error", "RobotRole"}, false)
             pid_logger:log_csv({
                 RobotID = 0,
                 Team = 0,
                 target_theta = 3.14,
-                theta_error = 0.5
+                theta_error = 0.5,
+                RobotRole = "offense"
+            })
+            local str_logger = Logger.new("system_log", "SingleCol", false)
+            str_logger:log_csv({
+                RobotID = 0,
+                Team = 0,
+                SingleCol = 99.9
             })
             pid_logger:log_json({
                 meta = "test_metadata",
@@ -683,8 +740,8 @@ mod tests {
         assert!(std::path::Path::new(&json_path).exists());
 
         let csv_content = std::fs::read_to_string(&csv_path).unwrap();
-        assert!(csv_content.contains("ElapsedTime,RobotID,Team,target_theta,theta_error"));
-        assert!(csv_content.contains("0.000,0,0,3.14,0.5"));
+        assert!(csv_content.contains("ElapsedTime,RobotID,Team,target_theta,theta_error,RobotRole,SingleCol"));
+        assert!(csv_content.contains("0.000,0,0,3.14,0.5,offense,99.9"));
 
         let json_content = std::fs::read_to_string(&json_path).unwrap();
         assert!(json_content.contains("test_metadata"));

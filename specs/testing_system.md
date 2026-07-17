@@ -2,7 +2,7 @@
 
 * **Autor**: Marco Repetto
 * **Fecha**: 17 de Julio de 2026
-* **Estado**: Listo para implementar
+* **Estado**: Implementado 
 * **Versión**: 1.2.1
 
 ---
