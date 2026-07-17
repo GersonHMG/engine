@@ -1,6 +1,8 @@
 local mark_tactic = require("tactics.non_active.mark") -- Update this path if you saved it elsewhere
 local utils = require("utils.utils")
 
+local ENABLE_ROLE_LOGGING = false
+
 local Defender = {}
 Defender.__index = Defender
 
@@ -10,7 +12,8 @@ function Defender.new(team_blackboard)
     return setmetatable({
         blackboard = team_blackboard,
         -- Instantiate our marking tactic so it can maintain its state
-        mark = mark_tactic.new() 
+        mark = mark_tactic.new(),
+        logger = Logger.new("system_log", "RobotRole", false)
     }, Defender)
 end
 
@@ -26,6 +29,14 @@ function Defender:process(robotId, team)
     end
 
     draw_text(robot.x, robot.y + 0.2, "Defender (Marking)", {r=1.0, g=0.5, b=0.0})
+
+    if ENABLE_ROLE_LOGGING and self.logger then
+        self.logger:log_csv({
+            RobotID = robotId,
+            Team = team,
+            RobotRole = "defender (marking)"
+        })
+    end
 
     -- 1. Determine the enemy team ID (Assuming teams are 0 and 1)
     local enemy_team = (team == 0) and 1 or 0

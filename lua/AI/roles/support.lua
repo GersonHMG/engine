@@ -1,6 +1,8 @@
 local utils = require("utils.utils")
 local receive_pass = require("tactics.active.receive_pass")
 
+local ENABLE_ROLE_LOGGING = false
+
 local Support = {}
 Support.__index = Support
 
@@ -8,6 +10,7 @@ function Support.new(team_blackboard)
     local self = setmetatable({}, Support)
     -- Save the specific blackboard to this instance
     self.blackboard = team_blackboard
+    self.logger = Logger.new("system_log", "RobotRole", false)
     return self
 end
 
@@ -19,6 +22,14 @@ function Support:process(robotId, team)
     local robot = get_robot_state(robotId, team)
     
     draw_text(robot.x, robot.y + 0.2, "Support", {r=0.0, g=1.0, b=0.0})
+
+    if ENABLE_ROLE_LOGGING and self.logger then
+        self.logger:log_csv({
+            RobotID = robotId,
+            Team = team,
+            RobotRole = "support"
+        })
+    end
     
     if not ball or not robot then
         return

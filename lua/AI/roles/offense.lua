@@ -2,12 +2,15 @@ local pass_to_point = require("tactics.active.pass_to_point")
 local shoot_module = require("tactics.active.shoot")
 local utils = require("utils.utils")
 
+local ENABLE_ROLE_LOGGING = false
+
 local Offense = {}
 Offense.__index = Offense
 
 function Offense.new(team_blackboard)
     local self = setmetatable({ current_action = nil }, Offense)
     self.blackboard = team_blackboard
+    self.logger = Logger.new("system_log", {"RobotRole"}, false)
     return self
 end
 
@@ -25,6 +28,14 @@ function Offense:process(robotId, team, teammateId)
     local action_str = self.current_action or "evaluating"
     local display_text = "Offense (" .. action_str .. ")"
     draw_text(robot.x, robot.y + 0.2, display_text, {r=1.0, g=0.0, b=0.0})
+
+    if ENABLE_ROLE_LOGGING and self.logger then
+        self.logger:log_csv({
+            RobotID = robotId,
+            Team = team,
+            RobotRole = "offense (" .. action_str .. ")"
+        })
+    end
 
     -- 1. Define the goal position and our shooting threshold
     local goal_target = { x = 4.5, y = 0.0 }
