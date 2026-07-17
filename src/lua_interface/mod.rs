@@ -275,4 +275,70 @@ mod tests {
         assert_eq!(state2, ScriptExecState::Running);
         assert!(!interface.has_failed);
     }
+
+    #[test]
+    fn test_lateral_movement_logging() {
+        use crate::types::Vec2D;
+        
+        let radio = Arc::new(Mutex::new(Radio::new(false, "", 115200)));
+        let world = Arc::new(RwLock::new(World::new(6, 6, 12.0, 9.0)));
+        let game_state = Arc::new(Mutex::new(GameState::new()));
+        
+        // Add active robot
+        {
+            let mut w = world.write().unwrap();
+            w.update_robot(0, 0, Vec2D::new(0.0, 0.0), 0.0, Vec2D::new(0.0, 0.0), 0.0);
+        }
+        
+        let mut interface = LuaInterface::new(radio, world, game_state, None);
+        let state = interface.run_script("lua/run_lateral_test.lua");
+        
+        assert_eq!(state, ScriptExecState::Paused);
+        assert!(!interface.has_failed);
+        
+        interface.resume_script();
+        
+        let mut dir_path = String::new();
+        // Run loop simulating 360 ticks (6 seconds)
+        for tick in 0..360 {
+            let elapsed = tick as f64 * (1.0 / 60.0);
+            {
+                let mut reg = crate::logger::get_registry().lock().unwrap();
+                reg.set_current_elapsed(elapsed);
+                if reg.session_dir.is_some() && dir_path.is_empty() {
+                    dir_path = reg.session_dir.clone().unwrap();
+                }
+            }
+            let state = interface.call_process();
+            assert_eq!(state, ScriptExecState::Running);
+            assert!(!interface.has_failed);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        
+        assert!(!dir_path.is_empty(), "Session dir should have been active during the test");
+        
+        // Stop session (it is already closed by the script, but stop_session is safe/idempotent)
+        {
+            let mut reg = crate::logger::get_registry().lock().unwrap();
+            reg.stop_session();
+        }
+        
+        // Verify files exist and are not empty
+        let csv_path = format!("{}/lateral_movement_test.csv", dir_path);
+        let json_path = format!("{}/lateral_movement_test.json", dir_path);
+        
+        assert!(std::path::Path::new(&csv_path).exists(), "CSV log file does not exist at {}", csv_path);
+        assert!(std::path::Path::new(&json_path).exists(), "JSON report file does not exist at {}", json_path);
+        
+        let csv_len = std::fs::metadata(&csv_path).unwrap().len();
+        let json_len = std::fs::metadata(&json_path).unwrap().len();
+        
+        assert!(csv_len > 100, "CSV file is empty or too small: {} bytes", csv_len);
+        assert!(json_len > 50, "JSON file is empty or too small: {} bytes", json_len);
+        
+        // Cleanup logs
+        let _ = std::fs::remove_file(&csv_path);
+        let _ = std::fs::remove_file(&json_path);
+        let _ = std::fs::remove_dir(&dir_path);
+    }
 }

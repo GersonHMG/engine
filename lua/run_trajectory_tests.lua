@@ -3,6 +3,7 @@
 
 local generator = require("utils.trajectory_generator")
 local TrajectoryTester = require("utils.trajectory_tester")
+local LateralTester = require("utils.lateral_tester")
 
 -- Test states
 local STATE_INIT = 0
@@ -10,7 +11,8 @@ local STATE_RUNNING_LINEAR = 1
 local STATE_RUNNING_CIRCULAR = 2
 local STATE_RUNNING_S_CURVE = 3
 local STATE_RUNNING_SQUARE = 4
-local STATE_COMPLETED = 5
+local STATE_RUNNING_LATERAL = 5
+local STATE_COMPLETED = 6
 
 local current_state = STATE_INIT
 local active_tester = nil
@@ -42,7 +44,7 @@ function process()
         active_tester:start(traj)
         
         current_state = STATE_RUNNING_LINEAR
-        print("[TEST SUITE] Running Test 1/4: Linear Trajectory...")
+        print("[TEST SUITE] Running Test 1/5: Linear Trajectory...")
         
     elseif current_state == STATE_RUNNING_LINEAR then
         local finished = active_tester:update()
@@ -58,7 +60,7 @@ function process()
             active_tester:start(traj)
             
             current_state = STATE_RUNNING_CIRCULAR
-            print("[TEST SUITE] Running Test 2/4: Circular Trajectory...")
+            print("[TEST SUITE] Running Test 2/5: Circular Trajectory...")
         end
         
     elseif current_state == STATE_RUNNING_CIRCULAR then
@@ -74,7 +76,7 @@ function process()
             active_tester:start(traj)
             
             current_state = STATE_RUNNING_S_CURVE
-            print("[TEST SUITE] Running Test 3/4: S-Curve Trajectory...")
+            print("[TEST SUITE] Running Test 3/5: S-Curve Trajectory...")
         end
         
     elseif current_state == STATE_RUNNING_S_CURVE then
@@ -94,13 +96,28 @@ function process()
             active_tester:start(traj)
             
             current_state = STATE_RUNNING_SQUARE
-            print("[TEST SUITE] Running Test 4/4: Square Trajectory...")
+            print("[TEST SUITE] Running Test 4/5: Square Trajectory...")
         end
         
     elseif current_state == STATE_RUNNING_SQUARE then
         local finished = active_tester:update()
         if finished then
             table.insert(results, active_tester:evaluate())
+            
+            -- Transition to Lateral Test
+            active_tester = LateralTester.new("lateral_movement_test", config)
+            local start_pos = { x = 0.0, y = 0.0, theta = 0.0 }
+            active_tester:start(start_pos, 1.5, 4.0) -- start_pos, target_distance, duration
+            
+            current_state = STATE_RUNNING_LATERAL
+            print("[TEST SUITE] Running Test 5/5: Lateral Movement...")
+        end
+        
+    elseif current_state == STATE_RUNNING_LATERAL then
+        local finished = active_tester:update()
+        if finished then
+            table.insert(results, active_tester:evaluate())
+            active_tester.logger:close()
             
             current_state = STATE_COMPLETED
             print("[TEST SUITE] All tests completed! Printing summary:")
@@ -139,7 +156,8 @@ function process()
         local y_offset = 1.5
         for i, res in ipairs(results) do
             local test_color = res.verdict == "PASS" and {0.0, 1.0, 0.0} or {1.0, 0.0, 0.0}
-            draw_text(-2.0, y_offset, string.format("%d. %s: %s (RMSE pos: %.4fm)", i, res.test_name, res.verdict, res.metrics.rmse_position), test_color)
+            local err_val = res.metrics.rmse_position or res.metrics.rmse_lateral or 0.0
+            draw_text(-2.0, y_offset, string.format("%d. %s: %s (RMSE: %.4fm)", i, res.test_name, res.verdict, err_val), test_color)
             y_offset = y_offset - 0.2
         end
     end

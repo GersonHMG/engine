@@ -77,6 +77,14 @@ impl LuaUserData for Logger {
             let json_val = lua_value_to_json(lua, data)?;
             this.log_json(json_val).map_err(|e| LuaError::RuntimeError(e.to_string()))
         });
+
+        methods.add_method("close", |_, this, ()| {
+            if this.is_main {
+                let mut reg = crate::logger::get_registry().lock().unwrap();
+                reg.stop_session();
+            }
+            Ok(())
+        });
     }
 }
 

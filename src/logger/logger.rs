@@ -185,7 +185,7 @@ pub struct Logger {
     log_name: String,
     #[allow(dead_code)]
     _columns: Vec<String>,
-    is_main: bool,
+    pub(crate) is_main: bool,
 }
 
 impl Logger {

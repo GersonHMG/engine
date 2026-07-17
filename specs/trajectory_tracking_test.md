@@ -1,6 +1,6 @@
 # Especificación de la Prueba de Seguimiento de Trayectorias (Trajectory Tracking Test)
 
-* **Autor**: Marco Repetto & Antigravity
+* **Autor**: Marco Repetto
 * **Fecha**: 17 de Julio de 2026
 * **Estado**: Listo para implementar
 * **Versión**: 1.0.1
