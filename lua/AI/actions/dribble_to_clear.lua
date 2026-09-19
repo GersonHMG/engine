@@ -7,24 +7,55 @@ local DribbleToClear = setmetatable({}, { __index = Action })
 DribbleToClear.__index = DribbleToClear
 
 local OWN_GOAL = { x = -4.5, y = 0.0 }  -- our own goal center
-local CLEAR_X = 0.0                     -- dribble the ball up to the halfway line
-local WING_Y = 2.5                      -- how far out to the side the clear target sits
-local LAMBDA = 0.35                     -- decay of urgency with distance to our own goal
+local CLEAR_DISTANCE = 0.8               -- how far to dribble away from our goal, per clear
+local LAMBDA = 0.35                      -- decay of urgency with distance to our own goal
+local BLOCK_RADIUS = 0.20                 -- clearance an enemy needs from the travel path
+local MAX_SIDESTEP = 1.0                 -- cap on how far the target gets deflected sideways
 
---- Picks the wing (top or bottom) with fewer nearby opponents, so the clear
---- target is less likely to be walked into by an enemy.
+--- Target relative to the robot's current position: primarily straight out
+--- along the line from our own goal through the robot, then deflected
+--- sideways around any enemy that actually sits on that path, so the ball
+--- goes around them instead of through them. Scaled to a fixed, short
+--- distance so every clear costs roughly the same travel.
+--- @param robot RobotState
 --- @param opponents RobotState[]|nil
---- @return number  -- WING_Y or -WING_Y
-local function open_wing_y(opponents)
-	local top_count, bottom_count = 0, 0
+--- @return { x: number, y: number }
+local function clear_target(robot, opponents)
+	local dx = robot.x - OWN_GOAL.x
+	local dy = robot.y - OWN_GOAL.y
+	local length = math.sqrt(dx * dx + dy * dy)
+
+	if length < 0.001 then
+		-- Directly on our own goal: fall back to straight upfield.
+		dx, dy, length = 1.0, 0.0, 1.0
+	end
+
+	local dir_x, dir_y = dx / length, dy / length
+	-- Perpendicular to the escape direction, used to sidestep blockers.
+	local perp_x, perp_y = -dir_y, dir_x
+
+	-- For every enemy that actually lies on the segment from the robot to
+	-- the (fixed-length) clear target, push the target sideways just far
+	-- enough to keep BLOCK_RADIUS of clearance from it.
+	local sidestep = 0.0
 	for _, enemy in ipairs(opponents or {}) do
-		if enemy.y >= 0 then
-			top_count = top_count + 1
-		else
-			bottom_count = bottom_count + 1
+		local ex, ey = enemy.x - robot.x, enemy.y - robot.y
+		local along = dir_x * ex + dir_y * ey
+		if along > 0.0 and along < CLEAR_DISTANCE then
+			local offset = perp_x * ex + perp_y * ey
+			if math.abs(offset) < BLOCK_RADIUS then
+				local needed = BLOCK_RADIUS - math.abs(offset)
+				local sign = (offset >= 0.0) and -1.0 or 1.0
+				sidestep = sidestep + sign * needed
+			end
 		end
 	end
-	return (top_count <= bottom_count) and WING_Y or -WING_Y
+	sidestep = math.max(-MAX_SIDESTEP, math.min(MAX_SIDESTEP, sidestep))
+
+	return {
+		x = robot.x + dir_x * CLEAR_DISTANCE + perp_x * sidestep,
+		y = robot.y + dir_y * CLEAR_DISTANCE + perp_y * sidestep,
+	}
 end
 
 --- @param team integer
@@ -45,7 +76,8 @@ function DribbleToClear:evaluate(state)
 end
 
 function DribbleToClear:run(state)
-	local target = { x = CLEAR_X, y = open_wing_y(state.opponents) }
+	local opponents = state.opponents or world.active_enemies()
+	local target = clear_target(state.robot, opponents)
 	skill_move_ball.process(state.robot.id, state.robot.team, target)
 end
 
