@@ -14,13 +14,14 @@ function GoToBall.new(team)
 	return self
 end
 
---- P(useful to go to ball) = exp(-lambda * dist_to_ball) * P(intercept),
---- discounted while we're already in kicking range (can_kick), since
---- there's no point moving toward the ball if we can already kick it.
+
+-- P(Score | s , go) = P( B | s, a ) * V(hold_the_ball)
+-- = P( success ) * V(hold_the_ball)
 function GoToBall:evaluate(state)
 	local decay = math.exp(-LAMBDA * state.distance_to_ball)
 	local k = state.can_kick and 1.0 or 0.0
-	return decay * state.probability_of_intercept * (1 - k)
+	
+	return (1 - k)
 end
 
 function GoToBall:run(state)
