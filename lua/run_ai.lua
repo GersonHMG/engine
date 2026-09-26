@@ -8,7 +8,7 @@ local ai = require("AI.main")
 --    ball so the first decision is go_to_ball and the kick follows.
 grsim.teleport_robot(0, 0, -0.5, 0.0, 0.0) -- Blue 2: the experiment robot
 grsim.teleport_robot(0, 1, 1.5, 0.0, 0.0) -- Yellow 0: the experiment robot
-grsim.teleport_ball(1.0, 0.0)              -- ball at the field center
+grsim.teleport_ball(0.0, 0.0)              -- ball at the field center
 
 -- 2. Run one tick of the experiment.
 function process()
