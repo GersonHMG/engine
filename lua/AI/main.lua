@@ -5,6 +5,7 @@
 
 local world = require("AI.calculator.world")
 local utils = require("utils.utils")
+local has_posession = require("AI.calculator.has_posession")
 
 
 local M = {}
@@ -12,13 +13,14 @@ local M = {}
 local TEAM = 0                            -- our team id (0 = blue, 1 = yellow)
 local ROBOT_ID = 0                        -- the robot this experiment drives
 local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center
-local KICK_RANGE = 0.25                   -- close enough to the ball to attempt a kick
+local SHOOT_THRESHOLD = 0.5               -- always shoot above this probability of scoring
 local LABEL_OFFSET = 0.2                  -- height of the first score label above the robot
 local LABEL_SPACING = 0.15                -- vertical gap between score labels
 
+-- DEFINE ACTIONS SPACE
 local KickToGoal = require("AI.actions.kick_to_goal")
 local GoToBall = require("AI.actions.go_to_ball")
-local DribbleToClear = require("AI.actions.dribble_to_clear")
+local KickToClear = require("AI.actions.kick_to_clear")
 
 local function to_action_entry(instance)
 	return {
@@ -31,7 +33,7 @@ end
 local ACTIONS = {
 	to_action_entry(KickToGoal.new(TEAM)),
 	to_action_entry(GoToBall.new(TEAM)),
-	to_action_entry(DribbleToClear.new(TEAM))
+	to_action_entry(KickToClear.new(TEAM))
 }
 
 
@@ -40,6 +42,7 @@ local ACTIONS = {
 --- @return table state
 local function build_state(robot)
 	local nearest = world.nearest_to_ball()
+	local has_posession_of_ball = has_posession.calc(robot)
 
 	return {
 		robot = robot,
@@ -50,7 +53,7 @@ local function build_state(robot)
 		distance_to_ball = world.distance_to_ball(robot),
 		-- Near enough to go for a kick: the kick skill drives the approach and
 		-- the facing itself, so proximity alone is enough to consider it.
-		can_kick = world.distance_to_ball(robot) <= KICK_RANGE,
+		can_kick = has_posession_of_ball,
 		-- Closer to the goal is a better shot, and only if the shot line is
 		-- not covered by an enemy.
 		probability_of_score = world.probability_of_score(robot, GOAL_TARGET),
@@ -85,6 +88,15 @@ local function score_actions(state)
 		-- Keep running the current action unless the challenger is clearly better.
 		if scored[best_index].score < scored[current_index].score then
 			best_index = current_index
+		end
+	end
+
+	if state.probability_of_score > SHOOT_THRESHOLD then
+		for i, entry in ipairs(scored) do
+			if entry.action.name == "kick_to_goal" then
+				best_index = i
+				break
+			end
 		end
 	end
 
