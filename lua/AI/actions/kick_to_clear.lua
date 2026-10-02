@@ -1,41 +1,16 @@
 -- KickToClear.lua
-local Action = require("AI.actions.action")
+local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
+local lane = require("AI.calculator.lane")
 local skill_kick = require("skills.kick_to_point")
 
-local KickToClear = setmetatable({}, { __index = Action })
+local KickToClear = setmetatable({}, { __index = KickAction })
 KickToClear.__index = KickToClear
 
-local CLEAR_DIST      = 2.0   -- how far from the ball the clear target sits, meters
-local CANDIDATES      = 16    -- directions sampled around the ball
-local ROBOT_RADIUS    = 0.09
-local BALL_RADIUS     = 0.021
-local BLOCK_SHARPNESS = 12.0  -- logistic steepness for lane clearance
-
-local function dist(a, b)
-	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
-end
-
---- Perpendicular distance from point c to segment a->b.
-local function point_to_segment(c, a, b)
-	local dx, dy = b.x - a.x, b.y - a.y
-	local len2 = dx * dx + dy * dy
-	if len2 < 1e-9 then return dist(c, a) end
-	local t = ((c.x - a.x) * dx + (c.y - a.y) * dy) / len2
-	t = math.max(0.0, math.min(1.0, t))
-	return dist(c, { x = a.x + t * dx, y = a.y + t * dy })
-end
-
---- P(ball travels a->b without an opponent intercepting it), in [0, 1].
-local function lane_clear(a, b, opponents)
-	local p = 1.0
-	local clearance = ROBOT_RADIUS + BALL_RADIUS
-	for _, opp in ipairs(opponents) do
-		local d = point_to_segment(opp, a, b)
-		p = p / (1.0 + math.exp(-BLOCK_SHARPNESS * (d - clearance)))
-	end
-	return p
-end
+local OWN_GOAL   = { x = -4.5, y = 0.0 }  -- our own goal center
+local CLEAR_DIST = 2.0   -- how far from the ball the clear target sits, meters
+local CANDIDATES = 16    -- directions sampled around the ball
+local LAMBDA     = 0.35  -- decay of urgency with distance to our own goal
 
 --- Picks the most open direction around the ball. Directions the robot is
 --- already lined up for (robot -> ball) are preferred, so it barely has to
@@ -48,7 +23,7 @@ local function pick_target(robot, ball, opponents)
 		local a = 2 * math.pi * i / CANDIDATES
 		local p = { x = ball.x + CLEAR_DIST * math.cos(a), y = ball.y + CLEAR_DIST * math.sin(a) }
 		local alignment = (1.0 + math.cos(a - approach)) / 2.0
-		local s = lane_clear(ball, p, opponents) * (0.5 + 0.5 * alignment)
+		local s = lane.clear(ball, p, opponents) * (0.5 + 0.5 * alignment)
 		if s > best_score then
 			best, best_score = p, s
 		end
@@ -60,29 +35,40 @@ end
 --- @param team integer
 --- @return KickToClear
 function KickToClear.new(team)
-	local self = setmetatable(Action.new("kick_to_clear"), KickToClear)
+	local self = setmetatable(KickAction.new("kick_to_clear"), KickToClear)
 	self.team = team
-	self.target = nil
+	self.candidate = nil  -- best target this tick, from evaluate()
+	self.target = nil     -- target committed when the option started
 	return self
 end
 
---- Needs possession. The target is chosen once and kept until possession is
---- lost, so the robot's own movement cannot keep moving it.
+--- Needs possession. Scores a fresh candidate target every tick; start()
+--- commits it, so the robot's own movement cannot move the target mid-kick.
+---
+--- S = k · Λ(b, target, E) · e^(−λ·d(r, O)): clearing is a defensive action,
+--- only urgent near our own goal. Without the urgency term an open lane
+--- (Λ ≈ 1) would beat passing and shooting everywhere on the field.
 function KickToClear:evaluate(state)
+	self.candidate = nil
 	if not state.can_kick then
-		self.target = nil
 		return 0.0
 	end
 
 	local ball = state.ball or world.ball()
 	local opponents = state.opponents or world.active_enemies()
 
-	if not self.target then
-		self.target = pick_target(state.robot, ball, opponents)
-		if not self.target then return 0.0 end
+	self.candidate = pick_target(state.robot, ball, opponents)
+	if not self.candidate then
+		return 0.0
 	end
 
-	return lane_clear(ball, self.target, opponents)
+	local urgency = math.exp(-LAMBDA * world.distance(state.robot, OWN_GOAL))
+	return lane.clear(ball, self.candidate, opponents) * urgency
+end
+
+function KickToClear:start(state)
+	KickAction.start(self, state)
+	self.target = self.candidate
 end
 
 function KickToClear:run(state)

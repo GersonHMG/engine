@@ -1,9 +1,9 @@
 -- KickToGoal.lua
-local Action = require("AI.actions.action")
+local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
 local skill_kick = require("skills.kick_to_point")
 
-local KickToGoal = setmetatable({}, { __index = Action })
+local KickToGoal = setmetatable({}, { __index = KickAction })
 KickToGoal.__index = KickToGoal
 
 local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center
@@ -77,7 +77,7 @@ end
 --- @param team integer
 --- @return KickToGoal
 function KickToGoal.new(team)
-	local self = setmetatable(Action.new("kick_to_goal"), KickToGoal)
+	local self = setmetatable(KickAction.new("kick_to_goal"), KickToGoal)
 	self.team = team
 	return self
 end

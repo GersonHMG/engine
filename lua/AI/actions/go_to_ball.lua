@@ -24,6 +24,11 @@ function GoToBall:evaluate(state)
 	return (1 - k)
 end
 
+--- Done once the ball is in kick range: the kick options take over from there.
+function GoToBall:terminated(state)
+	return state.can_kick
+end
+
 function GoToBall:run(state)
 	-- TODO: point this at whatever movement primitive you use now.
 	-- e.g. world.set_move_command(state.robot.id, self.team, state.ball)
