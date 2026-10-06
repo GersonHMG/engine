@@ -1,110 +1,117 @@
+-- kick_to_point: lines the robot up behind the ball and kicks it flat towards `target`.
+-- Parameters: robotId, team, target {x, y} (m).
+-- Terminates when the robot is lined up and the ball is within the kicker's reach, or
+-- reaches it before the next tick, issuing the kick on that tick.
 local kick_to_point = {}
 
-local utils = require("utils.utils")
-local has_the_ball = utils.has_the_ball
+local APPROACH_OFFSET = 0.15        -- m, ball to approach point, behind the ball (robot radius 0.09 + ball 0.0215 + 0.0385 clearance)
+local TOUCH_OFFSET = 0.045          -- m, ball to the move_direct target while touching
+local LINE_TOLERANCE = 0.10         -- m, lateral distance to the kick line to start touching
+local FACING_TOLERANCE = 0.1        -- rad, heading error to the kick direction to start touching
+local CONTACT_DIST = 0.073 + 0.0215 -- m, robot center to ball center when the ball touches the kicker
+local KICK_REACH = 0.01             -- m, how far in front of the kicker face a kick still fires
+local KICKER_HALF_WIDTH = 0.05      -- m, lateral reach of the kicker face
+local TICK = 1 / 60                 -- s, control period
+local MIN_LENGTH = 0.001            -- m, guard for divisions by a length
 
-local function get_kick_point(kick_target, offset_dist)
-    -- Get current ball position
-    local ball_pos = get_ball_state()
+-- Observation only: the phase chosen on the last tick, per robot, for tests and
+-- debugging. Written every tick, never read by the skill.
+kick_to_point.debug = {}
 
-    -- Calculate direction from target to ball
-    local dx = ball_pos.x - kick_target.x
-    local dy = ball_pos.y - kick_target.y
-    local dist = math.sqrt(dx^2 + dy^2)
-    
-    -- Prevent division by zero
-    if dist == 0 then dist = 0.001 end
-    
-    -- Calculate the final approach point
-    local point = {
-        x = ball_pos.x + ((dx / dist) * offset_dist),
-        y = ball_pos.y + ((dy / dist) * offset_dist)
-    }
-    
-    -- Return the calculated point back to the caller
-    return point
+local function report(robotId, team, phase, reason)
+    kick_to_point.debug[team] = kick_to_point.debug[team] or {}
+    kick_to_point.debug[team][robotId] = { phase = phase, reason = reason }
 end
 
+local function wrap(angle)
+    while angle > math.pi do angle = angle - 2 * math.pi end
+    while angle < -math.pi do angle = angle + 2 * math.pi end
+    return angle
+end
 
-local function is_facing_point(robotId, team, target_point, tolerance)
-    -- Fetch the robot's current state (adjust this function to match your API)
-    local robot_state = get_robot_state(robotId, team) 
-    
-    -- Calculate the angle from the robot to the target point
-    local target_angle = math.atan(target_point.y - robot_state.y, target_point.x - robot_state.x)
-    
-    -- Get the absolute difference between the robot's current angle and the target angle
-    local angle_diff = math.abs(robot_state.orientation - target_angle)
-    
-    -- Normalize the angle difference to be within -PI and PI
-    while angle_diff > math.pi do
-        angle_diff = angle_diff - (2 * math.pi)
+-- Point `offset` behind the ball, on the line from `target` through the ball.
+local function get_kick_point(ball, target, offset)
+    local dx = ball.x - target.x
+    local dy = ball.y - target.y
+    local dist = math.max(math.sqrt(dx ^ 2 + dy ^ 2), MIN_LENGTH)
+    return { x = ball.x + dx / dist * offset, y = ball.y + dy / dist * offset }
+end
+
+-- Heading error of the robot to the kick direction (ball to target), in [0, pi].
+-- Not the bearing to the ball: near the ball a few cm of lateral offset change that
+-- bearing by more than the tolerance while the kick direction is still right.
+local function kick_heading_error(robot, ball, target)
+    local kick_angle = math.atan(target.y - ball.y, target.x - ball.x)
+    return math.abs(wrap(robot.orientation - kick_angle))
+end
+
+-- Returns whether the robot is lined up to kick, and why not.
+local function check_lined_up(robot, ball, target)
+    local dx = ball.x - target.x
+    local dy = ball.y - target.y
+    local length = math.sqrt(dx ^ 2 + dy ^ 2)
+    if length < MIN_LENGTH then
+        return false, "target_on_ball"
     end
-    angle_diff = math.abs(angle_diff)
-    
-    -- Return true if the difference is within the allowed tolerance
-    return angle_diff <= tolerance
-end
-
-local function is_on_kicking_line(robot_pos, ball_pos, target_pos, tolerance)
-    -- Vector from Ball to Target (the direction we want to kick)
-    local dx_bt = target_pos.x - ball_pos.x
-    local dy_bt = target_pos.y - ball_pos.y
-    
-    local length_bt = math.sqrt(dx_bt^2 + dy_bt^2)
-    if length_bt == 0 then return false end -- Prevent division by zero
-    
-    -- Normalize the direction vector
-    local dir_x = dx_bt / length_bt
-    local dir_y = dy_bt / length_bt
-    
-    -- Vector from Ball to Robot
-    local dx_br = robot_pos.x - ball_pos.x
-    local dy_br = robot_pos.y - ball_pos.y
-    
-    -- 1. Check if the robot is BEHIND the ball
-    -- We use the dot product. If positive, the robot is in front of the ball.
-    local dot_product = dir_x * dx_br + dir_y * dy_br
-    
-    if dot_product < 0 then
-        return false 
+    local dir_x, dir_y = dx / length, dy / length -- from the target through the ball, to behind it
+    local rx, ry = robot.x - ball.x, robot.y - ball.y
+    if dir_x * rx + dir_y * ry < 0 then
+        return false, "behind_fail"
     end
-    -- 2. Check the perpendicular distance to the line
-    -- Using the 2D cross product magnitude
-    local distance_to_line = math.abs(dir_x * dy_br - dir_y * dx_br)
-    
-    return distance_to_line <= tolerance
+    local lateral = math.abs(dir_x * ry - dir_y * rx)
+    if lateral > LINE_TOLERANCE then
+        return false, string.format("line_fail %.3f>%.3f", lateral, LINE_TOLERANCE)
+    end
+    local facing = kick_heading_error(robot, ball, target)
+    if facing > FACING_TOLERANCE then
+        return false, string.format("facing_fail %.3f>%.3f", facing, FACING_TOLERANCE)
+    end
+    return true, "lined_up"
 end
 
+-- True when the ball is within the kicker's reach, or reaches it before the next tick
+-- at the current closing speed. A wider window (has_the_ball, 0.12 m) can end the
+-- skill with the ball out of reach, and then the kick never fires.
+local function is_ball_at_kicker(robot, ball)
+    local cos_h, sin_h = math.cos(robot.orientation), math.sin(robot.orientation)
+    local dx, dy = ball.x - robot.x, ball.y - robot.y
+    local along = dx * cos_h + dy * sin_h
+    local side = -dx * sin_h + dy * cos_h
+    local closing = (robot.vel_x - ball.vel_x) * cos_h + (robot.vel_y - ball.vel_y) * sin_h
+    return along > 0 and math.abs(side) <= KICKER_HALF_WIDTH
+        and along - CONTACT_DIST <= KICK_REACH + math.max(closing, 0) * TICK
+end
 
+local function is_done(robot, ball, target)
+    return check_lined_up(robot, ball, target) and is_ball_at_kicker(robot, ball)
+end
 
 function kick_to_point.process(robotId, team, target)
-    -- Get the point to move to before kicking
-    draw_point(target.x, target.y, true, {r=1.0, g=0.0, b=0.0}) -- Green point for the target
-    local ball_pos = get_ball_state()
-    
-    local point = get_kick_point(target, 0.09+0.10)
+    local robot = get_robot_state(robotId, team)
+    local ball = get_ball_state()
+    draw_point(target.x, target.y, true, { r = 1.0, g = 0.0, b = 0.0 })
 
-    -- Visualize the target point for debugging
-    draw_point(point.x, point.y)
-    local robot_pos = get_robot_state(robotId, team)
-    if is_on_kicking_line(robot_pos, ball_pos, point, 0.05) and is_facing_point(robotId, team, ball_pos, 0.1) then
-        local point = get_kick_point(target, 0.045)
-        move_direct(robotId, team, {x = point.x, y = point.y})
-        
-        if has_the_ball(robotId, team) then
-            kickx(robotId, team)
-            return true
-        end
+    if is_done(robot, ball, target) then
+        report(robotId, team, "done", "ball_at_kicker")
+        kickx(robotId, team)
+        return true
+    end
+
+    local lined_up, reason = check_lined_up(robot, ball, target)
+    if lined_up then
+        report(robotId, team, "touch", reason)
+        move_direct(robotId, team, get_kick_point(ball, target, TOUCH_OFFSET))
         return false
     end
 
-    -- Move to the calculated point
-    face_to(robotId, team, {x = ball_pos.x, y = ball_pos.y})
-    move_to(robotId, team, {x = point.x, y = point.y})
-
+    report(robotId, team, "approach", reason)
+    local approach = get_kick_point(ball, target, APPROACH_OFFSET)
+    draw_point(approach.x, approach.y)
+    -- Turn to the kick direction while approaching: that is the heading the lined-up
+    -- check needs, so the robot does not turn to the ball first and back later.
+    face_to(robotId, team, target)
+    move_to(robotId, team, approach)
     return false
 end
-
 
 return kick_to_point
