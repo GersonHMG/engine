@@ -20,6 +20,8 @@ pub enum ToolbarMessage {
     ToggleRecording,
     /// Plays the last recording in replay mode.
     PlayRecording,
+    /// Shows or hides the Lua drawings on the field.
+    ToggleDraws,
     ToggleSimulator,
     SimSpeedSelected(SimSpeed),
 }
@@ -56,6 +58,8 @@ pub struct Toolbar {
     pub recording_s: Option<f64>,
     /// Whether there is a finished recording to replay.
     pub has_recording: bool,
+    /// Whether the Lua drawings are shown on the field.
+    pub show_draws: bool,
 }
 
 impl Toolbar {
@@ -68,6 +72,7 @@ impl Toolbar {
             simulator,
             recording_s: None,
             has_recording: false,
+            show_draws: true,
         }
     }
 
@@ -128,6 +133,8 @@ impl Toolbar {
             button(text("⟲ REPLAY").size(12)).style(button::secondary)
         };
 
+        let draws_btn = draws_button(self.show_draws, ToolbarMessage::ToggleDraws);
+
         let script_name = if self.script_path.is_empty() {
             "No script".to_string()
         } else {
@@ -166,6 +173,7 @@ impl Toolbar {
             reload_btn,
             rec_btn,
             replay_btn,
+            draws_btn,
             text("|").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
             text(script_name).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
             text(status_text).size(12).color(status_color),
@@ -193,6 +201,13 @@ impl Toolbar {
             .style(toolbar_style)
             .into()
     }
+}
+
+/// Show/hide toggle for the Lua drawings, sending `message`: highlighted while they are shown.
+pub fn draws_button<'a, M: Clone + 'a>(shown: bool, message: M) -> iced::widget::Button<'a, M> {
+    button(text("✎ DRAWS").size(12))
+        .on_press(message)
+        .style(if shown { button::success } else { button::secondary })
 }
 
 fn toolbar_style(theme: &iced::Theme) -> container::Style {
