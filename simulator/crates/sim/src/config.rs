@@ -13,6 +13,48 @@ pub struct SimConfig {
     pub max_substep: f64,
 }
 
+impl SimConfig {
+    /// Checks that every parameter is usable by the physics, naming the
+    /// first one that is not.
+    pub fn validate(&self) -> Result<(), String> {
+        let positive = |v: f64| v.is_finite() && v > 0.0;
+        let non_negative = |v: f64| v.is_finite() && v >= 0.0;
+        let fraction = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
+        let (field, robot, ball) = (&self.field, &self.robot, &self.ball);
+
+        let checks = [
+            ("max_substep", self.max_substep, positive(self.max_substep), "> 0"),
+            ("field.length", field.length, positive(field.length), "> 0"),
+            ("field.width", field.width, positive(field.width), "> 0"),
+            ("field.boundary_width", field.boundary_width, non_negative(field.boundary_width), ">= 0"),
+            ("robot.radius", robot.radius, positive(robot.radius), "> 0"),
+            (
+                "robot.front_distance",
+                robot.front_distance,
+                non_negative(robot.front_distance) && robot.front_distance < robot.radius,
+                ">= 0 and < robot.radius",
+            ),
+            ("robot.max_speed", robot.max_speed, non_negative(robot.max_speed), ">= 0"),
+            ("robot.max_accel", robot.max_accel, non_negative(robot.max_accel), ">= 0"),
+            ("robot.max_omega", robot.max_omega, non_negative(robot.max_omega), ">= 0"),
+            ("robot.max_alpha", robot.max_alpha, non_negative(robot.max_alpha), ">= 0"),
+            ("robot.max_kick_speed", robot.max_kick_speed, non_negative(robot.max_kick_speed), ">= 0"),
+            ("robot.kick_reach", robot.kick_reach, non_negative(robot.kick_reach), ">= 0"),
+            ("robot.body_restitution", robot.body_restitution, fraction(robot.body_restitution), "in [0, 1]"),
+            ("robot.front_restitution", robot.front_restitution, fraction(robot.front_restitution), "in [0, 1]"),
+            ("ball.radius", ball.radius, positive(ball.radius), "> 0"),
+            ("ball.slide_decel", ball.slide_decel, non_negative(ball.slide_decel), ">= 0"),
+            ("ball.roll_decel", ball.roll_decel, non_negative(ball.roll_decel), ">= 0"),
+            ("ball.wall_restitution", ball.wall_restitution, fraction(ball.wall_restitution), "in [0, 1]"),
+        ];
+
+        match checks.iter().find(|(_, _, ok, _)| !ok) {
+            Some((name, value, _, rule)) => Err(format!("{name} must be {rule}, got {value}")),
+            None => Ok(()),
+        }
+    }
+}
+
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
