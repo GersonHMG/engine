@@ -1,13 +1,12 @@
 -- KickToGoal.lua
 local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
-local skill_kick = require("skills.kick_to_point")
 
 local KickToGoal = setmetatable({}, { __index = KickAction })
 KickToGoal.__index = KickToGoal
 
 local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center
-local GOAL_HALF_WIDTH = 1.0               -- half the goal mouth width (post to post = 2x this)
+local GOAL_HALF_WIDTH = 0.5               -- half the goal mouth width (post to post = 2x this): SSL division B, 1.0 m
 local LAMBDA = 0.35                       -- decay of the probability with distance to goal
 
 local GOAL_POSTS = {
@@ -87,13 +86,14 @@ function KickToGoal:evaluate(state)
 	-- state.opponents isn't populated by every caller yet; fall back to the
 	-- world snapshot's active enemies so the front-blocker check still works.
 	local opponents = state.opponents or world.active_enemies()
-	return k * probability_of_score(state.robot, opponents)
+	local ball = state.ball or world.ball()
+	return k * probability_of_score(state.robot, opponents) * KickAction.alignment(state.robot, ball, GOAL_TARGET)
 end
 
 function KickToGoal:run(state)
 	-- TODO: replace with your kick primitive now that kick_to_point is gone.
 	-- e.g. world.set_kick_command(state.robot.id, self.team, GOAL_TARGET)
-	skill_kick.process(state.robot.id, state.robot.team, GOAL_TARGET)
+	KickAction.kick_towards(state, GOAL_TARGET)
 end
 
 return KickToGoal

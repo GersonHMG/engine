@@ -5,6 +5,7 @@ local GoToBall = setmetatable({}, { __index = Action })
 GoToBall.__index = GoToBall
 
 local LAMBDA = 0.35  -- decay of the probability with distance to ball
+local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center: arrive at the ball lined up to shoot
 
 --- @param team integer
 --- @return GoToBall
@@ -32,7 +33,7 @@ end
 function GoToBall:run(state)
 	-- TODO: point this at whatever movement primitive you use now.
 	-- e.g. world.set_move_command(state.robot.id, self.team, state.ball)
-    skill.process(state.robot.id, state.robot.team)
+    skill.process(state.robot.id, state.robot.team, GOAL_TARGET)
 end
 
 return GoToBall
