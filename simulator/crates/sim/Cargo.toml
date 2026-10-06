@@ -1,0 +1,9 @@
+[package]
+name = "ssl-sim"
+description = "Deterministic 2D physics for RoboCup SSL: field walls, robot, ball"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+libm = "0.2.16"
+serde = { version = "1.0.229", features = ["derive"] }
