@@ -32,7 +32,7 @@ use crate::sender::simulator::console as simulator_console;
 use crate::sender::simulator::SimLink;
 use crate::world::World;
 use crate::logger::Logger;
-use crate::types::{KickerCommand, MotionCommand};
+use crate::types::{DrawCommand, KickerCommand, MotionCommand};
 use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, SimulatorSettings, VisionUpdate};
 use crate::gui::toolbar::ScriptStatus;
 use crate::config::load_field_config_from_exe;
@@ -196,6 +196,13 @@ impl LaunchArgs {
     fn simulator_settings(&self) -> SimulatorSettings {
         SimulatorSettings { enabled: self.simulator, speed: self.speed }
     }
+}
+
+/// Lua draw commands in the GUI's format.
+fn to_gui_draws(cmds: &[DrawCommand]) -> Vec<LuaDrawCmd> {
+    cmds.iter()
+        .filter_map(|cmd| serde_json::to_value(cmd).ok().and_then(|json| serde_json::from_value(json).ok()))
+        .collect()
 }
 
 fn map_script_state(state: ScriptExecState) -> ScriptStatus {
@@ -509,10 +516,13 @@ async fn run_engine(
                     r.add_kicker_command(kicker);
                 }
                 EngineCommand::LoadScript { path } => {
-                    let state = {
+                    let (state, draw_cmds) = {
                         let mut lua = lua_iface.lock().unwrap();
-                        lua.run_script(&path)
+                        let state = lua.run_script(&path);
+                        (state, lua.take_draw_commands())
                     };
+                    // A new script replaces the previous script's drawings (with any it drew while loading).
+                    let _ = lua_draw_gui_tx.try_send(to_gui_draws(&draw_cmds));
                     last_script_state = state;
                     let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
                         status: map_script_state(state),
@@ -572,10 +582,11 @@ async fn run_engine(
         }
 
         // Call Lua process()
-        let (draw_cmds, script_state) = {
+        let (draw_cmds, script_state, ran_process) = {
             let mut lua = lua_iface.lock().unwrap();
+            let ran_process = lua.script_state() == ScriptExecState::Running;
             let state = lua.call_process();
-            (lua.take_draw_commands(), state)
+            (lua.take_draw_commands(), state, ran_process)
         };
 
         if script_state != last_script_state {
@@ -586,23 +597,10 @@ async fn run_engine(
             });
         }
 
-        // Send draw commands to GUI
-        if !draw_cmds.is_empty() {
-            // Convert draw commands to serializable format
-            let gui_cmds: Vec<LuaDrawCmd> = draw_cmds
-                .iter()
-                .filter_map(|cmd| {
-                    // Serialize/deserialize through serde_json for compatibility
-                    if let Ok(json) = serde_json::to_value(cmd) {
-                        serde_json::from_value(json).ok()
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            let _ = lua_draw_gui_tx.try_send(gui_cmds);
-        } else {
-            let _ = lua_draw_gui_tx.try_send(Vec::new());
+        // Send draw commands to GUI. Only a tick that ran process() replaces the
+        // drawings: while the script is paused (or has failed) the last ones stay.
+        if ran_process {
+            let _ = lua_draw_gui_tx.try_send(to_gui_draws(&draw_cmds));
         }
 
         // Prepare radio frame

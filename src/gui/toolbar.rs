@@ -1,4 +1,4 @@
-// gui/toolbar.rs — Script toolbar (load/play/reload + simulator switch + PPS sparkline + filename)
+// gui/toolbar.rs — Script toolbar (load/play/reload + record/replay + simulator switch + PPS sparkline + filename)
 
 use super::types::SimulatorSettings;
 use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke};
@@ -16,6 +16,10 @@ pub enum ToolbarMessage {
     LoadScript,
     ToggleScript,
     ReloadScript,
+    /// Starts or stops recording the field (robots, ball, Lua drawings).
+    ToggleRecording,
+    /// Plays the last recording in replay mode.
+    PlayRecording,
     ToggleSimulator,
     SimSpeedSelected(SimSpeed),
 }
@@ -48,6 +52,10 @@ pub struct Toolbar {
     pub pps: u32,
     pub pps_history: Vec<u32>,
     pub simulator: SimulatorSettings,
+    /// Seconds recorded so far, while recording.
+    pub recording_s: Option<f64>,
+    /// Whether there is a finished recording to replay.
+    pub has_recording: bool,
 }
 
 impl Toolbar {
@@ -58,6 +66,8 @@ impl Toolbar {
             pps: 0,
             pps_history: vec![0; PPS_HISTORY],
             simulator,
+            recording_s: None,
+            has_recording: false,
         }
     }
 
@@ -99,6 +109,25 @@ impl Toolbar {
             button(text("🔄").size(14)).style(button::secondary)
         };
 
+        // Record toggle: shows the recorded time while recording
+        let rec_btn = match self.recording_s {
+            Some(secs) => button(text(format!("⏹ REC {secs:.1}s")).size(12))
+                .on_press(ToolbarMessage::ToggleRecording)
+                .style(button::danger),
+            None => button(text("⏺ REC").size(12))
+                .on_press(ToolbarMessage::ToggleRecording)
+                .style(button::secondary),
+        };
+
+        // Replay of the last recording, once there is one and nothing is being recorded
+        let replay_btn = if self.has_recording && self.recording_s.is_none() {
+            button(text("⟲ REPLAY").size(12))
+                .on_press(ToolbarMessage::PlayRecording)
+                .style(button::secondary)
+        } else {
+            button(text("⟲ REPLAY").size(12)).style(button::secondary)
+        };
+
         let script_name = if self.script_path.is_empty() {
             "No script".to_string()
         } else {
@@ -135,6 +164,8 @@ impl Toolbar {
             load_btn,
             toggle_btn,
             reload_btn,
+            rec_btn,
+            replay_btn,
             text("|").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
             text(script_name).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
             text(status_text).size(12).color(status_color),

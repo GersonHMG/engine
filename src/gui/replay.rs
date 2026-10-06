@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::Instant;
 
-use super::field_canvas::{FieldData, RobotData};
+use super::field_canvas::{FieldData, LuaDrawCommand, RobotData};
 
 #[derive(Debug, Clone)]
 pub struct ReplayFrame {
@@ -9,12 +9,16 @@ pub struct ReplayFrame {
     pub robots_blue: Vec<RobotData>,
     pub robots_yellow: Vec<RobotData>,
     pub ball: (f64, f64),
+    /// Lua drawings on the field at this frame (empty for CSV replays).
+    pub draws: Vec<LuaDrawCommand>,
 }
 
 #[derive(Debug)]
 pub struct ReplayState {
     pub enabled: bool,
     pub file_path: Option<String>,
+    /// Set when the frames come from the toolbar's recorder instead of a CSV file.
+    pub recording_label: Option<String>,
     pub is_playing: bool,
     pub frames: Vec<ReplayFrame>,
     pub frame_index: usize,
@@ -27,6 +31,7 @@ impl Default for ReplayState {
         Self {
             enabled: false,
             file_path: None,
+            recording_label: None,
             is_playing: false,
             frames: Vec::new(),
             frame_index: 0,
@@ -61,6 +66,7 @@ impl ReplayState {
         robot_trace: &mut Vec<(f64, f64)>,
     ) -> Result<(), String> {
         self.file_path = Some(path);
+        self.recording_label = None;
         self.is_playing = false;
         self.last_tick = Instant::now();
 
@@ -79,6 +85,24 @@ impl ReplayState {
                 Err(e)
             }
         }
+    }
+
+    /// Loads frames recorded in the GUI (robots, ball and Lua drawings) and shows the first one.
+    pub fn load_recording(
+        &mut self,
+        frames: Vec<ReplayFrame>,
+        label: String,
+        field_data: &mut FieldData,
+        robot_trace: &mut Vec<(f64, f64)>,
+    ) {
+        self.file_path = None;
+        self.recording_label = Some(label);
+        self.is_playing = false;
+        self.last_tick = Instant::now();
+        self.frames = frames;
+        self.frame_index = 0;
+        self.elapsed_ms = self.frames.first().map(|f| f.elapsed_ms).unwrap_or(0);
+        self.apply_current_frame(field_data, robot_trace);
     }
 
     pub fn start_playback(&mut self, field_data: &mut FieldData, robot_trace: &mut Vec<(f64, f64)>) {
@@ -116,12 +140,12 @@ impl ReplayState {
 
     pub fn tick(&mut self, field_data: &mut FieldData, robot_trace: &mut Vec<(f64, f64)>) {
         field_data.vision_connected = true;
-        field_data.lua_draw_commands.clear();
 
         if self.frames.is_empty() {
             field_data.robots_blue.clear();
             field_data.robots_yellow.clear();
             field_data.ball = (0.0, 0.0);
+            field_data.lua_draw_commands.clear();
             return;
         }
 
@@ -153,6 +177,7 @@ impl ReplayState {
             field_data.robots_blue = frame.robots_blue.clone();
             field_data.robots_yellow = frame.robots_yellow.clone();
             field_data.ball = frame.ball;
+            field_data.lua_draw_commands = frame.draws.clone();
             field_data.robot_trace.clear();
             robot_trace.clear();
         }
@@ -280,6 +305,7 @@ pub fn load_replay_frames(path: &str) -> Result<Vec<ReplayFrame>, String> {
             robots_blue,
             robots_yellow,
             ball: builder.ball,
+            draws: Vec::new(),
         });
     }
 
