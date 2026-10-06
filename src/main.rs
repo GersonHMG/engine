@@ -16,6 +16,7 @@ mod logger;
 mod gui;
 mod config;
 mod headless;
+mod mcp;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
@@ -99,6 +100,26 @@ fn switch_simulator(
     info!("Simulator {}", if enabled { "on" } else { "off, vision receiver restarted" });
 }
 
+/// Runs a Lua console line (`sim ...`) and returns its output.
+fn run_console(line: &str, radio: &Mutex<Radio>, world: &RwLock<World>) -> Vec<String> {
+    let mut radio = radio.lock().unwrap_or_else(|e| e.into_inner());
+    let mut world = world.write().unwrap_or_else(|e| e.into_inner());
+    simulator_console::execute(line, radio.simulator_mut(), &mut world)
+}
+
+/// The engine's state as an MCP agent sees it.
+fn mcp_snapshot(
+    world: &RwLock<World>,
+    radio: &Mutex<Radio>,
+    simulator: SimulatorSettings,
+    script: ScriptExecState,
+    script_path: &str,
+) -> mcp::Snapshot {
+    let sim_time = radio.lock().unwrap_or_else(|e| e.into_inner()).simulator_mut().map(|sim| sim.time());
+    let world = world.read().unwrap_or_else(|e| e.into_inner());
+    mcp::Snapshot::new(&world, simulator, sim_time, script, script_path)
+}
+
 /// Real time to spend per tick, or `None` to run flat out. Only the
 /// simulator can run faster than real time.
 fn frame_duration(simulator: SimulatorSettings) -> Option<Duration> {
@@ -121,7 +142,7 @@ const SIM_FRAME_RATE: u32 = 60;
 /// Default simulated-time limit for `--headless`, s.
 const HEADLESS_MAX_TIME: f64 = 60.0;
 
-/// Command line: `engine [--sim] [--speed <x>] [script.lua]`, or
+/// Command line: `engine [--sim] [--speed <x>] [--mcp-port <port>] [script.lua]`, or
 /// `engine --headless [--max-time <s>] script.lua`. The simulator can also
 /// be switched on and off from the toolbar.
 struct LaunchArgs {
@@ -130,6 +151,8 @@ struct LaunchArgs {
     headless: bool,
     /// Simulated seconds after which a headless run stops.
     max_time: f64,
+    /// Port of the MCP server (127.0.0.1 only).
+    mcp_port: u16,
     /// Start with the in-process simulator instead of grSim or the radio.
     simulator: bool,
     /// Simulated seconds per real second; 0 = as fast as possible.
@@ -142,6 +165,7 @@ impl LaunchArgs {
             script: None,
             headless: false,
             max_time: HEADLESS_MAX_TIME,
+            mcp_port: mcp::DEFAULT_PORT,
             simulator: false,
             speed: 1.0,
         };
@@ -150,6 +174,10 @@ impl LaunchArgs {
             match arg.as_str() {
                 "--sim" => launch.simulator = true,
                 "--headless" => launch.headless = true,
+                "--mcp-port" => match args.next().and_then(|v| v.parse::<u16>().ok()) {
+                    Some(port) => launch.mcp_port = port,
+                    _ => warn!("--mcp-port needs a port number, using {}", mcp::DEFAULT_PORT),
+                },
                 "--max-time" => match args.next().and_then(|v| v.parse::<f64>().ok()) {
                     Some(seconds) if seconds > 0.0 => launch.max_time = seconds,
                     _ => warn!("--max-time needs a number of seconds > 0, using {HEADLESS_MAX_TIME}"),
@@ -205,12 +233,15 @@ fn main() -> iced::Result {
     let (lua_status_tx, lua_status_rx) = tokio::sync::mpsc::channel::<LuaScriptStatusUpdate>(64);
     let (lua_log_tx, lua_log_rx) = tokio::sync::mpsc::channel::<String>(512);
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<EngineCommand>(256);
+    let (simulator_gui_tx, simulator_rx) = tokio::sync::mpsc::channel::<SimulatorSettings>(16);
+    let (mcp_tx, mcp_rx) = tokio::sync::mpsc::channel::<mcp::Request>(64);
 
     let gui_channels = GuiChannels {
         vision_rx,
         lua_draw_rx,
         lua_status_rx,
         lua_log_rx,
+        simulator_rx,
         command_tx: command_tx.clone(),
     };
 
@@ -221,17 +252,22 @@ fn main() -> iced::Result {
     let lua_status_tx_clone = lua_status_tx.clone();
     let lua_log_tx_clone = lua_log_tx.clone();
     let command_rx_clone = command_rx.clone();
+    let engine_command_tx = command_tx.clone();
 
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
         rt.block_on(async move {
             let rx = command_rx_clone.lock().unwrap().take().expect("command_rx already taken");
+            tokio::spawn(mcp::serve(launch.mcp_port, mcp_tx));
             run_engine(
                 vision_tx_clone,
                 lua_draw_tx_clone,
                 lua_status_tx_clone,
                 lua_log_tx_clone,
+                simulator_gui_tx,
+                engine_command_tx,
                 rx,
+                mcp_rx,
                 field_config,
                 launch,
             )
@@ -263,7 +299,11 @@ async fn run_engine(
     lua_draw_gui_tx: tokio::sync::mpsc::Sender<Vec<LuaDrawCmd>>,
     lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
     lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
+    simulator_gui_tx: tokio::sync::mpsc::Sender<SimulatorSettings>,
+    // The engine's own sender, for queueing MCP commands behind the GUI's.
+    command_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
+    mut mcp_rx: tokio::sync::mpsc::Receiver<mcp::Request>,
     field_config: crate::config::FieldConfig,
     launch: LaunchArgs,
 ) {
@@ -295,13 +335,17 @@ async fn run_engine(
     let mut simulator = launch.simulator_settings();
     let logger = Arc::new(Mutex::new(Logger::new()));
 
-    // Console replies share the Lua log channel, so they show in the same panel.
-    let console_tx = lua_log_gui_tx.clone();
+    // Lua output and console replies share one channel, so they show in the
+    // same panel. Each tick it is drained into the log kept for MCP's
+    // get_log and forwarded to the GUI.
+    let (log_tx, mut log_rx) = tokio::sync::mpsc::channel::<String>(512);
+    let console_tx = log_tx.clone();
+    let mut console_log = mcp::LogBuffer::default();
     let lua_iface = Arc::new(Mutex::new(LuaInterface::new(
         Arc::clone(&radio),
         Arc::clone(&world),
         Arc::clone(&game_state),
-        Some(lua_log_gui_tx),
+        Some(log_tx),
     )));
 
     let last_script_path = Arc::new(Mutex::new(String::new()));
@@ -372,6 +416,19 @@ async fn run_engine(
             (w.get_blue_team_state(), w.get_yellow_team_state(), w.get_ball_state())
         };
 
+        // MCP requests: commands join the GUI's queue, so they run below in
+        // order; every request is answered once that queue is done.
+        let mut mcp_requests = Vec::new();
+        while let Ok(request) = mcp_rx.try_recv() {
+            match request {
+                mcp::Request::Command(command, reply) => {
+                    let _ = command_tx.try_send(command);
+                    mcp_requests.push(mcp::Request::State(reply));
+                }
+                other => mcp_requests.push(other),
+            }
+        }
+
         // Process GUI commands
         while let Ok(cmd) = command_rx.try_recv() {
             match cmd {
@@ -396,11 +453,7 @@ async fn run_engine(
                     radio.lock().unwrap().teleport_ball(x, y);
                 }
                 EngineCommand::ConsoleCommand(line) => {
-                    let reply = {
-                        let mut r = radio.lock().unwrap();
-                        let mut w = world.write().unwrap_or_else(|e| e.into_inner());
-                        simulator_console::execute(&line, r.simulator_mut(), &mut w)
-                    };
+                    let reply = run_console(&line, &radio, &world);
                     for out in std::iter::once(format!("> {line}")).chain(reply) {
                         let _ = console_tx.try_send(out);
                     }
@@ -408,6 +461,7 @@ async fn run_engine(
                 EngineCommand::SetSimulator(settings) => {
                     switch_simulator(settings.enabled, field_config, &radio, &world, &vision_state, &vision_gui_tx);
                     simulator = settings;
+                    let _ = simulator_gui_tx.try_send(settings);
                 }
                 EngineCommand::UpdateRadioConfig { use_radio, port_name, baud_rate } => {
                     let mut r = radio.lock().unwrap();
@@ -490,6 +544,31 @@ async fn run_engine(
                     });
                 }
             }
+        }
+
+        for request in mcp_requests {
+            match request {
+                mcp::Request::State(reply) | mcp::Request::Command(_, reply) => {
+                    let path = last_script_path.lock().unwrap().clone();
+                    let _ = reply.send(mcp_snapshot(&world, &radio, simulator, last_script_state, &path));
+                }
+                mcp::Request::Console(line, reply) => {
+                    let output = run_console(&line, &radio, &world);
+                    for out in std::iter::once(format!("> {line}  (agent)")).chain(output.iter().cloned()) {
+                        let _ = console_tx.try_send(out);
+                    }
+                    let _ = reply.send(output);
+                }
+                mcp::Request::Log { since, reply } => {
+                    let _ = reply.send(console_log.since(since));
+                }
+            }
+        }
+
+        // Lua output and console replies: keep them, then show them.
+        while let Ok(line) = log_rx.try_recv() {
+            console_log.push(line.clone());
+            let _ = lua_log_gui_tx.try_send(line);
         }
 
         // Call Lua process()
