@@ -8,6 +8,7 @@
 // that does not exist yet (like grSim turning a robot on).
 
 pub mod console;
+mod scenario;
 
 use crate::types::{RobotCommand, Vec2D};
 use crate::world::World;
@@ -31,11 +32,7 @@ pub struct SimLink {
 
 impl SimLink {
     /// Starts with blue robot 0 behind the ball at the center.
-    pub fn new(field_length_m: f64, field_width_m: f64) -> Self {
-        let mut config = SimConfig::default();
-        config.field.length = field_length_m;
-        config.field.width = field_width_m;
-
+    pub fn new(config: SimConfig) -> Self {
         let mut link = Self {
             sim: Simulator::new(config, SimState::new(Vec::new(), Ball::new(Vec2::ZERO, Vec2::ZERO))),
             robot_homes: BTreeMap::new(),

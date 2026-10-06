@@ -12,7 +12,8 @@ use super::panels::radio::RadioMessage;
 use super::panels::recording::RecordingMessage;
 use super::panels::vision::VisionMessage;
 use super::sidebar::SidebarMessage;
-use super::teleport_menu::{TeleportMenu, TeleportMenuMessage};
+use super::field_canvas::FieldMessage;
+use super::teleport_menu::TeleportMenuMessage;
 use super::toolbar::{self, ToolbarMessage};
 
 // --- Vision update (sent from vision task to GUI) ---
@@ -132,7 +133,7 @@ pub enum Message {
     LuaConsoleResizeStart,
     ConsoleInputChanged(String),
     ConsoleSubmit,
-    FieldRightClicked(TeleportMenu),
+    Field(FieldMessage),
     TeleportMenu(TeleportMenuMessage),
 
     // Window events

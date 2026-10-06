@@ -1,0 +1,30 @@
+# Parameters of the engine's built-in simulator (SIM button).
+# Read every time SIM is turned on; `sim save` in the Lua console rewrites
+# this file with the current values. Missing values use the defaults.
+# Field length and width come from config.ini.
+#
+# Units: meters, seconds, radians (m/s, m/s^2, rad/s, rad/s^2).
+# Restitutions go from 0 (no bounce) to 1 (perfect bounce).
+
+max_substep = 0.001
+
+[ball]
+radius = 0.0215
+roll_decel = 1.0
+slide_decel = 3.0
+wall_restitution = 0.6
+
+[field]
+boundary_width = 0.3
+
+[robot]
+body_restitution = 0.5
+front_distance = 0.073
+front_restitution = 0.2
+kick_reach = 0.01
+max_accel = 6.0
+max_alpha = 40.0
+max_kick_speed = 6.5
+max_omega = 10.0
+max_speed = 3.5
+radius = 0.09

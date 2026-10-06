@@ -80,6 +80,19 @@ console:
 | `sim config` | all parameters (field, robot, ball) |
 | `sim robot [<parameter> <value>]` | show or change the robot profile, e.g. `sim robot max_speed 2.5` |
 | `sim ball [<parameter> <value>]` | show or change the ball profile, e.g. `sim ball roll_decel 0.5` |
+| `sim save` | keep the current robot and ball profiles in `simulator.toml` |
+| `sim scenario save <name>` | save where every robot and the ball are, in `scenarios/<name>.toml` |
+| `sim scenario load <name>` | put the robots and ball back as saved (other robots are removed) |
+| `sim scenario list` | saved scenarios |
+
+On the field, left-click a robot to select it (Escape deselects). Right-click
+opens a menu: move the ball there, teleport the selected robot there, or
+add a blue or yellow robot there (with the lowest free id).
+
+The parameters persist in `simulator.toml` at the repository root, read
+every time SIM is turned on. Edit it by hand and toggle SIM off and on, or
+tune live with `sim robot` / `sim ball` and then `sim save`. Field length
+and width come from `config.ini`.
 
 Teleporting a robot that is not simulated yet (from Lua or the right-click
 menu) adds it, as grSim does when it turns a robot on. The simulated robot is
