@@ -2,7 +2,7 @@
 //
 // Each command returns the lines to print back in the console.
 
-use super::{engine_id, SimLink};
+use super::{engine_id, scenario, SimLink};
 use crate::world::World;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -17,6 +17,10 @@ const HELP: &[&str] = &[
     "sim config                              all simulator parameters",
     "sim robot [<parameter> <value>]         show or change the robot profile",
     "sim ball [<parameter> <value>]          show or change the ball profile",
+    "sim save                                keep the robot and ball profiles in simulator.toml",
+    "sim scenario save <name>                save where every robot and the ball are",
+    "sim scenario load <name>                put robots and ball back as saved",
+    "sim scenario list                       saved scenarios",
 ];
 
 /// Runs one console line and returns what to print.
@@ -79,6 +83,7 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
         ["robot", name, value] => {
             let mut config = simulator.sim.config().clone();
             config.robot = with_value(&config.robot, name, parse_number(value, name)?)?;
+            config.validate()?;
             simulator.sim.set_config(config);
             Ok(vec![format!("robot {name} = {value}")])
         }
@@ -86,9 +91,33 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
         ["ball", name, value] => {
             let mut config = simulator.sim.config().clone();
             config.ball = with_value(&config.ball, name, parse_number(value, name)?)?;
+            config.validate()?;
             simulator.sim.set_config(config);
             Ok(vec![format!("ball {name} = {value}")])
         }
+        ["save"] => {
+            let path = crate::config::save_simulator_config(simulator.sim.config())?;
+            Ok(vec![format!("saved to {}", path.display())])
+        }
+        ["scenario", "save", name] => {
+            let setup = simulator.scenario();
+            let path = scenario::save(name, &setup)?;
+            Ok(vec![format!("saved {} robots and the ball to {}", setup.robots.len(), path.display())])
+        }
+        ["scenario", "load", name] => {
+            let setup = scenario::load(name)?;
+            simulator.load_scenario(&setup, world);
+            Ok(vec![format!("loaded {name}: {} robots", setup.robots.len())])
+        }
+        ["scenario"] | ["scenario", "list"] => {
+            let names = scenario::list();
+            if names.is_empty() {
+                Ok(vec!["no saved scenarios, create one with `sim scenario save <name>`".to_string()])
+            } else {
+                Ok(names)
+            }
+        }
+        ["scenario", ..] => Err("usage: sim scenario save|load <name>, or sim scenario list".to_string()),
         [other, ..] => Err(format!("unknown sim command `{other}`, type `sim help`")),
         [] => unreachable!("handled by `execute`"),
     }
@@ -188,7 +217,7 @@ mod tests {
     use super::*;
 
     fn setup() -> (SimLink, World) {
-        (SimLink::new(9.0, 6.0), World::new(0, 0, 9.0, 6.0))
+        (SimLink::new(ssl_sim::SimConfig::default()), World::new(0, 0, 9.0, 6.0))
     }
 
     fn run_line(simulator: &mut SimLink, world: &mut World, line: &str) -> Vec<String> {
