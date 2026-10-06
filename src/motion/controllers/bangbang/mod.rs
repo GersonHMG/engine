@@ -79,11 +79,15 @@ impl Default for Trajectory1D {
     }
 }
 
+/// Distances below this (in meters) are treated as zero; anything smaller is
+/// floating-point noise from vision/teleports, not a real offset.
+const WF_EPSILON: f64 = 1e-9;
+
 impl Trajectory1D {
     pub fn new(a_max: f64, v_max: f64, v0: f64, wf: f64) -> Self {
         assert!(a_max > 0.0 && v_max > 0.0, "Max acceleration and velocity must be > 0");
 
-        if wf == 0.0 {
+        if wf.abs() < WF_EPSILON {
             return Self {
                 states: vec![State { v: v0, t: 0.0, _a: 0.0, _d: 0.0 }],
             };
@@ -150,6 +154,10 @@ impl Trajectory2D {
         let mut traj_x = Trajectory1D::default();
         let mut traj_y = Trajectory1D::default();
         let mut valid = false;
+        // Best (smallest |tx.tf() - ty.tf()|) pair seen, used if bisection does
+        // not converge, e.g. when one axis distance is tiny: alpha can't get
+        // small enough in 20 iterations to stretch that axis's time to match.
+        let mut best: Option<(f64, Trajectory1D, Trajectory1D)> = None;
 
         for _ in 0..20 {
             let mid_alpha = (min_alpha + max_alpha) / 2.0;
@@ -174,7 +182,8 @@ impl Trajectory2D {
                 break;
             }
 
-            if (tx.tf() - ty.tf()).abs() < epsilon {
+            let err = (tx.tf() - ty.tf()).abs();
+            if err < epsilon {
                 traj_x = tx;
                 traj_y = ty;
                 valid = true;
@@ -185,6 +194,18 @@ impl Trajectory2D {
                 max_alpha = mid_alpha;
             } else {
                 min_alpha = mid_alpha;
+            }
+
+            if best.as_ref().map_or(true, |(e, _, _)| err < *e) {
+                best = Some((err, tx, ty));
+            }
+        }
+
+        if !valid {
+            if let Some((_, tx, ty)) = best {
+                traj_x = tx;
+                traj_y = ty;
+                valid = true;
             }
         }
 
@@ -291,5 +312,44 @@ mod tests {
         let vel = t.get_next_velocity();
         assert!(vel.x > 0.0);
         assert!(vel.y > 0.0);
+    }
+
+    #[test]
+    fn trajectory2d_tiny_offset_moves() {
+        // Robot at (-0.3, 1e-12) driving to (-0.045, 0): y offset is noise,
+        // x offset is real. Previously bisection never converged and the
+        // controller returned zero velocity, freezing the robot.
+        let t = Trajectory2D::new(
+            2.5,
+            5.0,
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(-0.3, 1e-12),
+            Vec2D::new(-0.045, 0.0),
+        );
+        assert!(t.valid);
+        let vel = t.get_next_velocity();
+        assert!(vel.x > 0.0);
+        assert!(vel.y.abs() < 1e-3);
+
+        // Small offsets above the epsilon must also not freeze the robot.
+        for dy in [1e-8, -1e-8, 1e-7] {
+            let t = Trajectory2D::new(
+                2.5,
+                5.0,
+                Vec2D::new(0.0, 0.0),
+                Vec2D::new(-0.3, 0.0),
+                Vec2D::new(-0.045, dy),
+            );
+            assert!(t.valid);
+            let vel = t.get_next_velocity();
+            assert!(vel.x > 0.0, "dy = {dy}");
+            assert!(vel.y.abs() < 1e-2, "dy = {dy}");
+        }
+    }
+
+    #[test]
+    fn trajectory1d_tiny_distance_is_zero() {
+        let t = Trajectory1D::new(2.5, 5.0, 0.0, 1e-12);
+        assert!(t.tf() == 0.0);
     }
 }
