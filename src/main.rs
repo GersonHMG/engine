@@ -15,6 +15,7 @@ mod lua_interface;
 mod logger;
 mod gui;
 mod config;
+mod headless;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
@@ -117,10 +118,18 @@ const TICK: Duration = Duration::from_micros(16_667);
 /// Vision frame rate reported to the GUI in simulator mode (one frame per tick).
 const SIM_FRAME_RATE: u32 = 60;
 
-/// Command line: `engine [--sim] [--speed <x>] [script.lua]`. The
-/// simulator can also be switched on and off from the toolbar.
+/// Default simulated-time limit for `--headless`, s.
+const HEADLESS_MAX_TIME: f64 = 60.0;
+
+/// Command line: `engine [--sim] [--speed <x>] [script.lua]`, or
+/// `engine --headless [--max-time <s>] script.lua`. The simulator can also
+/// be switched on and off from the toolbar.
 struct LaunchArgs {
     script: Option<String>,
+    /// Run the script against the simulator without the GUI, then exit.
+    headless: bool,
+    /// Simulated seconds after which a headless run stops.
+    max_time: f64,
     /// Start with the in-process simulator instead of grSim or the radio.
     simulator: bool,
     /// Simulated seconds per real second; 0 = as fast as possible.
@@ -129,11 +138,22 @@ struct LaunchArgs {
 
 impl LaunchArgs {
     fn parse() -> Self {
-        let mut launch = Self { script: None, simulator: false, speed: 1.0 };
+        let mut launch = Self {
+            script: None,
+            headless: false,
+            max_time: HEADLESS_MAX_TIME,
+            simulator: false,
+            speed: 1.0,
+        };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
                 "--sim" => launch.simulator = true,
+                "--headless" => launch.headless = true,
+                "--max-time" => match args.next().and_then(|v| v.parse::<f64>().ok()) {
+                    Some(seconds) if seconds > 0.0 => launch.max_time = seconds,
+                    _ => warn!("--max-time needs a number of seconds > 0, using {HEADLESS_MAX_TIME}"),
+                },
                 "--speed" => match args.next().and_then(|v| v.parse::<f64>().ok()) {
                     Some(speed) if speed >= 0.0 => launch.speed = speed,
                     _ => warn!("--speed needs a number >= 0 (0 = as fast as possible), using 1"),
@@ -160,10 +180,22 @@ fn map_script_state(state: ScriptExecState) -> ScriptStatus {
 }
 
 fn main() -> iced::Result {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
+    // Headless runs keep stdout for the script's output.
+    let headless = std::env::args().any(|arg| arg == "--headless");
+    if headless {
+        tracing_subscriber::fmt().with_writer(std::io::stderr).with_ansi(false).init();
+    } else {
+        tracing_subscriber::fmt::init();
+    }
 
     let launch = LaunchArgs::parse();
+    if headless {
+        let Some(script) = launch.script.as_deref() else {
+            eprintln!("usage: engine --headless [--max-time <seconds>] <script.lua>");
+            std::process::exit(headless::EXIT_SCRIPT_ERROR);
+        };
+        std::process::exit(headless::run(script, launch.max_time, TICK));
+    }
     let simulator = launch.simulator_settings();
     let field_config = load_field_config_from_exe();
 

@@ -67,6 +67,19 @@ cargo run -- --sim --speed 4 lua/run_ai.lua
 
 The script loads paused; press play in the GUI.
 
+To run a script with no window, as fast as possible (for tests and agents):
+
+```sh
+cargo run -q -- --headless lua/tests/<name>.lua
+cargo run -q -- --headless --max-time 120 lua/tests/<name>.lua
+```
+
+The script's `print` goes to stdout and logs to stderr. Headless scripts also
+get `sim.time()`, `sim.events()` (kicks, touches, wall hits since the last
+call) and `sim.finish(ok)`. Exit codes: 0 finished, 1 `sim.finish(false)`,
+2 Lua error, 3 time limit (default 60 s simulated). See `CLAUDE.md` for how to
+write a test script.
+
 Type `sim ...` commands in the command line at the bottom of the Lua
 console:
 
