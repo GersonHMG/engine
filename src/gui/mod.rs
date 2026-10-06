@@ -68,6 +68,7 @@ pub struct EngineApp {
     lua_draw_rx: Arc<Mutex<mpsc::Receiver<Vec<LuaDrawCmd>>>>,
     lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
     lua_log_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    simulator_rx: Arc<Mutex<mpsc::Receiver<SimulatorSettings>>>,
     command_tx: mpsc::Sender<EngineCommand>,
 
     // Keyboard state for manual control
@@ -132,6 +133,7 @@ impl EngineApp {
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
             lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
             lua_log_rx: Arc::new(Mutex::new(channels.lua_log_rx)),
+            simulator_rx: Arc::new(Mutex::new(channels.simulator_rx)),
             command_tx: channels.command_tx,
             key_chars: std::collections::HashSet::new(),
             kick_key_was_down: false,
@@ -674,6 +676,13 @@ impl EngineApp {
                                 },
                             })
                             .collect();
+                    }
+                }
+
+                // Keep the SIM button and speed in step with the engine
+                if let Ok(mut rx) = self.simulator_rx.try_lock() {
+                    while let Ok(settings) = rx.try_recv() {
+                        self.toolbar.simulator = settings;
                     }
                 }
 
