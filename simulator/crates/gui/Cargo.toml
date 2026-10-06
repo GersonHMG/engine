@@ -1,0 +1,14 @@
+[package]
+name = "ssl-sim-gui"
+description = "Window showing the SSL simulator's field"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "engine-sim-gui"
+path = "src/main.rs"
+
+[dependencies]
+iced = { version = "0.14", features = ["canvas", "tokio"] }
+ssl-sim = { path = "../sim" }
+ssl-sim-scenario = { path = "../scenario" }
