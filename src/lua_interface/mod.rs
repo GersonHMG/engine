@@ -20,6 +20,23 @@ pub enum ScriptExecState {
     Failed,
 }
 
+/// Lets a script end a headless run (`sim.finish`).
+#[derive(Debug, Default)]
+pub struct RunControl {
+    outcome: Mutex<Option<bool>>,
+}
+
+impl RunControl {
+    fn finish(&self, ok: bool) {
+        *self.outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(ok);
+    }
+
+    /// `Some(ok)` once the script has called `sim.finish(ok)`.
+    pub fn outcome(&self) -> Option<bool> {
+        *self.outcome.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
 pub struct LuaInterface {
     lua: Lua,
     radio: Arc<Mutex<Radio>>,
@@ -27,6 +44,8 @@ pub struct LuaInterface {
     game_state: Arc<Mutex<GameState>>,
     draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
     log_tx: Option<mpsc::Sender<String>>,
+    /// Set for headless runs: registers the `sim` table.
+    run_control: Option<Arc<RunControl>>,
     have_script: bool,
     is_paused: bool,
     has_failed: bool,
@@ -48,6 +67,7 @@ impl LuaInterface {
             game_state,
             draw_commands: Arc::new(Mutex::new(Vec::new())),
             log_tx,
+            run_control: None,
             have_script: false,
             is_paused: false,
             has_failed: false,
@@ -57,6 +77,12 @@ impl LuaInterface {
         interface
     }
 
+    /// Gives scripts the `sim` table (time, events, finish) for headless
+    /// runs. Takes effect from the next `run_script`.
+    pub fn set_run_control(&mut self, control: Arc<RunControl>) {
+        self.run_control = Some(control);
+    }
+
     fn register_functions(&mut self) {
         api::register_api_functions(
             &self.lua,
@@ -64,6 +90,7 @@ impl LuaInterface {
             Arc::clone(&self.world),
             Arc::clone(&self.game_state),
             Arc::clone(&self.draw_commands),
+            self.run_control.clone(),
         );
         self.register_print();
     }
