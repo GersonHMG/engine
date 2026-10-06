@@ -122,12 +122,19 @@ impl FieldCanvas {
         self.mouse_field_pos
     }
 
-    pub fn view<'a, M: 'a>(&'a self, data: &'a FieldData) -> Element<'a, M> {
+    /// `on_right_click` receives the click position inside the canvas (px)
+    /// and on the field (m).
+    pub fn view<'a, M: 'a>(
+        &'a self,
+        data: &'a FieldData,
+        on_right_click: impl Fn(Point, (f64, f64)) -> M + 'a,
+    ) -> Element<'a, M> {
         Canvas::new(FieldProgram {
             data,
             pan: self.pan,
             scale: self.scale,
             last_bounds: &self.last_bounds,
+            on_right_click: Box::new(on_right_click),
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -172,11 +179,7 @@ impl FieldCanvas {
     }
 
     pub fn screen_to_field(&self, bounds: Rectangle, position: Point) -> (f64, f64) {
-        let cx = bounds.width / 2.0 + self.pan.x;
-        let cy = bounds.height / 2.0 + self.pan.y;
-        let x = ((position.x - cx) / self.scale / 1000.0) as f64;
-        let y = -((position.y - cy) / self.scale / 1000.0) as f64;
-        (x, y)
+        screen_to_field(self.pan, self.scale, bounds, position)
     }
 
     pub fn update_mouse_pos(&mut self, position: Point) {
@@ -194,14 +197,26 @@ impl FieldCanvas {
     }
 }
 
-struct FieldProgram<'a> {
+/// Canvas point (px) to field coordinates (m), for a view panned by `pan`
+/// and zoomed by `scale` (px per mm).
+fn screen_to_field(pan: Vector, scale: f32, bounds: Rectangle, position: Point) -> (f64, f64) {
+    let cx = bounds.width / 2.0 + pan.x;
+    let cy = bounds.height / 2.0 + pan.y;
+    (
+        ((position.x - cx) / scale / 1000.0) as f64,
+        -((position.y - cy) / scale / 1000.0) as f64,
+    )
+}
+
+struct FieldProgram<'a, M> {
     data: &'a FieldData,
     pan: Vector,
     scale: f32,
     last_bounds: &'a Cell<Rectangle>,
+    on_right_click: Box<dyn Fn(Point, (f64, f64)) -> M + 'a>,
 }
 
-impl<'a> FieldProgram<'a> {
+impl<'a, M> FieldProgram<'a, M> {
     fn field_to_screen(&self, bounds: Rectangle, x: f64, y: f64) -> Point {
         let cx = bounds.width / 2.0 + self.pan.x;
         let cy = bounds.height / 2.0 + self.pan.y;
@@ -210,10 +225,27 @@ impl<'a> FieldProgram<'a> {
             cy - (y as f32) * 1000.0 * self.scale,
         )
     }
+
 }
 
-impl<'a, M> canvas::Program<M> for FieldProgram<'a> {
+impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
     type State = ();
+
+    /// Right click: publish where it happened. Other events pass through.
+    fn update(
+        &self,
+        _state: &mut Self::State,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> Option<canvas::Action<M>> {
+        let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event else {
+            return None;
+        };
+        let position = cursor.position_in(bounds)?;
+        let field = screen_to_field(self.pan, self.scale, bounds, position);
+        Some(canvas::Action::publish((self.on_right_click)(position, field)).and_capture())
+    }
 
     fn draw(
         &self,

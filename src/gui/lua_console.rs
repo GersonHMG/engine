@@ -1,6 +1,7 @@
-// gui/lua_console.rs — Lua console log panel UI
+// gui/lua_console.rs — Lua console panel UI: logs plus a command line
+// (simulator commands, see `sim help`)
 
-use iced::widget::{column, container, scrollable, text, Id, MouseArea, Space};
+use iced::widget::{column, container, scrollable, text, text_input, Id, MouseArea, Space};
 use iced::{Element, Length, mouse};
 use std::collections::VecDeque;
 
@@ -18,6 +19,8 @@ pub struct LuaConsolePanel {
     max_lines: usize,
     scroll_id: Id,
     height: f32,
+    /// Command being typed.
+    input: String,
 }
 
 impl LuaConsolePanel {
@@ -29,7 +32,18 @@ impl LuaConsolePanel {
             max_lines: DEFAULT_MAX_LINES.min(max_lines),
             scroll_id: Id::unique(),
             height: DEFAULT_PANEL_HEIGHT_PX,
+            input: String::new(),
         }
+    }
+
+    pub fn set_input(&mut self, input: String) {
+        self.input = input;
+    }
+
+    /// The typed command, trimmed, clearing the input; `None` if empty.
+    pub fn take_input(&mut self) -> Option<String> {
+        let line = std::mem::take(&mut self.input).trim().to_string();
+        (!line.is_empty()).then_some(line)
     }
 
     pub fn push_line(&mut self, line: String) -> bool {
@@ -69,6 +83,8 @@ impl LuaConsolePanel {
     pub fn view<'a, Message: Clone + 'a>(
         &self,
         on_resize_start: Message,
+        on_input: impl Fn(String) -> Message + 'a,
+        on_submit: Message,
     ) -> Element<'a, Message> {
         let (body_text, body_color) = if self.logs.is_empty() {
             (
@@ -102,6 +118,10 @@ impl LuaConsolePanel {
                 )
                 .id(self.scroll_id.clone())
                 .height(Length::Fill),
+                text_input("Type a command, e.g. sim help", &self.input)
+                    .on_input(on_input)
+                    .on_submit(on_submit)
+                    .size(11),
             ]
             .spacing(4)
             .padding(6),

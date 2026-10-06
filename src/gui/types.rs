@@ -12,6 +12,7 @@ use super::panels::radio::RadioMessage;
 use super::panels::recording::RecordingMessage;
 use super::panels::vision::VisionMessage;
 use super::sidebar::SidebarMessage;
+use super::teleport_menu::{TeleportMenu, TeleportMenuMessage};
 use super::toolbar::{self, ToolbarMessage};
 
 // --- Vision update (sent from vision task to GUI) ---
@@ -73,6 +74,21 @@ pub enum EngineCommand {
     LoadScript { path: String },
     PauseScript,
     ResumeScript,
+    SetSimulator(SimulatorSettings),
+    /// Moves a robot (simulator or grSim); orientation in rad.
+    TeleportRobot { id: i32, team: i32, x: f64, y: f64, orientation: f64 },
+    /// Moves the ball, at rest (simulator or grSim).
+    TeleportBall { x: f64, y: f64 },
+    /// A line typed in the console, e.g. `sim status`.
+    ConsoleCommand(String),
+}
+
+/// In-process simulator on/off and how fast it runs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SimulatorSettings {
+    pub enabled: bool,
+    /// Simulated seconds per real second; 0 = as fast as possible.
+    pub speed: f64,
 }
 
 // --- GUI channels ---
@@ -114,6 +130,10 @@ pub enum Message {
     ReplayPause,
     ReplaySeek(u32),
     LuaConsoleResizeStart,
+    ConsoleInputChanged(String),
+    ConsoleSubmit,
+    FieldRightClicked(TeleportMenu),
+    TeleportMenu(TeleportMenuMessage),
 
     // Window events
     WindowOpened(window::Id),
