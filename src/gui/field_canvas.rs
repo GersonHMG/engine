@@ -20,6 +20,8 @@ pub struct FieldData {
     pub path_points: Vec<(f64, f64)>,
     pub robot_trace: Vec<(f64, f64)>,
     pub lua_draw_commands: Vec<LuaDrawCommand>,
+    /// Whether the Lua drawings are shown (they are kept, and recorded, while hidden).
+    pub show_lua_draws: bool,
     pub vision_connected: bool,
     pub vis_velocities: bool,
     pub path_draw_mode: bool,
@@ -40,6 +42,7 @@ impl Default for FieldData {
             path_points: Vec::new(),
             robot_trace: Vec::new(),
             lua_draw_commands: Vec::new(),
+            show_lua_draws: true,
             vision_connected: false,
             vis_velocities: false,
             path_draw_mode: false,
@@ -446,8 +449,9 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
             );
         }
 
-        // Draw Lua commands
-        for cmd in &self.data.lua_draw_commands {
+        // Draw Lua commands (unless hidden from the toolbar)
+        let lua_draws: &[LuaDrawCommand] = if self.data.show_lua_draws { &self.data.lua_draw_commands } else { &[] };
+        for cmd in lua_draws {
             match cmd {
                 LuaDrawCommand::Point { x, y, draw_x, color } => {
                     let pos = self.field_to_screen(bounds, *x, *y);

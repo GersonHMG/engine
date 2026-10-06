@@ -2,14 +2,15 @@
 local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
 local lane = require("AI.calculator.lane")
-local skill_kick = require("skills.kick_to_point")
+local profile = require("utils.robot_profile")
 
 local KickToClear = setmetatable({}, { __index = KickAction })
 KickToClear.__index = KickToClear
 
 local OWN_GOAL   = { x = -4.5, y = 0.0 }  -- our own goal center
-local CLEAR_DIST = 2.0   -- how far from the ball the clear target sits, meters
 local CANDIDATES = 16    -- directions sampled around the ball
+local FIELD_HALF_X, FIELD_HALF_Y = 4.5, 3.0  -- m
+local FIELD_MARGIN = 0.2 -- m, the ball must stop at least this far inside the field
 local LAMBDA     = 0.35  -- decay of urgency with distance to our own goal
 
 --- Picks the most open direction around the ball. Directions the robot is
@@ -18,12 +19,16 @@ local LAMBDA     = 0.35  -- decay of urgency with distance to our own goal
 local function pick_target(robot, ball, opponents)
 	local approach = math.atan(ball.y - robot.y, ball.x - robot.x)
 	local best, best_score = nil, 0.0
+	-- The clear target is where a kick stops rolling, so the lane check covers the whole roll.
+	local clear_dist = profile.roll_distance()
 
 	for i = 0, CANDIDATES - 1 do
 		local a = 2 * math.pi * i / CANDIDATES
-		local p = { x = ball.x + CLEAR_DIST * math.cos(a), y = ball.y + CLEAR_DIST * math.sin(a) }
+		local p = { x = ball.x + clear_dist * math.cos(a), y = ball.y + clear_dist * math.sin(a) }
 		local alignment = (1.0 + math.cos(a - approach)) / 2.0
-		local s = lane.clear(ball, p, opponents) * (0.5 + 0.5 * alignment)
+		-- A clear that rolls out of the field gives the ball away.
+		local inside = math.abs(p.x) <= FIELD_HALF_X - FIELD_MARGIN and math.abs(p.y) <= FIELD_HALF_Y - FIELD_MARGIN
+		local s = inside and lane.clear(ball, p, opponents) * (0.5 + 0.5 * alignment) or 0.0
 		if s > best_score then
 			best, best_score = p, s
 		end
@@ -73,7 +78,7 @@ end
 
 function KickToClear:run(state)
 	if not self.target then return end
-	skill_kick.process(state.robot.id, state.robot.team, self.target)
+	KickAction.kick_towards(state, self.target)
 end
 
 return KickToClear

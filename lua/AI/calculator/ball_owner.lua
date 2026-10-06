@@ -2,7 +2,7 @@
 ---
 --- Owner = the robot with the lowest time to reach the ball:
 ---
----     T_i = d(r_i, b̂) / V_MAX + |wrap(θ_i − atan2(b̂ − r_i))| / OMEGA_MAX
+---     T_i = d(r_i, b̂) / v + |wrap(θ_i − atan2(b̂ − r_i))| / ω   (v, ω: robot profile)
 ---     b̂   = b + v_b · LOOKAHEAD                 (where the ball will be)
 ---
 --- with hysteresis: a challenger only takes over when
@@ -19,12 +19,11 @@
 --- Call `update(robots)` once per tick, after `world.update`.
 
 local world = require("AI.calculator.world")
+local profile = require("utils.robot_profile")
 
 local M = {}
 
 -- Tuning knobs.
-M.V_MAX = 2.0            -- m/s, robot cruise speed used for the time estimate
-M.OMEGA_MAX = 4.0        -- rad/s, robot turn rate used for the time estimate
 M.LOOKAHEAD = 0.3        -- s, how far ahead the ball position is predicted
 M.SWITCH_MARGIN = 0.25   -- s, how much faster a challenger has to be
 M.PASS_MIN_SPEED = 1.0   -- m/s, slower than this the ball is not "in flight" (dribbling pushes are slower)
@@ -35,20 +34,13 @@ M.receiver = nil  -- RobotState|nil, the ally a pass in flight is heading to
 
 local owner_id = nil  -- owner remembered across ticks, for hysteresis
 
-local function wrap(angle)
-	while angle > math.pi do angle = angle - 2 * math.pi end
-	while angle <= -math.pi do angle = angle + 2 * math.pi end
-	return angle
-end
-
---- Estimated seconds for `robot` to reach `target`: drive + turn to face it.
+--- Estimated seconds for `robot` to reach `target`: drive + turn to face it, at the
+--- active robot profile's cruise speed and turn rate.
 --- @param robot RobotState
 --- @param target { x: number, y: number }
 --- @return number
 function M.time_to_ball(robot, target)
-	local heading = math.atan(target.y - robot.y, target.x - robot.x)
-	local turn = math.abs(wrap(robot.orientation - heading))
-	return world.distance(robot, target) / M.V_MAX + turn / M.OMEGA_MAX
+	return profile.time_to_reach(robot, target)
 end
 
 --- @return { x: number, y: number }

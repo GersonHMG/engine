@@ -2,7 +2,6 @@
 local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
 local lane = require("AI.calculator.lane")
-local skill_kick = require("skills.kick_to_point")
 
 local Pass = setmetatable({}, { __index = KickAction })
 Pass.__index = Pass
@@ -40,7 +39,7 @@ function Pass:evaluate(state)
 	local opponents = state.opponents or world.active_enemies()
 	local best = 0.0
 	for _, mate in ipairs(state.teammates or {}) do
-		local v = pass_value(state.ball, mate, opponents)
+		local v = pass_value(state.ball, mate, opponents) * KickAction.alignment(state.robot, state.ball, mate)
 		if v > best then
 			best, self.candidate_id = v, mate.id
 		end
@@ -59,7 +58,7 @@ end
 function Pass:run(state)
 	local mate = self.receiver_id and world.ally(self.receiver_id)
 	if not mate then return end
-	skill_kick.process(state.robot.id, state.robot.team, { x = mate.x, y = mate.y })
+	KickAction.kick_towards(state, { x = mate.x, y = mate.y })
 end
 
 return Pass

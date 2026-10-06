@@ -277,6 +277,7 @@ impl EngineApp {
             match &message {
                 Message::Sidebar(SidebarMessage::ToggleReplayMode)
                 | Message::Toolbar(ToolbarMessage::PlayRecording)
+                | Message::Toolbar(ToolbarMessage::ToggleDraws)
                 | Message::ReplayFilePick
                 | Message::ReplayFileSelected(_)
                 | Message::ReplayPlay
@@ -434,6 +435,11 @@ impl EngineApp {
                     }
                 };
                 let _ = self.command_tx.try_send(command);
+            }
+            Message::Toolbar(ToolbarMessage::ToggleDraws) => {
+                self.toolbar.show_draws = !self.toolbar.show_draws;
+                self.field_data.show_lua_draws = self.toolbar.show_draws;
+                self.field_canvas.request_redraw();
             }
             Message::Toolbar(ToolbarMessage::ToggleSimulator) => {
                 self.toolbar.simulator.enabled = !self.toolbar.simulator.enabled;
@@ -905,6 +911,8 @@ impl EngineApp {
                 button(text("⟲ Last recording").size(12)).style(button::secondary)
             };
 
+            let draws_btn = toolbar::draws_button(self.toolbar.show_draws, Message::Toolbar(ToolbarMessage::ToggleDraws));
+
             let exit_btn = button(text("Exit replay").size(12))
                 .on_press(Message::Sidebar(SidebarMessage::ToggleReplayMode))
                 .style(button::secondary);
@@ -914,6 +922,7 @@ impl EngineApp {
                     text("Replay Mode").size(12).color(iced::Color::from_rgb(0.8, 0.8, 0.8)),
                     open_btn,
                     last_recording_btn,
+                    draws_btn,
                     text(replay_file_name).size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
                     iced::widget::Space::new().width(Length::Fill),
                     exit_btn,

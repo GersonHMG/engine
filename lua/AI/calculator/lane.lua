@@ -8,10 +8,10 @@
 --- function, so each enemy is a soft gate: 0.5 when it just touches the ball's
 --- path, ~1 when well clear.
 
+local profile = require("utils.robot_profile")
+
 local M = {}
 
-M.ROBOT_RADIUS = 0.09
-M.BALL_RADIUS = 0.021
 M.SHARPNESS = 12.0  -- logistic steepness for lane clearance
 
 local function dist(a, b)
@@ -39,7 +39,7 @@ end
 --- @return number
 function M.clear(a, b, opponents)
 	local p = 1.0
-	local clearance = M.ROBOT_RADIUS + M.BALL_RADIUS
+	local clearance = profile.touch_distance()
 	for _, opp in ipairs(opponents) do
 		local d = M.point_to_segment(opp, a, b)
 		p = p / (1.0 + math.exp(-M.SHARPNESS * (d - clearance)))
