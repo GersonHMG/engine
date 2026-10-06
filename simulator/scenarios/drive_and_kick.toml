@@ -1,0 +1,23 @@
+# The robot drives at the ball, kicks it into the right wall and the ball
+# bounces back.
+
+name = "drive_and_kick"
+duration = 5.0
+
+[robot]
+x = -1.0
+y = 0.0
+theta = 0.0
+
+[ball]
+x = 0.0
+y = 0.0
+
+[[commands]]
+t = 0.0
+vt = 1.0
+kick_speed = 4.0
+
+[[commands]]
+t = 1.2
+vt = 0.0
