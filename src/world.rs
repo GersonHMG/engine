@@ -103,6 +103,21 @@ impl World {
         });
     }
 
+    pub fn remove_robot(&mut self, id: i32, team: i32) {
+        match team {
+            0 => self.blue_robots.remove(&id),
+            _ => self.yellow_robots.remove(&id),
+        };
+    }
+
+    /// Forgets every robot and the ball, e.g. when switching between the
+    /// simulator and vision.
+    pub fn clear(&mut self) {
+        self.blue_robots.clear();
+        self.yellow_robots.clear();
+        self.ball = BallState::default();
+    }
+
     pub fn set_commanded_velocity(&mut self, id: i32, team: i32, cmd_v: Vec2D, cmd_angular: f64) {
         let robots = match team {
             0 => &mut self.blue_robots,
