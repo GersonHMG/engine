@@ -6,6 +6,7 @@ pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
 pub mod lua_console;
+pub mod recorder;
 pub mod replay;
 pub mod robot;
 pub mod teleport_menu;
@@ -28,6 +29,7 @@ use tracing::warn;
 use crate::config::FieldConfig;
 
 use field_canvas::{FieldCanvas, FieldData, FieldMessage, LuaDrawCommand, RobotData};
+use recorder::Recorder;
 use replay::ReplayState;
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
 use teleport_menu::{TeleportMenu, TeleportMenuMessage};
@@ -92,6 +94,10 @@ pub struct EngineApp {
 
     // Replay mode UI state
     replay: ReplayState,
+    // Toolbar recorder (REC / REPLAY)
+    recorder: Recorder,
+    // Live Lua drawings, kept up to date while replay mode shows recorded ones
+    live_draws: Vec<LuaDrawCommand>,
     // Right-click menu on the field, while open
     teleport_menu: Option<TeleportMenu>,
 }
@@ -147,6 +153,8 @@ impl EngineApp {
             lua_console_resize_start_height: 0.0,
             window_height: 800.0,
             replay: ReplayState::default(),
+            recorder: Recorder::default(),
+            live_draws: Vec::new(),
             teleport_menu: None,
         };
 
@@ -215,10 +223,60 @@ impl EngineApp {
         iced::Task::none()
     }
 
+    /// Switches to replay mode: closes the panel windows, stops recording and
+    /// keeps the live drawings aside until replay mode ends.
+    fn enter_replay_mode(&mut self) -> iced::Task<Message> {
+        self.recorder.stop();
+        self.replay.set_enabled(true);
+        self.live_draws = std::mem::take(&mut self.field_data.lua_draw_commands);
+
+        let panel_ids: Vec<window::Id> = self.panel_windows.values().cloned().collect();
+        self.panel_windows.clear();
+        self.window_to_panel.clear();
+        self.sidebar.active_panel = None;
+        self.lua_console_panel.open = false;
+        self.key_chars.clear();
+        self.kick_key_was_down = false;
+
+        let tasks: Vec<iced::Task<Message>> = panel_ids.into_iter().map(window::close).collect();
+        iced::Task::batch(tasks)
+    }
+
+    /// Back to the live view, with the live drawings.
+    fn exit_replay_mode(&mut self) {
+        self.replay.set_enabled(false);
+        self.field_data.lua_draw_commands = std::mem::take(&mut self.live_draws);
+    }
+
+    /// Plays the last recording from its start, in replay mode.
+    fn play_last_recording(&mut self) -> iced::Task<Message> {
+        if self.recorder.is_recording() || !self.recorder.has_recording() {
+            return iced::Task::none();
+        }
+        let task = if self.replay.enabled { iced::Task::none() } else { self.enter_replay_mode() };
+        let label = format!("Last recording ({:.1} s)", self.recorder.last_duration_s());
+        let frames = self.recorder.last_recording().to_vec();
+        self.replay.load_recording(frames, label, &mut self.field_data, &mut self.robot_trace);
+        self.replay.start_playback(&mut self.field_data, &mut self.robot_trace);
+        task
+    }
+
+    /// Takes the newest Lua drawings sent by the engine, if any arrived.
+    fn drain_lua_draws(&mut self) -> Option<Vec<LuaDrawCommand>> {
+        let mut latest = None;
+        if let Ok(mut rx) = self.lua_draw_rx.try_lock() {
+            while let Ok(cmds) = rx.try_recv() {
+                latest = Some(cmds);
+            }
+        }
+        latest.map(|cmds| cmds.iter().map(to_field_draw).collect())
+    }
+
     pub fn update(&mut self, message: Message) -> iced::Task<Message> {
         if self.replay.enabled {
             match &message {
                 Message::Sidebar(SidebarMessage::ToggleReplayMode)
+                | Message::Toolbar(ToolbarMessage::PlayRecording)
                 | Message::ReplayFilePick
                 | Message::ReplayFileSelected(_)
                 | Message::ReplayPlay
@@ -235,23 +293,10 @@ impl EngineApp {
         match message {
             // --- Sidebar ---
             Message::Sidebar(SidebarMessage::ToggleReplayMode) => {
-                let enabled = !self.replay.enabled;
-                self.replay.set_enabled(enabled);
-
                 if self.replay.enabled {
-                    let panel_ids: Vec<window::Id> = self.panel_windows.values().cloned().collect();
-                    self.panel_windows.clear();
-                    self.window_to_panel.clear();
-                    self.sidebar.active_panel = None;
-                    self.lua_console_panel.open = false;
-                    self.key_chars.clear();
-                    self.kick_key_was_down = false;
-
-                    let tasks: Vec<iced::Task<Message>> = panel_ids
-                        .into_iter()
-                        .map(window::close)
-                        .collect();
-                    return iced::Task::batch(tasks);
+                    self.exit_replay_mode();
+                } else {
+                    return self.enter_replay_mode();
                 }
             }
             Message::Sidebar(SidebarMessage::TogglePanel(panel)) => {
@@ -332,6 +377,16 @@ impl EngineApp {
                     let path = self.toolbar.script_path.clone();
                     let _ = self.command_tx.try_send(EngineCommand::LoadScript { path });
                 }
+            }
+            Message::Toolbar(ToolbarMessage::ToggleRecording) => {
+                if self.recorder.is_recording() {
+                    self.recorder.stop();
+                } else {
+                    self.recorder.start();
+                }
+            }
+            Message::Toolbar(ToolbarMessage::PlayRecording) => {
+                return self.play_last_recording();
             }
             // --- Console command line ---
             Message::ConsoleInputChanged(input) => {
@@ -564,6 +619,9 @@ impl EngineApp {
                     self.vision_panel.connected = true;
                     self.vision_panel.pps = 0;
                     self.toolbar.pps = 0;
+                    if let Some(draws) = self.drain_lua_draws() {
+                        self.live_draws = draws;
+                    }
                     self.replay.tick(&mut self.field_data, &mut self.robot_trace);
                     self.field_canvas.request_redraw();
                     return iced::Task::none();
@@ -647,36 +705,10 @@ impl EngineApp {
                     }
                 }
 
-                // Drain lua draw channel
-                if let Ok(mut rx) = self.lua_draw_rx.try_lock() {
-                    while let Ok(cmds) = rx.try_recv() {
-                        self.field_data.lua_draw_commands = cmds.iter()
-                            .map(|cmd| match cmd {
-                                LuaDrawCmd::Point { x, y, draw_x, color } => LuaDrawCommand::Point {
-                                    x: *x,
-                                    y: *y,
-                                    draw_x: *draw_x,
-                                    color: *color,
-                                },
-                                LuaDrawCmd::HighlightRobot { id, team } => LuaDrawCommand::HighlightRobot { id: *id, team: *team },
-                                LuaDrawCmd::Line {
-                                    points,
-                                    draw_points_between,
-                                    color,
-                                } => LuaDrawCommand::Line {
-                                    points: points.clone(),
-                                    draw_points_between: *draw_points_between,
-                                    color: *color,
-                                },
-                                LuaDrawCmd::Text { x, y, text, color } => LuaDrawCommand::Text {
-                                    x: *x,
-                                    y: *y,
-                                    text: text.clone(),
-                                    color: *color,
-                                },
-                            })
-                            .collect();
-                    }
+                // Drain lua draw channel (the engine sends drawings on each tick that
+                // ran process() and on script loads, so they stay while paused)
+                if let Some(draws) = self.drain_lua_draws() {
+                    self.field_data.lua_draw_commands = draws;
                 }
 
                 // Keep the SIM button and speed in step with the engine
@@ -711,6 +743,11 @@ impl EngineApp {
                         }
                     }
                 }
+
+                // Record what the field shows now (robots, ball, drawings)
+                self.recorder.capture(&self.field_data);
+                self.toolbar.recording_s = self.recorder.elapsed_s();
+                self.toolbar.has_recording = self.recorder.has_recording();
 
                 let mut scroll_task = iced::Task::none();
                 if log_added && self.lua_console_panel.open {
@@ -846,22 +883,40 @@ impl EngineApp {
 
         // Toolbar
         let toolbar: Element<'_, Message> = if self.replay.enabled {
-            let replay_file_name = self
-                .replay
-                .file_path
-                .as_ref()
-                .map(|p| p.replace('\\', "/").rsplit('/').next().unwrap_or("No file").to_string())
-                .unwrap_or_else(|| "No CSV selected".to_string());
+            let replay_file_name = if let Some(label) = &self.replay.recording_label {
+                label.clone()
+            } else {
+                self.replay
+                    .file_path
+                    .as_ref()
+                    .map(|p| p.replace('\\', "/").rsplit('/').next().unwrap_or("No file").to_string())
+                    .unwrap_or_else(|| "No CSV selected".to_string())
+            };
 
             let open_btn = button(text("Open CSV").size(12))
                 .on_press(Message::ReplayFilePick)
+                .style(button::secondary);
+
+            let last_recording_btn = if self.recorder.has_recording() {
+                button(text("⟲ Last recording").size(12))
+                    .on_press(Message::Toolbar(ToolbarMessage::PlayRecording))
+                    .style(button::secondary)
+            } else {
+                button(text("⟲ Last recording").size(12)).style(button::secondary)
+            };
+
+            let exit_btn = button(text("Exit replay").size(12))
+                .on_press(Message::Sidebar(SidebarMessage::ToggleReplayMode))
                 .style(button::secondary);
 
             container(
                 row![
                     text("Replay Mode").size(12).color(iced::Color::from_rgb(0.8, 0.8, 0.8)),
                     open_btn,
+                    last_recording_btn,
                     text(replay_file_name).size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
+                    iced::widget::Space::new().width(Length::Fill),
+                    exit_btn,
                 ]
                 .spacing(8)
                 .padding(4)
@@ -1112,4 +1167,18 @@ impl EngineApp {
         }
     }
 
+}
+
+/// A Lua drawing from the engine, in the field canvas's format.
+fn to_field_draw(cmd: &LuaDrawCmd) -> LuaDrawCommand {
+    match cmd {
+        LuaDrawCmd::Point { x, y, draw_x, color } => LuaDrawCommand::Point { x: *x, y: *y, draw_x: *draw_x, color: *color },
+        LuaDrawCmd::HighlightRobot { id, team } => LuaDrawCommand::HighlightRobot { id: *id, team: *team },
+        LuaDrawCmd::Line { points, draw_points_between, color } => LuaDrawCommand::Line {
+            points: points.clone(),
+            draw_points_between: *draw_points_between,
+            color: *color,
+        },
+        LuaDrawCmd::Text { x, y, text, color } => LuaDrawCommand::Text { x: *x, y: *y, text: text.clone(), color: *color },
+    }
 }
