@@ -8,9 +8,10 @@ pub mod panels;
 pub mod lua_console;
 pub mod replay;
 pub mod robot;
+pub mod teleport_menu;
 pub mod types;
 
-pub use types::{EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, Message, RobotUpdateData, VisionUpdate};
+pub use types::{EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, Message, RobotUpdateData, SimulatorSettings, VisionUpdate};
 
 use iced::widget::{button, column, container, row, scrollable, slider, text};
 use iced::widget::operation::snap_to_end;
@@ -29,6 +30,7 @@ use crate::config::FieldConfig;
 use field_canvas::{FieldCanvas, FieldData, LuaDrawCommand, RobotData};
 use replay::ReplayState;
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
+use teleport_menu::{TeleportMenu, TeleportMenuMessage};
 use toolbar::{Toolbar, ToolbarMessage};
 use bottom_panel::{BottomPanel, BottomPanelMessage};
 use lua_console::LuaConsolePanel;
@@ -89,6 +91,8 @@ pub struct EngineApp {
 
     // Replay mode UI state
     replay: ReplayState,
+    // Right-click menu on the field, while open
+    teleport_menu: Option<TeleportMenu>,
 }
 
 fn app_icon() -> Option<window::Icon> {
@@ -98,7 +102,11 @@ fn app_icon() -> Option<window::Icon> {
 
 impl EngineApp {
     /// Boot function for iced::daemon — opens the main window and returns initial state + tasks
-    pub fn boot(channels: GuiChannels, field_config: FieldConfig) -> (Self, iced::Task<Message>) {
+    pub fn boot(
+        channels: GuiChannels,
+        field_config: FieldConfig,
+        simulator: SimulatorSettings,
+    ) -> (Self, iced::Task<Message>) {
         let (main_id, open_task) = window::open(window::Settings {
             size: iced::Size::new(900.0, 600.0),
             icon: app_icon(),
@@ -108,7 +116,7 @@ impl EngineApp {
         let app = Self {
             field_canvas: FieldCanvas::new(),
             sidebar: Sidebar::new(),
-            toolbar: Toolbar::new(),
+            toolbar: Toolbar::new(simulator),
             bottom_panel: BottomPanel::new(),
             vision_panel: VisionPanel::default(),
             radio_panel: RadioPanel::default(),
@@ -137,6 +145,7 @@ impl EngineApp {
             lua_console_resize_start_height: 0.0,
             window_height: 800.0,
             replay: ReplayState::default(),
+            teleport_menu: None,
         };
 
         (app, open_task.map(Message::WindowOpened))
@@ -321,6 +330,46 @@ impl EngineApp {
                     let path = self.toolbar.script_path.clone();
                     let _ = self.command_tx.try_send(EngineCommand::LoadScript { path });
                 }
+            }
+            // --- Console command line ---
+            Message::ConsoleInputChanged(input) => {
+                self.lua_console_panel.set_input(input);
+            }
+            Message::ConsoleSubmit => {
+                if let Some(line) = self.lua_console_panel.take_input() {
+                    let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(line));
+                }
+            }
+
+            // --- Right-click teleport menu ---
+            Message::FieldRightClicked(menu) => {
+                if !self.replay.enabled {
+                    self.teleport_menu = Some(menu);
+                }
+            }
+            Message::TeleportMenu(choice) => {
+                let Some(menu) = self.teleport_menu.take() else {
+                    return iced::Task::none();
+                };
+                let (x, y) = menu.field;
+                let command = match choice {
+                    TeleportMenuMessage::Ball => EngineCommand::TeleportBall { x, y },
+                    TeleportMenuMessage::Robot { id, team } => {
+                        // Keep the robot's current heading.
+                        let robots = if team == 0 { &self.field_data.robots_blue } else { &self.field_data.robots_yellow };
+                        let orientation = robots.iter().find(|r| r.id == id).map_or(0.0, |r| r.theta);
+                        EngineCommand::TeleportRobot { id: id as i32, team, x, y, orientation }
+                    }
+                };
+                let _ = self.command_tx.try_send(command);
+            }
+            Message::Toolbar(ToolbarMessage::ToggleSimulator) => {
+                self.toolbar.simulator.enabled = !self.toolbar.simulator.enabled;
+                let _ = self.command_tx.try_send(EngineCommand::SetSimulator(self.toolbar.simulator));
+            }
+            Message::Toolbar(ToolbarMessage::SimSpeedSelected(speed)) => {
+                self.toolbar.simulator.speed = speed.0;
+                let _ = self.command_tx.try_send(EngineCommand::SetSimulator(self.toolbar.simulator));
             }
             Message::ScriptFileSelected(Some(path)) => {
                 let _ = self.command_tx.try_send(EngineCommand::LoadScript { path: path.clone() });
@@ -659,6 +708,8 @@ impl EngineApp {
                         self.field_canvas.handle_drag_end();
                     }
                     Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                        // A click outside the teleport menu closes it.
+                        self.teleport_menu = None;
                         if let Some(pos) = self.last_cursor_position {
                             if self.lua_console_panel.open && !self.replay.enabled {
                                 let bottom_height = if self.replay.enabled { 0.0 } else { 52.0 };
@@ -675,6 +726,9 @@ impl EngineApp {
                         }
                     }
                     Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
+                        if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
+                            self.teleport_menu = None;
+                        }
                         if let keyboard::Key::Character(c) = &key {
                             let ch = c.chars().next().unwrap_or(' ').to_ascii_lowercase();
                             self.key_chars.insert(ch);
@@ -808,7 +862,9 @@ impl EngineApp {
         };
 
         // Field canvas
-        let canvas: Element<'_, Message> = self.field_canvas.view(&self.field_data);
+        let canvas: Element<'_, Message> = self
+            .field_canvas
+            .view(&self.field_data, |screen, field| Message::FieldRightClicked(TeleportMenu { screen, field }));
 
         // Mouse coords overlay
         let mouse_pos_text = if let Some((x, y)) = self.field_canvas.mouse_field_pos() {
@@ -912,13 +968,18 @@ impl EngineApp {
             .padding(8);
 
             iced::widget::stack![canvas, mouse_overlay, replay_controls].into()
+        } else if let Some(menu) = &self.teleport_menu {
+            let menu = menu
+                .view(&self.field_data.robots_blue, &self.field_data.robots_yellow)
+                .map(Message::TeleportMenu);
+            iced::widget::stack![canvas, mouse_overlay, menu].into()
         } else {
             iced::widget::stack![canvas, mouse_overlay].into()
         };
 
         let mut canvas_area = column![toolbar, field_stack];
         if self.lua_console_panel.open {
-            canvas_area = canvas_area.push(self.lua_console_panel.view(Message::LuaConsoleResizeStart));
+            canvas_area = canvas_area.push(self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit));
         }
 
         // Main content area = sidebar + canvas
@@ -960,7 +1021,7 @@ impl EngineApp {
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
-            SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart),
+            SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit),
         };
 
         container(scrollable(content))

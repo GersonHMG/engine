@@ -1,0 +1,4 @@
+*.rs   text eol=lf
+*.toml text eol=lf
+*.md   text eol=lf
+*.csv  text eol=lf

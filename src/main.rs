@@ -26,10 +26,12 @@ use crate::lua_interface::LuaInterface;
 use crate::lua_interface::ScriptExecState;
 use crate::receiver::vision;
 use crate::sender::radio::Radio;
+use crate::sender::simulator::console as simulator_console;
+use crate::sender::simulator::SimLink;
 use crate::world::World;
 use crate::logger::Logger;
 use crate::types::{KickerCommand, MotionCommand};
-use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, VisionUpdate};
+use crate::gui::{EngineApp, EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, SimulatorSettings, VisionUpdate};
 use crate::gui::toolbar::ScriptStatus;
 use crate::config::load_field_config_from_exe;
 
@@ -40,6 +42,112 @@ struct VisionState {
     tx: Option<tokio::sync::mpsc::Sender<vision::VisionCommand>>,
     ip: String,
     port: u16,
+}
+
+impl VisionState {
+    /// Starts the vision receiver on `ip:port`, replacing a running one.
+    fn start(&mut self, world: &Arc<RwLock<World>>, gui_tx: &tokio::sync::mpsc::Sender<VisionUpdate>) {
+        self.stop();
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
+        self.tx = Some(tx);
+
+        let (ip, port) = (self.ip.clone(), self.port);
+        let world = Arc::clone(world);
+        let gui_tx = gui_tx.clone();
+        self.handle = Some(tokio::spawn(async move {
+            if let Err(e) = vision::run_vision(ip, port, world, gui_tx, rx).await {
+                warn!("Vision task error: {e}");
+            }
+            Ok(())
+        }));
+    }
+
+    fn stop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            handle.abort();
+        }
+        self.tx = None;
+    }
+}
+
+/// Switches between the in-process simulator and the vision receiver
+/// (grSim or real robots). The world is cleared so nothing from the
+/// previous source lingers.
+fn switch_simulator(
+    enabled: bool,
+    field_config: crate::config::FieldConfig,
+    radio: &Mutex<Radio>,
+    world: &Arc<RwLock<World>>,
+    vision_state: &Mutex<VisionState>,
+    vision_gui_tx: &tokio::sync::mpsc::Sender<VisionUpdate>,
+) {
+    let mut radio = radio.lock().unwrap_or_else(|e| e.into_inner());
+    if radio.has_simulator() == enabled {
+        return;
+    }
+
+    let mut vision = vision_state.lock().unwrap_or_else(|e| e.into_inner());
+    if enabled {
+        vision.stop();
+        radio.attach_simulator(SimLink::new(field_config.length_m, field_config.width_m));
+    } else {
+        radio.detach_simulator();
+        vision.start(world, vision_gui_tx);
+    }
+    world.write().unwrap_or_else(|e| e.into_inner()).clear();
+    info!("Simulator {}", if enabled { "on" } else { "off, vision receiver restarted" });
+}
+
+/// Real time to spend per tick, or `None` to run flat out. Only the
+/// simulator can run faster than real time.
+fn frame_duration(simulator: SimulatorSettings) -> Option<Duration> {
+    if !simulator.enabled {
+        Some(TICK)
+    } else if simulator.speed > 0.0 {
+        Some(TICK.div_f64(simulator.speed))
+    } else {
+        None
+    }
+}
+
+/// One engine tick (~60 FPS). With the simulator this is also the
+/// simulated time each tick advances.
+const TICK: Duration = Duration::from_micros(16_667);
+
+/// Vision frame rate reported to the GUI in simulator mode (one frame per tick).
+const SIM_FRAME_RATE: u32 = 60;
+
+/// Command line: `engine [--sim] [--speed <x>] [script.lua]`. The
+/// simulator can also be switched on and off from the toolbar.
+struct LaunchArgs {
+    script: Option<String>,
+    /// Start with the in-process simulator instead of grSim or the radio.
+    simulator: bool,
+    /// Simulated seconds per real second; 0 = as fast as possible.
+    speed: f64,
+}
+
+impl LaunchArgs {
+    fn parse() -> Self {
+        let mut launch = Self { script: None, simulator: false, speed: 1.0 };
+        let mut args = std::env::args().skip(1);
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--sim" => launch.simulator = true,
+                "--speed" => match args.next().and_then(|v| v.parse::<f64>().ok()) {
+                    Some(speed) if speed >= 0.0 => launch.speed = speed,
+                    _ => warn!("--speed needs a number >= 0 (0 = as fast as possible), using 1"),
+                },
+                _ if launch.script.is_none() => launch.script = Some(arg),
+                _ => warn!("Ignoring extra argument: {arg}"),
+            }
+        }
+        launch
+    }
+
+    fn simulator_settings(&self) -> SimulatorSettings {
+        SimulatorSettings { enabled: self.simulator, speed: self.speed }
+    }
 }
 
 fn map_script_state(state: ScriptExecState) -> ScriptStatus {
@@ -55,6 +163,8 @@ fn main() -> iced::Result {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
+    let launch = LaunchArgs::parse();
+    let simulator = launch.simulator_settings();
     let field_config = load_field_config_from_exe();
 
     // Create channels between GUI and engine
@@ -91,6 +201,7 @@ fn main() -> iced::Result {
                 lua_log_tx_clone,
                 rx,
                 field_config,
+                launch,
             )
             .await;
         });
@@ -104,7 +215,7 @@ fn main() -> iced::Result {
         move || {
             let channels = gui_channels.lock().unwrap().take()
                 .expect("GUI channels already consumed");
-            EngineApp::boot(channels, field_config)
+            EngineApp::boot(channels, field_config, simulator)
         },
         EngineApp::update,
         EngineApp::view,
@@ -122,6 +233,7 @@ async fn run_engine(
     lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
     field_config: crate::config::FieldConfig,
+    launch: LaunchArgs,
 ) {
     // Configuration Defaults
     let vision_ip = "224.5.23.2".to_string();
@@ -143,9 +255,16 @@ async fn run_engine(
     )));
     let game_state = Arc::new(Mutex::new(GameState::new()));
     let radio = Arc::new(Mutex::new(Radio::new(use_radio, &radio_port, radio_baud)));
-    let vision_state = Arc::new(Mutex::new(VisionState::default()));
+    let vision_state = Arc::new(Mutex::new(VisionState {
+        ip: vision_ip,
+        port: vision_port,
+        ..Default::default()
+    }));
+    let mut simulator = launch.simulator_settings();
     let logger = Arc::new(Mutex::new(Logger::new()));
 
+    // Console replies share the Lua log channel, so they show in the same panel.
+    let console_tx = lua_log_gui_tx.clone();
     let lua_iface = Arc::new(Mutex::new(LuaInterface::new(
         Arc::clone(&radio),
         Arc::clone(&world),
@@ -160,28 +279,11 @@ async fn run_engine(
         script_path: None,
     });
 
-    // Spawn Vision receiver task
-    {
-        let mut vs = vision_state.lock().unwrap();
-        vs.ip = vision_ip.clone();
-        vs.port = vision_port;
-
-        let (tx, rx) = tokio::sync::mpsc::channel(32);
-        vs.tx = Some(tx);
-
-        let world_for_vision = Arc::clone(&world);
-        let ip_clone = vision_ip.clone();
-        let gui_tx = vision_gui_tx.clone();
-
-        let handle = tokio::spawn(async move {
-            if let Err(e) = vision::run_vision(ip_clone, vision_port, world_for_vision, gui_tx, rx).await {
-                warn!("Vision task error: {e}");
-                Ok(())
-            } else {
-                Ok(())
-            }
-        });
-        vs.handle = Some(handle);
+    // World source: the in-process simulator, or the vision receiver
+    if simulator.enabled {
+        switch_simulator(true, field_config, &radio, &world, &vision_state, &vision_gui_tx);
+    } else {
+        vision_state.lock().unwrap().start(&world, &vision_gui_tx);
     }
 
     // Spawn Game Controller receiver task
@@ -193,7 +295,7 @@ async fn run_engine(
     });
 
     // Run script from command line arg if provided
-    if let Some(script_path) = std::env::args().nth(1) {
+    if let Some(script_path) = launch.script.clone() {
         let state = {
             let mut lua = lua_iface.lock().unwrap();
             lua.run_script(&script_path)
@@ -207,9 +309,9 @@ async fn run_engine(
         *last = script_path;
     }
 
-    // Main update loop (~60 FPS)
-    let frame_duration = Duration::from_micros(16_667);
-    info!("Engine started. Running at ~60 FPS.");
+    // Main update loop: one tick per TICK of real time; with the simulator
+    // the speed setting scales it.
+    info!("Engine started. Simulator: {}.", if simulator.enabled { "on" } else { "off" });
 
     loop {
         let frame_start = Instant::now();
@@ -243,29 +345,37 @@ async fn run_engine(
             match cmd {
                 EngineCommand::UpdateVisionConnection { ip, port } => {
                     let mut vs = vision_state.lock().unwrap();
-                    if vs.ip == ip && vs.port == port && vs.handle.is_some() {
+                    if vs.ip == ip && vs.port == port && (vs.handle.is_some() || simulator.enabled) {
                         continue;
                     }
                     vs.ip = ip.clone();
                     vs.port = port;
-                    if let Some(handle) = vs.handle.take() {
-                        handle.abort();
+                    if simulator.enabled {
+                        info!("Vision set to {}:{}, used when the simulator is turned off", ip, port);
+                    } else {
+                        vs.start(&world, &vision_gui_tx);
+                        info!("Restarted vision task with {}:{}", ip, port);
                     }
-                    let (tx, rx) = tokio::sync::mpsc::channel(32);
-                    vs.tx = Some(tx);
-                    let world_clone = world.clone();
-                    let ip_clone = ip.clone();
-                    let gui_tx = vision_gui_tx.clone();
-                    let handle = tokio::spawn(async move {
-                        if let Err(e) = vision::run_vision(ip_clone, port, world_clone, gui_tx, rx).await {
-                            warn!("Vision task error: {e}");
-                            Ok(())
-                        } else {
-                            Ok(())
-                        }
-                    });
-                    vs.handle = Some(handle);
-                    info!("Restarted vision task with {}:{}", ip, port);
+                }
+                EngineCommand::TeleportRobot { id, team, x, y, orientation } => {
+                    radio.lock().unwrap().teleport_robot(id, team, x, y, orientation);
+                }
+                EngineCommand::TeleportBall { x, y } => {
+                    radio.lock().unwrap().teleport_ball(x, y);
+                }
+                EngineCommand::ConsoleCommand(line) => {
+                    let reply = {
+                        let mut r = radio.lock().unwrap();
+                        let mut w = world.write().unwrap_or_else(|e| e.into_inner());
+                        simulator_console::execute(&line, r.simulator_mut(), &mut w)
+                    };
+                    for out in std::iter::once(format!("> {line}")).chain(reply) {
+                        let _ = console_tx.try_send(out);
+                    }
+                }
+                EngineCommand::SetSimulator(settings) => {
+                    switch_simulator(settings.enabled, field_config, &radio, &world, &vision_state, &vision_gui_tx);
+                    simulator = settings;
                 }
                 EngineCommand::UpdateRadioConfig { use_radio, port_name, baud_rate } => {
                     let mut r = radio.lock().unwrap();
@@ -430,12 +540,22 @@ async fn run_engine(
                 }
             };
             r.send_commands(&mut w);
+
+            if r.has_simulator() {
+                r.step_simulator(&mut w, TICK.as_secs_f64());
+                let _ = vision_gui_tx.try_send(vision::gui_update(&w, SIM_FRAME_RATE));
+            }
         }
 
-        // Sleep for remaining frame time
-        let elapsed = frame_start.elapsed();
-        if elapsed < frame_duration {
-            tokio::time::sleep(frame_duration - elapsed).await;
+        // Sleep for remaining frame time, or just yield when running flat out
+        match frame_duration(simulator) {
+            Some(frame_duration) => {
+                let elapsed = frame_start.elapsed();
+                if elapsed < frame_duration {
+                    tokio::time::sleep(frame_duration - elapsed).await;
+                }
+            }
+            None => tokio::task::yield_now().await,
         }
     }
 }

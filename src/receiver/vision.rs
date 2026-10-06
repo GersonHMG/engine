@@ -133,48 +133,8 @@ pub async fn run_vision(
                                         process_robot(&mut tracker, &mut world_writer, robot, 1);
                                     }
 
-                                    // Create update struct
-                                    let mut current_update = VisionUpdate {
-                                        ball: Some(world_writer.ball.position),
-                                        robots_blue: vec![],
-                                        robots_yellow: vec![],
-                                        pps: current_pps,
-                                    };
-
-                                    for robot in world_writer.blue_robots.values() {
-                                         if robot.active {
-                                             current_update.robots_blue.push(RobotUpdateData {
-                                                 id: robot.id as u32,
-                                                 x: robot.position.x,
-                                                 y: robot.position.y,
-                                                 theta: robot.orientation,
-                                                 vx: robot.velocity.x,
-                                                 vy: robot.velocity.y,
-                                                 cmd_vx: robot.commanded_velocity.x,
-                                                 cmd_vy: robot.commanded_velocity.y,
-                                                 cmd_angular: robot.commanded_angular,
-                                             });
-                                         }
-                                    }
-
-                                    for robot in world_writer.yellow_robots.values() {
-                                         if robot.active {
-                                             current_update.robots_yellow.push(RobotUpdateData {
-                                                 id: robot.id as u32,
-                                                 x: robot.position.x,
-                                                 y: robot.position.y,
-                                                 theta: robot.orientation,
-                                                 vx: robot.velocity.x,
-                                                 vy: robot.velocity.y,
-                                                 cmd_vx: robot.commanded_velocity.x,
-                                                 cmd_vy: robot.commanded_velocity.y,
-                                                 cmd_angular: robot.commanded_angular,
-                                             });
-                                         }
-                                    }
-
                                     // Send to GUI via channel
-                                    let _ = gui_tx.try_send(current_update);
+                                    let _ = gui_tx.try_send(gui_update(&world_writer, current_pps));
                                 }
                             }
                             Err(e) => {
@@ -190,6 +150,28 @@ pub async fn run_vision(
         }
     }
     Ok(())
+}
+
+/// Snapshot of the active robots and the ball for the GUI field view.
+pub fn gui_update(world: &World, pps: u32) -> VisionUpdate {
+    let robot_data = |robot: &crate::types::RobotState| RobotUpdateData {
+        id: robot.id as u32,
+        x: robot.position.x,
+        y: robot.position.y,
+        theta: robot.orientation,
+        vx: robot.velocity.x,
+        vy: robot.velocity.y,
+        cmd_vx: robot.commanded_velocity.x,
+        cmd_vy: robot.commanded_velocity.y,
+        cmd_angular: robot.commanded_angular,
+    };
+
+    VisionUpdate {
+        ball: Some(world.ball.position),
+        robots_blue: world.blue_robots.values().filter(|r| r.active).map(robot_data).collect(),
+        robots_yellow: world.yellow_robots.values().filter(|r| r.active).map(robot_data).collect(),
+        pps,
+    }
 }
 
 fn process_robot(

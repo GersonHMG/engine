@@ -1,0 +1,4 @@
+# Short commands: `cargo sim run <scenario>` and `cargo gui [scenario]`.
+[alias]
+sim = "run -q -p ssl-sim-cli --"
+gui = "run -p ssl-sim-gui --"

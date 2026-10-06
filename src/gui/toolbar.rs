@@ -1,16 +1,37 @@
-// gui/toolbar.rs — Script toolbar (load/play/reload + PPS sparkline + filename)
+// gui/toolbar.rs — Script toolbar (load/play/reload + simulator switch + PPS sparkline + filename)
 
+use super::types::SimulatorSettings;
 use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke};
-use iced::widget::{button, container, row, text, Canvas};
+use iced::widget::{button, container, pick_list, row, text, Canvas};
 use iced::{mouse, Color, Element, Length, Point, Rectangle, Size, Theme};
+use std::fmt;
 
 const PPS_HISTORY: usize = 60;
+
+/// Speeds offered for the simulator; 0 = as fast as possible.
+const SIM_SPEEDS: [SimSpeed; 5] = [SimSpeed(1.0), SimSpeed(2.0), SimSpeed(5.0), SimSpeed(10.0), SimSpeed(0.0)];
 
 #[derive(Debug, Clone)]
 pub enum ToolbarMessage {
     LoadScript,
     ToggleScript,
     ReloadScript,
+    ToggleSimulator,
+    SimSpeedSelected(SimSpeed),
+}
+
+/// Simulator speed as shown in the speed menu.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SimSpeed(pub f64);
+
+impl fmt::Display for SimSpeed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.0 == 0.0 {
+            write!(f, "Max")
+        } else {
+            write!(f, "{}x", self.0)
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,15 +47,17 @@ pub struct Toolbar {
     pub script_status: ScriptStatus,
     pub pps: u32,
     pub pps_history: Vec<u32>,
+    pub simulator: SimulatorSettings,
 }
 
 impl Toolbar {
-    pub fn new() -> Self {
+    pub fn new(simulator: SimulatorSettings) -> Self {
         Self {
             script_path: String::new(),
             script_status: ScriptStatus::NoScript,
             pps: 0,
             pps_history: vec![0; PPS_HISTORY],
+            simulator,
         }
     }
 
@@ -103,7 +126,12 @@ impl Toolbar {
         .width(Length::Fixed(80.0))
         .height(Length::Fixed(20.0));
 
-        let content = row![
+        // Simulator switch, plus its speed menu while it is on
+        let sim_btn = button(text("SIM").size(12))
+            .on_press(ToolbarMessage::ToggleSimulator)
+            .style(if self.simulator.enabled { button::success } else { button::secondary });
+
+        let mut content = row![
             load_btn,
             toggle_btn,
             reload_btn,
@@ -111,12 +139,22 @@ impl Toolbar {
             text(script_name).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
             text(status_text).size(12).color(status_color),
             iced::widget::Space::new().width(Length::Fill),
-            text(pps_text).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
-            pps_sparkline,
+            sim_btn,
         ]
         .spacing(6)
         .padding(4)
         .align_y(iced::Alignment::Center);
+
+        if self.simulator.enabled {
+            content = content.push(
+                pick_list(SIM_SPEEDS, Some(SimSpeed(self.simulator.speed)), ToolbarMessage::SimSpeedSelected)
+                    .text_size(12),
+            );
+        }
+
+        let content = content
+            .push(text(pps_text).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)))
+            .push(pps_sparkline);
 
         container(content)
             .width(Length::Fill)
