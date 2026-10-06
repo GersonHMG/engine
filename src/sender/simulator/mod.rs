@@ -12,7 +12,7 @@ mod scenario;
 
 use crate::types::{RobotCommand, Vec2D};
 use crate::world::World;
-use ssl_sim::{Ball, RobotId, SimConfig, SimState, Simulator, Team, Vec2};
+use ssl_sim::{Ball, Event, RobotId, SimConfig, SimState, Simulator, Team, Vec2};
 use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 
@@ -28,6 +28,9 @@ pub struct SimLink {
     robot_homes: BTreeMap<RobotId, Pose>,
     /// Where the ball was last placed.
     ball_home: Vec2,
+    /// Events kept for `take_events`; `None` = not recorded (they would pile
+    /// up with nobody reading them).
+    events: Option<Vec<Event>>,
 }
 
 impl SimLink {
@@ -37,6 +40,7 @@ impl SimLink {
             sim: Simulator::new(config, SimState::new(Vec::new(), Ball::new(Vec2::ZERO, Vec2::ZERO))),
             robot_homes: BTreeMap::new(),
             ball_home: Vec2::ZERO,
+            events: None,
         };
         link.place_robot(RobotId::new(Team::Blue, 0), Vec2::new(-1.0, 0.0), 0.0);
         link
@@ -70,8 +74,10 @@ impl SimLink {
     /// the world, as the vision receiver would.
     pub fn step(&mut self, dt: f64, world: &mut World) {
         self.sim.step(dt);
-        for event in self.sim.take_events() {
-            debug!("Simulator: {event:?}");
+        let events = self.sim.take_events();
+        match self.events.as_mut() {
+            Some(recorded) => recorded.extend(events),
+            None => events.iter().for_each(|event| debug!("Simulator: {event:?}")),
         }
 
         let state = self.sim.state();
@@ -87,6 +93,22 @@ impl SimLink {
             );
         }
         world.update_ball(to_vec2d(state.ball.velocity), to_vec2d(state.ball.position));
+    }
+
+    /// Simulated time, s.
+    pub fn time(&self) -> f64 {
+        self.sim.time()
+    }
+
+    /// Starts keeping the simulator's events for `take_events`.
+    pub fn record_events(&mut self) {
+        self.events.get_or_insert_with(Vec::new);
+    }
+
+    /// The events recorded since the last call (none unless `record_events`
+    /// was called).
+    pub fn take_events(&mut self) -> Vec<Event> {
+        self.events.as_mut().map(std::mem::take).unwrap_or_default()
     }
 
     /// Places a robot at rest (adding it if needed) and remembers the spot.
@@ -124,7 +146,7 @@ fn sim_id(id: i32, team: i32) -> Option<RobotId> {
 }
 
 /// Simulator id to engine (id, team).
-fn engine_id(id: RobotId) -> (i32, i32) {
+pub(crate) fn engine_id(id: RobotId) -> (i32, i32) {
     let team = match id.team {
         Team::Blue => 0,
         Team::Yellow => 1,
