@@ -284,3 +284,19 @@ fn each_robot_kicks_with_its_own_command() {
         .collect();
     assert_eq!(kicks, [YELLOW0]);
 }
+
+#[test]
+fn config_validation_names_the_bad_parameter() {
+    assert_eq!(SimConfig::default().validate(), Ok(()));
+
+    let config = SimConfig { max_substep: 0.0, ..Default::default() };
+    assert_eq!(config.validate(), Err("max_substep must be > 0, got 0".to_string()));
+
+    let mut config = SimConfig::default();
+    config.robot.front_distance = 0.2;
+    assert!(config.validate().unwrap_err().starts_with("robot.front_distance"));
+
+    let mut config = SimConfig::default();
+    config.ball.wall_restitution = f64::NAN;
+    assert!(config.validate().unwrap_err().starts_with("ball.wall_restitution"));
+}
