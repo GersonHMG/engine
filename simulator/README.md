@@ -113,6 +113,22 @@ blue robot 0; commands and teleports for other robots are ignored. In
 simulator mode the vision receiver is off and `grsim.teleport_robot` /
 `grsim.teleport_ball` move the simulated robot and ball.
 
+## Controlling the engine from an AI agent (MCP)
+
+While the engine GUI is open it serves MCP on `http://127.0.0.1:7878/mcp`
+(change the port with `--mcp-port <port>`). It only listens on this computer
+and refuses requests from web pages. Claude Code picks it up from `.mcp.json`
+at the repository root. To add it to Claude Code for other folders too:
+
+```sh
+claude mcp add --transport http engine http://127.0.0.1:7878/mcp
+```
+
+The tools do what the GUI does: `get_state`, `console` (any `sim ...` command),
+`teleport_robot`, `teleport_ball`, `load_script`, `play_script`,
+`pause_script`, `set_simulator`, `wait` and `get_log`. Commands sent by an
+agent show in the Lua console marked `(agent)`.
+
 ## Scenario files
 
 ```toml

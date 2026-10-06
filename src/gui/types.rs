@@ -98,6 +98,8 @@ pub struct GuiChannels {
     pub lua_draw_rx: mpsc::Receiver<Vec<LuaDrawCmd>>,
     pub lua_status_rx: mpsc::Receiver<LuaScriptStatusUpdate>,
     pub lua_log_rx: mpsc::Receiver<String>,
+    /// Simulator settings changed by the engine (e.g. by an MCP agent).
+    pub simulator_rx: mpsc::Receiver<SimulatorSettings>,
     pub command_tx: mpsc::Sender<EngineCommand>,
 }
 

@@ -11,6 +11,7 @@ Choose by what you need to test:
 | Lua code: skills, actions, roles, `lua/AI` | the engine with `--headless` (section 1) |
 | Physics, or a fixed sequence of velocity/kick commands | the `engine-sim` CLI (section 2) |
 | Watching a behavior, or showing it to the user | the engine GUI with `--sim` (section 3) |
+| Working in the user's open engine window | the `engine` MCP tools (section 4) |
 
 Sections 1 and 2 need no person and finish in a fraction of a second: run them
 yourself, as often as you need.
@@ -222,6 +223,28 @@ Typed in the command line under the engine's Lua console:
 These field setups are a different format from the CLI scenarios in
 `simulator/scenarios/`: they only hold positions (`[ball] x y`, `[[robots]] team id x y theta`),
 with no commands.
+
+## 4. The user's open engine (MCP)
+
+A running engine serves MCP on `http://127.0.0.1:7878/mcp` (`--mcp-port` changes
+it). It is registered as `engine` in `.mcp.json`. The tools only work while the
+user has the engine open. Everything you do shows in their window, and console
+commands appear in their Lua console marked `(agent)`.
+
+| Tool | Does |
+|---|---|
+| `get_state` | simulator (on, speed, time), script (status, path), ball, every robot |
+| `console(command)` | any Lua console line, e.g. `sim add yellow 2 1 0.5`, `sim scenario load kickoff`; `sim help` lists them. A failed command returns an error. |
+| `teleport_robot(team, id, x, y, theta)`, `teleport_ball(x, y)` | place things at rest; teleporting a new robot adds it |
+| `load_script(path)`, `play_script`, `pause_script` | the GUI's script controls; scripts load paused |
+| `set_simulator(enabled, speed)` | the SIM button and speed menu |
+| `wait(seconds)` | let the engine run for real seconds, then return the state |
+| `get_log(since)` | Lua console lines (print, errors, console replies); pass the returned `next` as `since` to get only new lines |
+
+Use this to show the user something or to set up their field. Use headless runs
+(section 1) to measure: they are faster, deterministic and do not move things in
+the user's window. To show the user a scenario, write it to
+`scenarios/<name>.toml` and load it with `console("sim scenario load <name>")`.
 
 ## Physics model and its limits
 
