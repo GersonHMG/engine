@@ -25,6 +25,8 @@ pub struct FieldData {
     pub path_draw_mode: bool,
     /// Robot to highlight in red: (robot_id, team 0=blue 1=yellow)
     pub highlight_robot: Option<(u32, i32)>,
+    /// Robot selected by clicking it, also highlighted: (robot_id, team)
+    pub selected_robot: Option<(u32, i32)>,
 }
 
 impl Default for FieldData {
@@ -42,6 +44,7 @@ impl Default for FieldData {
             vis_velocities: false,
             path_draw_mode: false,
             highlight_robot: None,
+            selected_robot: None,
         }
     }
 }
@@ -56,6 +59,17 @@ impl FieldData {
             data.field_width_mm = (field_width_m * 1000.0) as f32;
         }
         data
+    }
+
+    fn is_highlighted(&self, id: u32, team: i32) -> bool {
+        self.highlight_robot == Some((id, team)) || self.selected_robot == Some((id, team))
+    }
+
+    /// The robot whose center is within `ROBOT_PICK_RADIUS_M` of a field point.
+    fn robot_at(&self, (x, y): (f64, f64)) -> Option<(u32, i32)> {
+        let near = |r: &&RobotData| (r.x - x).hypot(r.y - y) <= ROBOT_PICK_RADIUS_M;
+        let blue = self.robots_blue.iter().find(near).map(|r| (r.id, 0));
+        blue.or_else(|| self.robots_yellow.iter().find(near).map(|r| (r.id, 1)))
     }
 }
 
@@ -81,10 +95,17 @@ pub enum LuaDrawCommand {
     },
 }
 
+/// Mouse input on the field.
 #[derive(Debug, Clone)]
 pub enum FieldMessage {
-    CanvasClicked(f64, f64), // field coords
+    /// Right click: position inside the canvas (px) and on the field (m).
+    RightClicked { screen: Point, field: (f64, f64) },
+    /// Left click on a robot (team 0 = blue, 1 = yellow).
+    RobotClicked { id: u32, team: i32 },
 }
+
+/// How close to a robot's center a click selects it, m.
+const ROBOT_PICK_RADIUS_M: f64 = 0.1;
 
 pub struct FieldCanvas {
     cache: Cache,
@@ -122,19 +143,18 @@ impl FieldCanvas {
         self.mouse_field_pos
     }
 
-    /// `on_right_click` receives the click position inside the canvas (px)
-    /// and on the field (m).
+    /// `on_message` turns the canvas's mouse input into the app's message.
     pub fn view<'a, M: 'a>(
         &'a self,
         data: &'a FieldData,
-        on_right_click: impl Fn(Point, (f64, f64)) -> M + 'a,
+        on_message: impl Fn(FieldMessage) -> M + 'a,
     ) -> Element<'a, M> {
         Canvas::new(FieldProgram {
             data,
             pan: self.pan,
             scale: self.scale,
             last_bounds: &self.last_bounds,
-            on_right_click: Box::new(on_right_click),
+            on_message: Box::new(on_message),
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -213,7 +233,7 @@ struct FieldProgram<'a, M> {
     pan: Vector,
     scale: f32,
     last_bounds: &'a Cell<Rectangle>,
-    on_right_click: Box<dyn Fn(Point, (f64, f64)) -> M + 'a>,
+    on_message: Box<dyn Fn(FieldMessage) -> M + 'a>,
 }
 
 impl<'a, M> FieldProgram<'a, M> {
@@ -231,7 +251,8 @@ impl<'a, M> FieldProgram<'a, M> {
 impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
     type State = ();
 
-    /// Right click: publish where it happened. Other events pass through.
+    /// Right click: publish where it happened. Left click on a robot:
+    /// publish which one, without capturing, so dragging still pans.
     fn update(
         &self,
         _state: &mut Self::State,
@@ -239,12 +260,23 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<M>> {
-        let canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right)) = event else {
+        let canvas::Event::Mouse(mouse::Event::ButtonPressed(button)) = event else {
             return None;
         };
-        let position = cursor.position_in(bounds)?;
-        let field = screen_to_field(self.pan, self.scale, bounds, position);
-        Some(canvas::Action::publish((self.on_right_click)(position, field)).and_capture())
+        let screen = cursor.position_in(bounds)?;
+        let field = screen_to_field(self.pan, self.scale, bounds, screen);
+
+        match button {
+            mouse::Button::Right => {
+                let message = (self.on_message)(FieldMessage::RightClicked { screen, field });
+                Some(canvas::Action::publish(message).and_capture())
+            }
+            mouse::Button::Left => {
+                let (id, team) = self.data.robot_at(field)?;
+                Some(canvas::Action::publish((self.on_message)(FieldMessage::RobotClicked { id, team })))
+            }
+            _ => None,
+        }
     }
 
     fn draw(
@@ -391,13 +423,13 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
 
         // Draw robots
         for robot in &self.data.robots_blue {
-            let highlighted = self.data.highlight_robot == Some((robot.id, 0));
+            let highlighted = self.data.is_highlighted(robot.id, 0);
             let pos = self.field_to_screen(bounds, robot.x, robot.y);
             let gui = RobotGui::new(robot, RobotTeam::Blue, highlighted);
             gui.draw(&mut frame, pos, s, self.data.vis_velocities);
         }
         for robot in &self.data.robots_yellow {
-            let highlighted = self.data.highlight_robot == Some((robot.id, 1));
+            let highlighted = self.data.is_highlighted(robot.id, 1);
             let pos = self.field_to_screen(bounds, robot.x, robot.y);
             let gui = RobotGui::new(robot, RobotTeam::Yellow, highlighted);
             gui.draw(&mut frame, pos, s, self.data.vis_velocities);

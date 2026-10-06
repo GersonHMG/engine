@@ -1,16 +1,18 @@
-// gui/teleport_menu.rs — Right-click menu on the field: move the ball or a
-// robot to the clicked point (simulator or grSim).
+// gui/teleport_menu.rs — Right-click menu on the field: move the ball or the
+// selected robot to the clicked point, or add a robot there (simulator or
+// grSim).
 
-use super::robot::RobotData;
 use iced::widget::{button, column, container, pin, text};
 use iced::{Color, Element, Length, Point};
 
-const MENU_WIDTH: f32 = 170.0;
+const MENU_WIDTH: f32 = 190.0;
 
 #[derive(Debug, Clone)]
 pub enum TeleportMenuMessage {
     Ball,
-    Robot { id: u32, team: i32 },
+    SelectedRobot,
+    /// Add a robot of this team (0 = blue, 1 = yellow).
+    AddRobot { team: i32 },
 }
 
 /// An open menu and the point it was opened at.
@@ -23,23 +25,33 @@ pub struct TeleportMenu {
 }
 
 impl TeleportMenu {
-    /// The menu at the click position: the ball, then every visible robot.
-    pub fn view<'a>(&self, blue: &[RobotData], yellow: &[RobotData]) -> Element<'a, TeleportMenuMessage> {
-        let item = |label: String, message: TeleportMenuMessage| {
+    /// `selected`: the robot to teleport, if any (id, team).
+    /// `can_add`: whether each team (blue, yellow) has a free robot id.
+    pub fn view<'a>(&self, selected: Option<(u32, i32)>, can_add: [bool; 2]) -> Element<'a, TeleportMenuMessage> {
+        let item = |label: String, message: Option<TeleportMenuMessage>| {
             button(text(label).size(12))
-                .on_press(message)
+                .on_press_maybe(message)
                 .style(button::text)
                 .width(Length::Fill)
         };
 
-        let mut items = column![item("Move ball here".to_string(), TeleportMenuMessage::Ball)];
-        for (team, name, robots) in [(0, "blue", blue), (1, "yellow", yellow)] {
-            let mut ids: Vec<u32> = robots.iter().map(|r| r.id).collect();
-            ids.sort_unstable();
-            for id in ids {
-                items = items.push(item(format!("Move {name} {id} here"), TeleportMenuMessage::Robot { id, team }));
-            }
-        }
+        let teleport_label = match selected {
+            Some((id, team)) => format!("Teleport {} {id} here", team_name(team)),
+            None => "Teleport robot here (click one first)".to_string(),
+        };
+
+        let items = column![
+            item("Move ball here".to_string(), Some(TeleportMenuMessage::Ball)),
+            item(teleport_label, selected.map(|_| TeleportMenuMessage::SelectedRobot)),
+            item(
+                "Add blue robot here".to_string(),
+                can_add[0].then_some(TeleportMenuMessage::AddRobot { team: 0 }),
+            ),
+            item(
+                "Add yellow robot here".to_string(),
+                can_add[1].then_some(TeleportMenuMessage::AddRobot { team: 1 }),
+            ),
+        ];
 
         let menu = container(items.width(MENU_WIDTH)).padding(4).style(|theme: &iced::Theme| {
             let palette = theme.extended_palette();
@@ -55,5 +67,13 @@ impl TeleportMenu {
         });
 
         pin(menu).position(self.screen).into()
+    }
+}
+
+fn team_name(team: i32) -> &'static str {
+    if team == 0 {
+        "blue"
+    } else {
+        "yellow"
     }
 }

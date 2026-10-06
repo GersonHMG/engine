@@ -27,7 +27,7 @@ use tracing::warn;
 
 use crate::config::FieldConfig;
 
-use field_canvas::{FieldCanvas, FieldData, LuaDrawCommand, RobotData};
+use field_canvas::{FieldCanvas, FieldData, FieldMessage, LuaDrawCommand, RobotData};
 use replay::ReplayState;
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
 use teleport_menu::{TeleportMenu, TeleportMenuMessage};
@@ -342,10 +342,13 @@ impl EngineApp {
             }
 
             // --- Right-click teleport menu ---
-            Message::FieldRightClicked(menu) => {
+            Message::Field(FieldMessage::RightClicked { screen, field }) => {
                 if !self.replay.enabled {
-                    self.teleport_menu = Some(menu);
+                    self.teleport_menu = Some(TeleportMenu { screen, field });
                 }
+            }
+            Message::Field(FieldMessage::RobotClicked { id, team }) => {
+                self.field_data.selected_robot = Some((id, team));
             }
             Message::TeleportMenu(choice) => {
                 let Some(menu) = self.teleport_menu.take() else {
@@ -354,10 +357,22 @@ impl EngineApp {
                 let (x, y) = menu.field;
                 let command = match choice {
                     TeleportMenuMessage::Ball => EngineCommand::TeleportBall { x, y },
-                    TeleportMenuMessage::Robot { id, team } => {
+                    TeleportMenuMessage::SelectedRobot => {
+                        let Some((id, team)) = self.field_data.selected_robot else {
+                            return iced::Task::none();
+                        };
                         // Keep the robot's current heading.
-                        let robots = if team == 0 { &self.field_data.robots_blue } else { &self.field_data.robots_yellow };
-                        let orientation = robots.iter().find(|r| r.id == id).map_or(0.0, |r| r.theta);
+                        let orientation = self.team_robots(team).iter().find(|r| r.id == id).map_or(0.0, |r| r.theta);
+                        EngineCommand::TeleportRobot { id: id as i32, team, x, y, orientation }
+                    }
+                    TeleportMenuMessage::AddRobot { team } => {
+                        let Some(id) = self.free_robot_id(team) else {
+                            return iced::Task::none();
+                        };
+                        // Teleporting a robot that is not on the field adds it
+                        // (simulator) or turns it on (grSim). It faces the
+                        // opponent's goal.
+                        let orientation = if team == 0 { 0.0 } else { std::f64::consts::PI };
                         EngineCommand::TeleportRobot { id: id as i32, team, x, y, orientation }
                     }
                 };
@@ -728,6 +743,7 @@ impl EngineApp {
                     Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
                         if key == keyboard::Key::Named(keyboard::key::Named::Escape) {
                             self.teleport_menu = None;
+                            self.field_data.selected_robot = None;
                         }
                         if let keyboard::Key::Character(c) = &key {
                             let ch = c.chars().next().unwrap_or(' ').to_ascii_lowercase();
@@ -864,7 +880,7 @@ impl EngineApp {
         // Field canvas
         let canvas: Element<'_, Message> = self
             .field_canvas
-            .view(&self.field_data, |screen, field| Message::FieldRightClicked(TeleportMenu { screen, field }));
+            .view(&self.field_data, Message::Field);
 
         // Mouse coords overlay
         let mouse_pos_text = if let Some((x, y)) = self.field_canvas.mouse_field_pos() {
@@ -970,7 +986,10 @@ impl EngineApp {
             iced::widget::stack![canvas, mouse_overlay, replay_controls].into()
         } else if let Some(menu) = &self.teleport_menu {
             let menu = menu
-                .view(&self.field_data.robots_blue, &self.field_data.robots_yellow)
+                .view(
+                    self.field_data.selected_robot,
+                    [self.free_robot_id(0).is_some(), self.free_robot_id(1).is_some()],
+                )
                 .map(Message::TeleportMenu);
             iced::widget::stack![canvas, mouse_overlay, menu].into()
         } else {
@@ -1029,6 +1048,18 @@ impl EngineApp {
             .height(Length::Fill)
             .padding(4)
             .into()
+    }
+
+    /// Robots on the field of one team (0 = blue, 1 = yellow).
+    fn team_robots(&self, team: i32) -> &[RobotData] {
+        if team == 0 { &self.field_data.robots_blue } else { &self.field_data.robots_yellow }
+    }
+
+    /// Lowest robot id of a team that is not on the field, if any is left.
+    fn free_robot_id(&self, team: i32) -> Option<u32> {
+        const MAX_ROBOTS_PER_TEAM: u32 = 16;
+        let robots = self.team_robots(team);
+        (0..MAX_ROBOTS_PER_TEAM).find(|id| robots.iter().all(|r| r.id != *id))
     }
 
     fn poll_keyboard_control(&mut self) {
