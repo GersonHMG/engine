@@ -89,7 +89,7 @@ fn switch_simulator(
     let mut vision = vision_state.lock().unwrap_or_else(|e| e.into_inner());
     if enabled {
         vision.stop();
-        radio.attach_simulator(SimLink::new(field_config.length_m, field_config.width_m));
+        radio.attach_simulator(SimLink::new(crate::config::load_simulator_config(field_config)));
     } else {
         radio.detach_simulator();
         vision.start(world, vision_gui_tx);
