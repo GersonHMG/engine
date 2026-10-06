@@ -1,8 +1,9 @@
-// radio.rs — Radio dispatcher (serial port + grSim)
+// radio.rs — Radio dispatcher (serial port, grSim or in-process simulator)
 // Port of radio/radio.cpp
 
 use crate::sender::grsim::Grsim;
 use crate::sender::packet_serializer;
+use crate::sender::simulator::SimLink;
 use crate::types::{KickerCommand, MotionCommand, RobotCommand};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, warn};
@@ -18,6 +19,8 @@ pub struct Radio {
     baud_rate: u32,
     serial_port: Option<Box<dyn serialport::SerialPort>>,
     grsim: Grsim,
+    /// When attached, takes the place of the serial radio and grSim.
+    simulator: Option<SimLink>,
 }
 
 impl Radio {
@@ -52,6 +55,33 @@ impl Radio {
             baud_rate,
             serial_port,
             grsim: Grsim::new(),
+            simulator: None,
+        }
+    }
+
+    /// Routes all commands and teleports to the in-process simulator.
+    pub fn attach_simulator(&mut self, simulator: SimLink) {
+        self.simulator = Some(simulator);
+    }
+
+    /// Goes back to the serial radio or grSim.
+    pub fn detach_simulator(&mut self) {
+        self.simulator = None;
+    }
+
+    pub fn simulator_mut(&mut self) -> Option<&mut SimLink> {
+        self.simulator.as_mut()
+    }
+
+    pub fn has_simulator(&self) -> bool {
+        self.simulator.is_some()
+    }
+
+    /// Advances the in-process simulator by `dt` seconds and writes its
+    /// state into the world. Does nothing without a simulator.
+    pub fn step_simulator(&mut self, world: &mut crate::world::World, dt: f64) {
+        if let Some(simulator) = self.simulator.as_mut() {
+            simulator.step(dt, world);
         }
     }
 
@@ -150,8 +180,12 @@ impl Radio {
             );
         }
 
-        // 2. HARDWARE RADIO LOGIC (Strict Serializer)
-        if self.use_radio {
+        // 2. IN-PROCESS SIMULATOR (stepped separately, see step_simulator)
+        if let Some(simulator) = self.simulator.as_mut() {
+            simulator.apply_commands(&self.command_map);
+        }
+        // 3. HARDWARE RADIO LOGIC (Strict Serializer)
+        else if self.use_radio {
             // Group commands by team so Robot 0 (Blue) doesn't overwrite Robot 0 (Yellow)
             let mut commands_by_team: HashMap<i32, HashMap<i32, RobotCommand>> = HashMap::new();
 
@@ -177,7 +211,7 @@ impl Radio {
                 }
             }
         } 
-        // 3. SIMULATOR LOGIC (Supports tuple map directly)
+        // 4. GRSIM LOGIC (Supports tuple map directly)
         else {
             for cmd in self.command_map.values() {
                 let m = &cmd.motion;
@@ -197,7 +231,7 @@ impl Radio {
             }
         }
 
-        // 4. Deregister stationary robots
+        // 5. Deregister stationary robots
         self.active_robots.retain(|&(id, team)| {
             if let Some(cmd) = self.command_map.get(&(id, team)) {
                 let m = &cmd.motion;
@@ -210,13 +244,19 @@ impl Radio {
         self.command_map.clear();
     }
 
-    pub fn teleport_robot(&self, id: i32, team: i32, x: f64, y: f64, orientation: f64) {
-        self.grsim.communicate_pos_robot(id, team, x, y, orientation);
+    pub fn teleport_robot(&mut self, id: i32, team: i32, x: f64, y: f64, orientation: f64) {
+        match self.simulator.as_mut() {
+            Some(simulator) => simulator.teleport_robot(id, team, x, y, orientation),
+            None => self.grsim.communicate_pos_robot(id, team, x, y, orientation),
+        }
         debug!("[Lua] Teleport robot ID:{} Team:{} to ({}, {})", id, team, x, y);
     }
 
-    pub fn teleport_ball(&self, x: f64, y: f64) {
-        self.grsim.communicate_pos_ball(x, y);
+    pub fn teleport_ball(&mut self, x: f64, y: f64) {
+        match self.simulator.as_mut() {
+            Some(simulator) => simulator.teleport_ball(x, y),
+            None => self.grsim.communicate_pos_ball(x, y),
+        }
         debug!("[Lua] Teleport ball to ({}, {})", x, y);
     }
 
