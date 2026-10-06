@@ -1,5 +1,8 @@
 local go_to_ball = {}
 
+local profile = require("utils.robot_profile")
+local APPROACH_CLEARANCE = 0.0285  -- m, gap between robot and ball at the approach point
+
 local utils = require("utils.utils")
 local has_the_ball = utils.has_the_ball
 
@@ -48,18 +51,21 @@ local function is_facing_point(robot_pos, target_point, tolerance)
     return angle_diff <= tolerance
 end
 
-function go_to_ball.process(robotId, team)
+--- `target` is optional: when given, the robot comes at the ball from the side opposite
+--- the target, so it arrives lined up to kick towards it; without it, from its own side.
+function go_to_ball.process(robotId, team, target)
     local ball_pos = get_ball_state()
     local robot_pos = get_robot_state(robotId, team)
     
     -- Configuration thresholds
-    local APPROACH_OFFSET = 0.14 -- Safe distance to approach first
+    local APPROACH_OFFSET = profile.touch_distance() + APPROACH_CLEARANCE -- Safe distance to approach first
     local TOUCH_OFFSET = 0.05    -- Closer distance to drive directly into the ball
     local DIST_TOLERANCE = 0.05
     local ANGLE_TOLERANCE = 0.1
 
-    -- Get the initial staging point
-    local approach_point = get_approach_point(robot_pos, ball_pos, APPROACH_OFFSET)
+    -- Get the initial staging point: behind the ball as seen from the target, if any
+    local from = target and { x = 2 * ball_pos.x - target.x, y = 2 * ball_pos.y - target.y } or robot_pos
+    local approach_point = get_approach_point(from, ball_pos, APPROACH_OFFSET)
 
     draw_point(approach_point.x, approach_point.y)
 
@@ -67,7 +73,7 @@ function go_to_ball.process(robotId, team)
     if is_on_point(robot_pos, approach_point, DIST_TOLERANCE) and is_facing_point(robot_pos, ball_pos, ANGLE_TOLERANCE) then
         
         -- Calculate the closer point to push into the ball
-        local touch_point = get_approach_point(robot_pos, ball_pos, TOUCH_OFFSET)
+        local touch_point = get_approach_point(from, ball_pos, TOUCH_OFFSET)
         
         -- Move directly (bypassing obstacle avoidance to grab the ball)
         move_direct(robotId, team, {x = touch_point.x, y = touch_point.y})

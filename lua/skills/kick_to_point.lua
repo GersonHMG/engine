@@ -4,13 +4,12 @@
 -- reaches it before the next tick, issuing the kick on that tick.
 local kick_to_point = {}
 
-local APPROACH_OFFSET = 0.15        -- m, ball to approach point, behind the ball (robot radius 0.09 + ball 0.0215 + 0.0385 clearance)
+local profile = require("utils.robot_profile")
+
+local APPROACH_CLEARANCE = 0.0385   -- m, gap between robot and ball at the approach point, behind the ball
 local TOUCH_OFFSET = 0.045          -- m, ball to the move_direct target while touching
 local LINE_TOLERANCE = 0.10         -- m, lateral distance to the kick line to start touching
 local FACING_TOLERANCE = 0.1        -- rad, heading error to the kick direction to start touching
-local CONTACT_DIST = 0.073 + 0.0215 -- m, robot center to ball center when the ball touches the kicker
-local KICK_REACH = 0.01             -- m, how far in front of the kicker face a kick still fires
-local KICKER_HALF_WIDTH = 0.05      -- m, lateral reach of the kicker face
 local TICK = 1 / 60                 -- s, control period
 local MIN_LENGTH = 0.001            -- m, guard for divisions by a length
 
@@ -78,8 +77,8 @@ local function is_ball_at_kicker(robot, ball)
     local along = dx * cos_h + dy * sin_h
     local side = -dx * sin_h + dy * cos_h
     local closing = (robot.vel_x - ball.vel_x) * cos_h + (robot.vel_y - ball.vel_y) * sin_h
-    return along > 0 and math.abs(side) <= KICKER_HALF_WIDTH
-        and along - CONTACT_DIST <= KICK_REACH + math.max(closing, 0) * TICK
+    return along > 0 and math.abs(side) <= profile.robot.kicker_half_width
+        and along - profile.contact_distance() <= profile.kick.reach + math.max(closing, 0) * TICK
 end
 
 local function is_done(robot, ball, target)
@@ -105,7 +104,7 @@ function kick_to_point.process(robotId, team, target)
     end
 
     report(robotId, team, "approach", reason)
-    local approach = get_kick_point(ball, target, APPROACH_OFFSET)
+    local approach = get_kick_point(ball, target, profile.touch_distance() + APPROACH_CLEARANCE)
     draw_point(approach.x, approach.y)
     -- Turn to the kick direction while approaching: that is the heading the lined-up
     -- check needs, so the robot does not turn to the ball first and back later.
