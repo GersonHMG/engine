@@ -79,7 +79,12 @@ impl SimLink {
             Some(recorded) => recorded.extend(events),
             None => events.iter().for_each(|event| debug!("Simulator: {event:?}")),
         }
+        self.write_world(world);
+    }
 
+    /// Writes the simulation into the world without advancing it, so robots
+    /// and the ball placed while it is paused show up.
+    pub fn write_world(&self, world: &mut World) {
         let state = self.sim.state();
         for robot in state.robots() {
             let (id, team) = engine_id(robot.id);
