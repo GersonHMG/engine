@@ -12,6 +12,7 @@ use iced::widget::{button, column, container, pick_list, row, scrollable, text, 
 use iced::{mouse, Color, Element, Length, Point, Rectangle, Size, Theme};
 use std::collections::VecDeque;
 use std::fmt;
+use crate::gui::theme;
 
 const LIVE_BUFFER_SIZE: usize = 600;
 
@@ -298,17 +299,17 @@ impl ChartsPanel {
         let status: Element<ChartsMessage> = if self.recording {
             text(format!("⏺ Recording ({} samples)", self.recorded_samples.len()))
                 .size(10)
-                .color(Color::from_rgb(1.0, 0.3, 0.3))
+                .color(theme::RED_FG)
                 .into()
         } else if !self.recorded_samples.is_empty() {
             text(format!("Recorded {} samples", self.recorded_samples.len()))
                 .size(10)
-                .color(Color::from_rgb(0.5, 0.5, 0.5))
+                .color(theme::MUTED)
                 .into()
         } else {
             text("Live")
                 .size(10)
-                .color(Color::from_rgb(0.4, 0.8, 0.4))
+                .color(theme::GREEN)
                 .into()
         };
 
@@ -325,7 +326,7 @@ impl ChartsPanel {
                 container(
                     text("Click + to add a plot")
                         .size(12)
-                        .color(Color::from_rgb(0.5, 0.5, 0.5)),
+                        .color(theme::MUTED),
                 )
                 .padding(20)
                 .center_x(Length::Fill),
@@ -495,7 +496,7 @@ impl canvas::Program<ChartsMessage> for MultiSeriesChartProgram {
         frame.fill_rectangle(
             Point::ORIGIN,
             Size::new(w, h),
-            Color::from_rgb(0.1, 0.1, 0.18),
+            theme::FIELD_BG,
         );
 
         let has_data = self.series.iter().any(|(d, _, _)| d.len() >= 2);
@@ -503,7 +504,7 @@ impl canvas::Program<ChartsMessage> for MultiSeriesChartProgram {
             frame.fill_text(Text {
                 content: "No data".to_string(),
                 position: Point::new(w / 2.0, h / 2.0),
-                color: Color::from_rgb(0.4, 0.4, 0.4),
+                color: theme::BTN_BORDER,
                 size: iced::Pixels(11.0),
                 align_x: iced::alignment::Horizontal::Center.into(),
                 align_y: iced::alignment::Vertical::Center.into(),
@@ -547,8 +548,8 @@ impl canvas::Program<ChartsMessage> for MultiSeriesChartProgram {
         let y_span = y_max - y_min;
 
         // Grid lines (horizontal)
-        let grid_color = Color::from_rgb(0.2, 0.2, 0.25);
-        let label_color = Color::from_rgb(0.5, 0.5, 0.5);
+        let grid_color = theme::DIVIDER;
+        let label_color = theme::MUTED;
         for i in 0..=4 {
             let frac = i as f32 / 4.0;
             let py = mt + ph * (1.0 - frac);
@@ -634,14 +635,14 @@ impl canvas::Program<ChartsMessage> for MultiSeriesChartProgram {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
-            radius: 0.0.into(),
+            radius: 6.0.into(),
         },
         ..Default::default()
     }
@@ -649,9 +650,9 @@ fn panel_style(theme: &iced::Theme) -> container::Style {
 
 fn plot_card_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(Color::from_rgb(0.12, 0.12, 0.16))),
+        background: Some(iced::Background::Color(theme::GROUP)),
         border: iced::Border {
-            color: Color::from_rgb(0.25, 0.25, 0.3),
+            color: theme::BTN_BORDER,
             width: 1.0,
             radius: 4.0.into(),
         },

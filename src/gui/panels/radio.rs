@@ -2,6 +2,7 @@
 
 use iced::widget::{button, column, container, row, text, text_input, toggler};
 use iced::{Element, Length};
+use crate::gui::theme;
 
 #[derive(Debug, Clone)]
 pub enum RadioMessage {
@@ -34,7 +35,7 @@ impl RadioPanel {
             text("Radio Configuration").size(16),
             row![
                 text("Port").width(Length::Fixed(80.0)),
-                text_input("/dev/ttyUSB0", &self.port_name)
+                text_input("/dev/ttyUSB0", &self.port_name).style(theme::input)
                     .on_input(RadioMessage::PortNameChanged)
                     .width(Length::Fill),
             ]
@@ -42,7 +43,7 @@ impl RadioPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Baud Rate").width(Length::Fixed(80.0)),
-                text_input("115200", &self.baud_rate)
+                text_input("115200", &self.baud_rate).style(theme::input)
                     .on_input(RadioMessage::BaudRateChanged)
                     .width(Length::Fill),
             ]
@@ -69,12 +70,12 @@ impl RadioPanel {
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
             radius: 6.0.into(),
         },

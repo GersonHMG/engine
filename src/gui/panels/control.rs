@@ -2,6 +2,7 @@
 
 use iced::widget::{column, container, pick_list, row, text, text_input};
 use iced::{Element, Length};
+use crate::gui::theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlMode {
@@ -99,7 +100,7 @@ impl ControlPanel {
 
         let content = column![
             text("Manual Control").size(16),
-            text(robot_info).size(12).color(iced::Color::from_rgb(0.6, 0.7, 0.8)),
+            text(robot_info).size(12).color(theme::TEXT_2),
             row![
                 text("Mode").width(Length::Fixed(90.0)),
                 pick_list(
@@ -113,7 +114,7 @@ impl ControlPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Scale Vx").width(Length::Fixed(90.0)),
-                text_input("1.0", &self.scale_vx)
+                text_input("1.0", &self.scale_vx).style(theme::input)
                     .on_input(ControlMessage::ScaleVxChanged)
                     .width(Length::Fixed(60.0)),
             ]
@@ -121,7 +122,7 @@ impl ControlPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Scale Vy").width(Length::Fixed(90.0)),
-                text_input("1.0", &self.scale_vy)
+                text_input("1.0", &self.scale_vy).style(theme::input)
                     .on_input(ControlMessage::ScaleVyChanged)
                     .width(Length::Fixed(60.0)),
             ]
@@ -129,7 +130,7 @@ impl ControlPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Scale ω").width(Length::Fixed(90.0)),
-                text_input("1.0", &self.scale_w)
+                text_input("1.0", &self.scale_w).style(theme::input)
                     .on_input(ControlMessage::ScaleWChanged)
                     .width(Length::Fixed(60.0)),
             ]
@@ -137,7 +138,7 @@ impl ControlPanel {
             .align_y(iced::Alignment::Center),
             text("Keys: W/S Vx, A/D Vy, Q/E ω, K kick")
                 .size(11)
-                .color(iced::Color::from_rgb(0.7, 0.75, 0.8)),
+                .color(theme::MUTED),
         ]
         .spacing(8)
         .padding(12);
@@ -149,12 +150,12 @@ impl ControlPanel {
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
             radius: 6.0.into(),
         },
