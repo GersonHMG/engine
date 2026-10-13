@@ -77,6 +77,11 @@ impl Radio {
         self.simulator.is_some()
     }
 
+    /// Simulated time of the in-process simulator, s, if there is one.
+    pub fn simulator_time(&self) -> Option<f64> {
+        self.simulator.as_ref().map(|s| s.time())
+    }
+
     /// Advances the in-process simulator by `dt` seconds and writes its
     /// state into the world. Does nothing without a simulator.
     pub fn step_simulator(&mut self, world: &mut crate::world::World, dt: f64) {
