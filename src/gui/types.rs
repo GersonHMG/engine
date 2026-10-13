@@ -141,6 +141,8 @@ pub enum Message {
     LuaConsoleResizeStart,
     ConsoleInputChanged(String),
     ConsoleSubmit,
+    /// Clears the Lua console logs.
+    ConsoleClear,
     Field(FieldMessage),
     TeleportMenu(TeleportMenuMessage),
 

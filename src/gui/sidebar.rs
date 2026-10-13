@@ -1,7 +1,8 @@
 // gui/sidebar.rs — Sidebar with icon buttons to open panels
 
-use iced::widget::{button, column, container, text};
-use iced::{Element, Length};
+use super::theme::{bar, btn, btn_fg, icon, tooltip_box, Btn, Icon, DIVIDER, SIDEBAR};
+use iced::widget::{button, column, container, text, tooltip, Space};
+use iced::{Alignment, Element, Length};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarPanel {
@@ -39,72 +40,55 @@ impl Sidebar {
         }
     }
 
-    pub fn view(&self, replay_mode: bool, lua_console_open: bool) -> Element<SidebarMessage> {
-        let make_btn = |label: &'static str, panel: SidebarPanel, is_active: bool, enabled: bool| -> Element<SidebarMessage> {
-            let btn = button(
-                text(label)
-                    .size(14)
-                    .center()
-                    .width(Length::Fill),
-            )
-            .width(Length::Fixed(36.0))
-            .height(Length::Fixed(36.0))
-            .style(if is_active {
-                button::primary
-            } else {
-                button::secondary
-            });
-
-            if enabled {
-                btn.on_press(SidebarMessage::TogglePanel(panel)).into()
-            } else {
-                btn.into()
-            }
+    /// `open`: panels whose window is open; `replay_mode` disables the panels.
+    pub fn view(&self, open: &[SidebarPanel], replay_mode: bool, lua_console_open: bool) -> Element<'_, SidebarMessage> {
+        let item = |glyph: Icon, label: &'static str, kind: Btn, message: Option<SidebarMessage>| -> Element<'_, SidebarMessage> {
+            let enabled = message.is_some();
+            let btn = button(container(icon(glyph, 16.0, Some(btn_fg(kind, enabled)))).center(Length::Fill))
+                .width(32)
+                .height(32)
+                .padding(0)
+                .style(btn(kind))
+                .on_press_maybe(message);
+            tooltip(btn, container(text(label).size(12)).padding([4, 8]).style(tooltip_box), tooltip::Position::Right)
+                .gap(6)
+                .into()
         };
-
-        let ap = self.active_panel;
-        let replay_btn = if replay_mode {
-            button(text("R").size(14).center().width(Length::Fill))
-                .on_press(SidebarMessage::ToggleReplayMode)
-                .width(Length::Fixed(36.0))
-                .height(Length::Fixed(36.0))
-                .style(button::danger)
-        } else {
-            button(text("R").size(14).center().width(Length::Fill))
-                .on_press(SidebarMessage::ToggleReplayMode)
-                .width(Length::Fixed(36.0))
-                .height(Length::Fixed(36.0))
-                .style(button::success)
+        let panel = |glyph: Icon, label: &'static str, panel: SidebarPanel| {
+            let message = (!replay_mode).then_some(SidebarMessage::TogglePanel(panel));
+            item(glyph, label, Btn::Side(open.contains(&panel)), message)
         };
 
         let content = column![
-            make_btn("👁", SidebarPanel::Vision, ap == Some(SidebarPanel::Vision), !replay_mode),
-            make_btn("📡", SidebarPanel::Radio, ap == Some(SidebarPanel::Radio), !replay_mode),
-            make_btn("📈", SidebarPanel::Kalman, ap == Some(SidebarPanel::Kalman), !replay_mode),
-            make_btn("⏺", SidebarPanel::Recording, ap == Some(SidebarPanel::Recording), !replay_mode),
-            make_btn("🎮", SidebarPanel::Control, ap == Some(SidebarPanel::Control), !replay_mode),
-            make_btn("📊", SidebarPanel::Charts, ap == Some(SidebarPanel::Charts), !replay_mode),
-            make_btn("🪵", SidebarPanel::LuaConsole, lua_console_open, !replay_mode),
-            replay_btn,
+            panel(Icon::Eye, "Vision", SidebarPanel::Vision),
+            panel(Icon::Radio, "Radio", SidebarPanel::Radio),
+            panel(Icon::Filter, "Kalman filter", SidebarPanel::Kalman),
+            panel(Icon::Record, "Recording", SidebarPanel::Recording),
+            panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),
+            panel(Icon::Chart, "Charts", SidebarPanel::Charts),
+            container(Space::new().width(22).height(1)).style(bar(DIVIDER)),
+            item(
+                Icon::Terminal,
+                "Lua console",
+                Btn::Side(lua_console_open),
+                (!replay_mode).then_some(SidebarMessage::TogglePanel(SidebarPanel::LuaConsole)),
+            ),
+            item(
+                Icon::Replay,
+                if replay_mode { "Exit replay mode" } else { "Replay mode" },
+                Btn::Replay(replay_mode),
+                Some(SidebarMessage::ToggleReplayMode),
+            ),
         ]
         .spacing(4)
-        .padding(4);
+        .align_x(Alignment::Center);
 
         container(content)
-            .style(sidebar_style)
+            .width(44)
+            .height(Length::Fill)
+            .padding([6, 0])
+            .style(bar(SIDEBAR))
             .into()
     }
 }
 
-fn sidebar_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
-    container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
-        border: iced::Border {
-            color: palette.background.strong.color,
-            width: 0.0,
-            radius: 0.0.into(),
-        },
-        ..Default::default()
-    }
-}

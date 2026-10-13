@@ -2,6 +2,7 @@
 
 use iced::widget::{button, column, container, row, text, text_input, toggler};
 use iced::{Element, Length};
+use crate::gui::theme;
 
 #[derive(Debug, Clone)]
 pub enum KalmanMessage {
@@ -44,7 +45,7 @@ impl KalmanPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Proc. Noise (P)").width(Length::Fixed(100.0)),
-                text_input("0.0000001", &self.process_noise_p)
+                text_input("0.0000001", &self.process_noise_p).style(theme::input)
                     .on_input(KalmanMessage::ProcessNoisePChanged)
                     .width(Length::Fill),
             ]
@@ -52,7 +53,7 @@ impl KalmanPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Proc. Noise (V)").width(Length::Fixed(100.0)),
-                text_input("0.0001", &self.process_noise_v)
+                text_input("0.0001", &self.process_noise_v).style(theme::input)
                     .on_input(KalmanMessage::ProcessNoiseVChanged)
                     .width(Length::Fill),
             ]
@@ -60,7 +61,7 @@ impl KalmanPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Meas. Noise").width(Length::Fixed(100.0)),
-                text_input("0.000001", &self.measurement_noise)
+                text_input("0.000001", &self.measurement_noise).style(theme::input)
                     .on_input(KalmanMessage::MeasurementNoiseChanged)
                     .width(Length::Fill),
             ]
@@ -80,12 +81,12 @@ impl KalmanPanel {
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
             radius: 6.0.into(),
         },

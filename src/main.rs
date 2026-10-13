@@ -297,6 +297,11 @@ fn main() -> iced::Result {
     )
     .title(EngineApp::title)
     .theme(EngineApp::theme)
+    .font(gui::theme::FONTS[0])
+    .font(gui::theme::FONTS[1])
+    .font(gui::theme::FONTS[2])
+    .font(gui::theme::FONTS[3])
+    .default_font(gui::theme::SANS)
     .subscription(EngineApp::subscription)
     .run()
 }

@@ -1,12 +1,11 @@
-// gui/toolbar.rs — Script toolbar (load/play/reload + record/replay + simulator switch + scenario menu + PPS sparkline + filename)
+// gui/toolbar.rs — Script toolbar (load/play/reload + status, record/replay/draws,
+// simulator switch with team steppers, scenario menu and speed)
 
+use super::theme::{self, bar, btn, btn_fg, divider, dot, group, icon, pill, Btn, Icon};
 use super::types::SimulatorSettings;
-use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke};
-use iced::widget::{button, container, pick_list, row, text, Canvas};
-use iced::{mouse, Color, Element, Length, Point, Rectangle, Size, Theme};
+use iced::widget::{button, container, pick_list, row, text, Space};
+use iced::{Alignment, Element, Length};
 use std::fmt;
-
-const PPS_HISTORY: usize = 60;
 
 /// Speeds offered for the simulator; 0 = as fast as possible.
 const SIM_SPEEDS: [SimSpeed; 5] = [SimSpeed(1.0), SimSpeed(2.0), SimSpeed(5.0), SimSpeed(10.0), SimSpeed(0.0)];
@@ -59,8 +58,6 @@ pub enum ScriptStatus {
 pub struct Toolbar {
     pub script_path: String,
     pub script_status: ScriptStatus,
-    pub pps: u32,
-    pub pps_history: Vec<u32>,
     pub simulator: SimulatorSettings,
     /// Seconds recorded so far, while recording.
     pub recording_s: Option<f64>,
@@ -77,8 +74,6 @@ impl Toolbar {
         Self {
             script_path: String::new(),
             script_status: ScriptStatus::NoScript,
-            pps: 0,
-            pps_history: vec![0; PPS_HISTORY],
             simulator,
             recording_s: None,
             has_recording: false,
@@ -87,232 +82,166 @@ impl Toolbar {
         }
     }
 
-    pub fn push_pps(&mut self, pps: u32) {
-        self.pps = pps;
-        self.pps_history.remove(0);
-        self.pps_history.push(pps);
-    }
-
-    pub fn view(&self) -> Element<ToolbarMessage> {
+    /// `robot_counts`: robots on the field per team (blue, yellow).
+    pub fn view(&self, robot_counts: [usize; 2]) -> Element<'_, ToolbarMessage> {
         let has_script = !self.script_path.is_empty();
         let is_running = self.script_status == ScriptStatus::Running;
 
-        let load_btn = button(text("📂").size(14))
-            .on_press(ToolbarMessage::LoadScript)
-            .style(button::secondary);
-
-        // Play/Stop toggle: ▶ when paused/loaded/idle, ⏹ when running
-        let toggle_btn = if has_script {
-            if is_running {
-                button(text("⏹").size(14))
-                    .on_press(ToolbarMessage::ToggleScript)
-                    .style(button::danger)
+        // `tint`: stroked icons take the button's text color; play/stop keep their own.
+        let icon_btn = |glyph: Icon, tint: bool, message: Option<ToolbarMessage>| {
+            let enabled = message.is_some();
+            let color = if tint {
+                Some(btn_fg(Btn::Neutral, enabled))
+            } else if enabled {
+                None
             } else {
-                button(text("▶").size(14))
-                    .on_press(ToolbarMessage::ToggleScript)
-                    .style(button::success)
-            }
-        } else {
-            button(text("▶").size(14)).style(button::secondary)
+                Some(theme::MUTED)
+            };
+            button(container(icon(glyph, 15.0, color)).center(Length::Fill))
+                .width(28)
+                .height(26)
+                .padding(0)
+                .style(btn(Btn::Neutral))
+                .on_press_maybe(message)
         };
 
-        // Reload button
-        let reload_btn = if has_script {
-            button(text("🔄").size(14))
-                .on_press(ToolbarMessage::ReloadScript)
-                .style(button::secondary)
+        let load_btn = icon_btn(Icon::Folder, true, Some(ToolbarMessage::LoadScript));
+        // Play/Stop toggle: play when paused/loaded/idle, stop when running
+        let toggle_btn = icon_btn(
+            if is_running { Icon::Stop } else { Icon::Play },
+            false,
+            has_script.then_some(ToolbarMessage::ToggleScript),
+        );
+        let reload_btn = icon_btn(Icon::Reload, true, has_script.then_some(ToolbarMessage::ReloadScript));
+
+        let script_name = if has_script {
+            self.script_path.replace('\\', "/").rsplit('/').next().unwrap_or("No script").to_string()
         } else {
-            button(text("🔄").size(14)).style(button::secondary)
+            "No script".to_string()
+        };
+
+        let status = match self.script_status {
+            ScriptStatus::Running => Some(("Running", theme::GREEN, theme::GREEN_DIM)),
+            ScriptStatus::Paused => Some(("Paused", theme::ORANGE, theme::ORANGE_DIM)),
+            ScriptStatus::Failed => Some(("Failed", theme::RED_FG, theme::RED_DIM)),
+            ScriptStatus::NoScript => None,
         };
 
         // Record toggle: shows the recorded time while recording
-        let rec_btn = match self.recording_s {
-            Some(secs) => button(text(format!("⏹ REC {secs:.1}s")).size(12))
-                .on_press(ToolbarMessage::ToggleRecording)
-                .style(button::danger),
-            None => button(text("⏺ REC").size(12))
-                .on_press(ToolbarMessage::ToggleRecording)
-                .style(button::secondary),
-        };
-
+        let rec_btn = label_button(
+            match self.recording_s {
+                Some(secs) => format!("■ REC {secs:.1}s"),
+                None => "● REC".to_string(),
+            },
+            Btn::Rec(self.recording_s.is_some()),
+            Some(ToolbarMessage::ToggleRecording),
+        );
         // Replay of the last recording, once there is one and nothing is being recorded
-        let replay_btn = if self.has_recording && self.recording_s.is_none() {
-            button(text("⟲ REPLAY").size(12))
-                .on_press(ToolbarMessage::PlayRecording)
-                .style(button::secondary)
-        } else {
-            button(text("⟲ REPLAY").size(12)).style(button::secondary)
-        };
-
+        let replay_btn = label_button(
+            "REPLAY".to_string(),
+            Btn::Neutral,
+            (self.has_recording && self.recording_s.is_none()).then_some(ToolbarMessage::PlayRecording),
+        );
         let draws_btn = draws_button(self.show_draws, ToolbarMessage::ToggleDraws);
-
-        let script_name = if self.script_path.is_empty() {
-            "No script".to_string()
-        } else {
-            self.script_path
-                .replace('\\', "/")
-                .rsplit('/')
-                .next()
-                .unwrap_or("No script")
-                .to_string()
-        };
-
-        let (status_text, status_color) = match self.script_status {
-            ScriptStatus::Running => ("Running", Color::from_rgb(0.2, 0.85, 0.25)),
-            ScriptStatus::Paused => ("Paused", Color::from_rgb(0.95, 0.55, 0.15)),
-            ScriptStatus::NoScript => ("", Color::from_rgb(0.6, 0.6, 0.6)),
-            ScriptStatus::Failed => ("Failed", Color::from_rgb(0.9, 0.2, 0.2)),
-        };
-
-        let pps_text = format!("{} PPS", self.pps);
-
-        // PPS sparkline (small inline canvas)
-        let pps_sparkline = Canvas::new(PpsSparkline {
-            data: &self.pps_history,
-        })
-        .width(Length::Fixed(80.0))
-        .height(Length::Fixed(20.0));
-
-        // Simulator switch, plus its speed menu while it is on
-        let sim_btn = button(text("SIM").size(12))
-            .on_press(ToolbarMessage::ToggleSimulator)
-            .style(if self.simulator.enabled { button::success } else { button::secondary });
 
         let mut content = row![
             load_btn,
             toggle_btn,
             reload_btn,
-            rec_btn,
-            replay_btn,
-            draws_btn,
-            text("|").size(14).color(Color::from_rgb(0.3, 0.3, 0.3)),
-            text(script_name).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)),
-            text(status_text).size(12).color(status_color),
-            iced::widget::Space::new().width(Length::Fill),
-            sim_btn,
+            Space::new().width(4),
+            text(script_name)
+                .size(12)
+                .font(theme::MONO)
+                .color(if has_script { theme::TEXT } else { theme::MUTED }),
         ]
-        .spacing(6)
-        .padding(4)
-        .align_y(iced::Alignment::Center);
+        .spacing(4)
+        .align_y(Alignment::Center);
 
-        if self.simulator.enabled {
-            content = content
-                .push(robot_count_buttons(0, Color::from_rgb(0.25, 0.5, 1.0)))
-                .push(robot_count_buttons(1, Color::from_rgb(0.95, 0.85, 0.1)));
-            content = content.push(
-                pick_list(self.scenarios.as_slice(), None::<String>, ToolbarMessage::ScenarioSelected)
-                    .placeholder("Load scenario…")
-                    .on_open(ToolbarMessage::ScenarioMenuOpened)
-                    .text_size(12),
-            );
-            content = content.push(
-                pick_list(SIM_SPEEDS, Some(SimSpeed(self.simulator.speed)), ToolbarMessage::SimSpeedSelected)
-                    .text_size(12),
-            );
+        if let Some((label, fg, bg)) = status {
+            content = content.push(container(text(label).size(11).color(fg)).padding([2, 8]).style(pill(bg)));
         }
 
-        let content = content
-            .push(text(pps_text).size(12).color(Color::from_rgb(0.6, 0.6, 0.6)))
-            .push(pps_sparkline);
+        content = content
+            .push(divider())
+            .push(rec_btn)
+            .push(replay_btn)
+            .push(draws_btn)
+            .push(Space::new().width(Length::Fill))
+            .push(label_button(
+                "SIM".to_string(),
+                Btn::Toggle(self.simulator.enabled),
+                Some(ToolbarMessage::ToggleSimulator),
+            ));
+
+        // While the simulator is on: team steppers, scenario menu and speed
+        if self.simulator.enabled {
+            content = content
+                .push(divider())
+                .push(team_stepper(0, robot_counts[0]))
+                .push(team_stepper(1, robot_counts[1]))
+                .push(
+                    pick_list(self.scenarios.as_slice(), None::<String>, ToolbarMessage::ScenarioSelected)
+                        .placeholder("Load scenario")
+                        .on_open(ToolbarMessage::ScenarioMenuOpened)
+                        .width(130)
+                        .text_size(12),
+                )
+                .push(
+                    pick_list(SIM_SPEEDS, Some(SimSpeed(self.simulator.speed)), ToolbarMessage::SimSpeedSelected)
+                        .width(64)
+                        .font(theme::MONO)
+                        .text_size(12),
+                );
+        }
 
         container(content)
             .width(Length::Fill)
-            .height(Length::Fixed(36.0))
-            .style(toolbar_style)
+            .height(36)
+            .padding([0, 8])
+            .center_y(36)
+            .style(bar(theme::BAR))
             .into()
     }
 }
 
-/// Show/hide toggle for the Lua drawings, sending `message`: highlighted while they are shown.
+/// Text button of the toolbars (REC, REPLAY, DRAWS, SIM, ...).
+pub fn label_button<'a, M: Clone + 'a>(label: String, kind: Btn, message: Option<M>) -> iced::widget::Button<'a, M> {
+    button(text(label).size(11).font(theme::SANS_BOLD))
+        .height(26)
+        .padding([5, 9])
+        .style(btn(kind))
+        .on_press_maybe(message)
+}
+
+/// Show/hide toggle for the Lua drawings, sending `message`: accent while they are shown.
 pub fn draws_button<'a, M: Clone + 'a>(shown: bool, message: M) -> iced::widget::Button<'a, M> {
-    button(text("✎ DRAWS").size(12))
-        .on_press(message)
-        .style(if shown { button::success } else { button::secondary })
+    label_button("DRAWS".to_string(), Btn::Toggle(shown), Some(message))
 }
 
-/// `− ● +` buttons removing or adding a robot of `team`, with a dot in the team color.
-fn robot_count_buttons<'a>(team: i32, color: Color) -> Element<'a, ToolbarMessage> {
-    row![
-        button(text("−").size(12))
-            .on_press(ToolbarMessage::RemoveRobot(team))
-            .style(button::secondary),
-        text("●").size(14).color(color),
-        button(text("+").size(12))
-            .on_press(ToolbarMessage::AddRobot(team))
-            .style(button::secondary),
-    ]
-    .spacing(2)
-    .align_y(iced::Alignment::Center)
+/// `− ●N +` removing or adding a robot of `team`, with its robot count.
+fn team_stepper<'a>(team: i32, count: usize) -> Element<'a, ToolbarMessage> {
+    const MAX_ROBOTS_PER_TEAM: usize = 16;
+    let step = |label: &'static str, message: Option<ToolbarMessage>| {
+        button(text(label).size(13).center())
+            .width(22)
+            .height(24)
+            .padding(0)
+            .style(btn(Btn::Ghost))
+            .on_press_maybe(message)
+    };
+    container(
+        row![
+            step("−", (count > 0).then_some(ToolbarMessage::RemoveRobot(team))),
+            row![dot(theme::team_color(team), 10.0), text(count).size(12).font(theme::MONO_BOLD)]
+                .spacing(5)
+                .padding([0, 4])
+                .align_y(Alignment::Center),
+            step("+", (count < MAX_ROBOTS_PER_TEAM).then_some(ToolbarMessage::AddRobot(team))),
+        ]
+        .align_y(Alignment::Center),
+    )
+    .height(26)
+    .center_y(26)
+    .style(group)
     .into()
-}
-
-fn toolbar_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
-    container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
-        border: iced::Border {
-            color: palette.background.strong.color,
-            width: 1.0,
-            radius: 0.0.into(),
-        },
-        ..Default::default()
-    }
-}
-
-// --- PPS Sparkline Canvas ---
-struct PpsSparkline<'a> {
-    data: &'a [u32],
-}
-
-impl<'a> canvas::Program<ToolbarMessage> for PpsSparkline<'a> {
-    type State = ();
-
-    fn draw(
-        &self,
-        _state: &Self::State,
-        renderer: &iced::Renderer,
-        _theme: &Theme,
-        bounds: Rectangle,
-        _cursor: mouse::Cursor,
-    ) -> Vec<Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
-        let w = bounds.width;
-        let h = bounds.height;
-
-        // Background
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            Size::new(w, h),
-            Color::from_rgb(0.1, 0.1, 0.15),
-        );
-
-        if self.data.is_empty() {
-            return vec![frame.into_geometry()];
-        }
-
-        let max_pps = self.data.iter().copied().max().unwrap_or(1).max(1) as f32;
-        let n = self.data.len();
-
-        if n >= 2 {
-            let path = Path::new(|b| {
-                for (i, v) in self.data.iter().enumerate() {
-                    let px = (i as f32 / (n - 1) as f32) * w;
-                    let py = h - (*v as f32 / max_pps) * h * 0.9;
-                    if i == 0 {
-                        b.move_to(Point::new(px, py));
-                    } else {
-                        b.line_to(Point::new(px, py));
-                    }
-                }
-            });
-            frame.stroke(
-                &path,
-                Stroke::default()
-                    .with_color(Color::from_rgb(0.3, 0.8, 0.4))
-                    .with_width(1.0),
-            );
-        }
-
-        vec![frame.into_geometry()]
-    }
 }

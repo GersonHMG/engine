@@ -1,8 +1,9 @@
 // gui/lua_console.rs — Lua console panel UI: logs plus a command line
 // (simulator commands, see `sim help`)
 
-use iced::widget::{column, container, scrollable, text, text_input, Id, MouseArea, Space};
-use iced::{Element, Length, mouse};
+use super::theme::{self, btn, Btn};
+use iced::widget::{button, column, container, row, scrollable, text, text_input, Id, MouseArea, Space};
+use iced::{mouse, Alignment, Element, Length};
 use std::collections::VecDeque;
 
 const DEFAULT_MAX_LINES: usize = 100;
@@ -80,65 +81,86 @@ impl LuaConsolePanel {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.logs.clear();
+    }
+
     pub fn view<'a, Message: Clone + 'a>(
         &self,
         on_resize_start: Message,
         on_input: impl Fn(String) -> Message + 'a,
         on_submit: Message,
+        on_clear: Message,
     ) -> Element<'a, Message> {
         let (body_text, body_color) = if self.logs.is_empty() {
-            (
-                "Lua console logs will appear here.".to_string(),
-                iced::Color::from_rgb(0.7, 0.7, 0.7),
-            )
+            ("Lua console logs will appear here.".to_string(), theme::MUTED)
         } else {
-            let text = self
-                .logs
-                .iter()
-                .map(|line| line.as_str())
-                .collect::<Vec<_>>()
-                .join("\n");
-            (text, iced::Color::from_rgb(0.85, 0.85, 0.85))
+            let text = self.logs.iter().map(|line| line.as_str()).collect::<Vec<_>>().join("\n");
+            (text, theme::TEXT_2)
         };
+
+        // Grab handle drawn at the top edge, where dragging resizes the console.
+        let grip = container(
+            container(Space::new().width(36).height(3)).style(|_: &iced::Theme| container::Style {
+                background: Some(iced::Background::Color(theme::BTN_BORDER)),
+                border: iced::Border { radius: 2.0.into(), ..Default::default() },
+                ..Default::default()
+            }),
+        )
+        .center_x(Length::Fill)
+        .height(Length::Fixed(RESIZE_EDGE_PX + 2.0))
+        .align_y(iced::alignment::Vertical::Center);
+
+        let header = row![
+            text("LUA CONSOLE").size(11).font(theme::SANS_BOLD).color(theme::TEXT_2),
+            Space::new().width(Length::Fill),
+            button(text("Clear").size(11)).padding([2, 8]).style(btn(Btn::Ghost)).on_press(on_clear),
+        ]
+        .align_y(Alignment::Center)
+        .padding([0, 10]);
+
+        let prompt = row![
+            text("›").size(14).font(theme::MONO_BOLD).color(theme::SELECT_RING),
+            text_input("sim add blue 3", &self.input)
+                .on_input(on_input)
+                .on_submit(on_submit)
+                .font(theme::MONO)
+                .size(12)
+                .padding([4, 8])
+                .style(theme::input),
+        ]
+        .spacing(6)
+        .padding([4, 10])
+        .align_y(Alignment::Center);
 
         let panel: Element<'a, Message> = container(
             column![
-                text("Lua Console")
-                    .size(12)
-                    .color(iced::Color::from_rgb(0.8, 0.8, 0.8)),
+                grip,
+                header,
                 scrollable(
                     container(
                         text(body_text)
-                            .size(11)
+                            .size(11.5)
+                            .font(theme::MONO)
                             .color(body_color)
                             .width(Length::Fill)
                             .wrapping(text::Wrapping::Word),
                     )
-                    .padding(6),
+                    .padding([2, 10]),
                 )
                 .id(self.scroll_id.clone())
                 .height(Length::Fill),
-                text_input("Type a command, e.g. sim help", &self.input)
-                    .on_input(on_input)
-                    .on_submit(on_submit)
-                    .size(11),
+                prompt,
             ]
-            .spacing(4)
-            .padding(6),
+            .spacing(2),
         )
         .width(Length::Fill)
         .height(Length::Fixed(self.height))
-        .style(|theme: &iced::Theme| {
-            let palette = theme.extended_palette();
-            container::Style {
-                background: Some(iced::Background::Color(palette.background.weak.color)),
-                border: iced::Border {
-                    color: palette.background.strong.color,
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Default::default()
-            }
+        .style(|_: &iced::Theme| container::Style {
+            background: Some(iced::Background::Color(theme::CONSOLE)),
+            text_color: Some(theme::TEXT),
+            border: iced::Border { color: theme::DIVIDER, width: 1.0, radius: 0.0.into() },
+            ..Default::default()
         })
         .into();
 

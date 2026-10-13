@@ -2,6 +2,7 @@
 
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Element, Length};
+use crate::gui::theme;
 
 #[derive(Debug, Clone)]
 pub enum VisionMessage {
@@ -38,16 +39,16 @@ impl VisionPanel {
         };
 
         let status_color = if self.connected {
-            iced::Color::from_rgb(0.2, 0.8, 0.2)
+            theme::GREEN
         } else {
-            iced::Color::from_rgb(0.8, 0.2, 0.2)
+            theme::RED_FG
         };
 
         let content = column![
             text("Vision Connection").size(16),
             row![
                 text("IP").width(Length::Fixed(80.0)),
-                text_input("224.5.23.2", &self.ip)
+                text_input("224.5.23.2", &self.ip).style(theme::input)
                     .on_input(VisionMessage::IpChanged)
                     .width(Length::Fill),
             ]
@@ -55,7 +56,7 @@ impl VisionPanel {
             .align_y(iced::Alignment::Center),
             row![
                 text("Port").width(Length::Fixed(80.0)),
-                text_input("10020", &self.port)
+                text_input("10020", &self.port).style(theme::input)
                     .on_input(VisionMessage::PortChanged)
                     .width(Length::Fill),
             ]
@@ -81,12 +82,12 @@ impl VisionPanel {
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
             radius: 6.0.into(),
         },

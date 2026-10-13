@@ -2,6 +2,7 @@
 
 use iced::widget::{button, column, container, row, text, text_input};
 use iced::{Element, Length};
+use crate::gui::theme;
 
 #[derive(Debug, Clone)]
 pub enum RecordingMessage {
@@ -37,14 +38,14 @@ impl RecordingPanel {
         let is_recording = self.status == RecordingStatus::Recording;
 
         let (status_text, status_color) = match self.status {
-            RecordingStatus::Idle => ("Idle", iced::Color::from_rgb(0.5, 0.5, 0.5)),
-            RecordingStatus::Recording => ("Recording...", iced::Color::from_rgb(0.2, 0.8, 0.2)),
-            RecordingStatus::Saved => ("Saved", iced::Color::from_rgb(0.5, 0.5, 0.5)),
+            RecordingStatus::Idle => ("Idle", theme::MUTED),
+            RecordingStatus::Recording => ("Recording...", theme::GREEN),
+            RecordingStatus::Saved => ("Saved", theme::MUTED),
         };
 
         let content = column![
             text("Recording").size(16),
-            text_input("record.csv", &self.filename)
+            text_input("record.csv", &self.filename).style(theme::input)
                 .on_input(RecordingMessage::FilenameChanged)
                 .width(Length::Fill),
             row![
@@ -80,12 +81,12 @@ impl RecordingPanel {
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
+fn panel_style(_theme: &iced::Theme) -> container::Style {
     container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
+        background: Some(iced::Background::Color(theme::PANEL)),
+        text_color: Some(theme::TEXT),
         border: iced::Border {
-            color: palette.background.strong.color,
+            color: theme::DIVIDER,
             width: 1.0,
             radius: 6.0.into(),
         },

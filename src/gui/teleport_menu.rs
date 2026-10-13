@@ -2,8 +2,9 @@
 // selected robot to the clicked point, or add a robot there (simulator or
 // grSim).
 
+use super::theme::{btn, overlay_box, Btn};
 use iced::widget::{button, column, container, pin, text};
-use iced::{Color, Element, Length, Point};
+use iced::{Element, Length, Point};
 
 const MENU_WIDTH: f32 = 190.0;
 
@@ -31,7 +32,8 @@ impl TeleportMenu {
         let item = |label: String, message: Option<TeleportMenuMessage>| {
             button(text(label).size(12))
                 .on_press_maybe(message)
-                .style(button::text)
+                .padding([5, 8])
+                .style(btn(Btn::Ghost))
                 .width(Length::Fill)
         };
 
@@ -53,18 +55,7 @@ impl TeleportMenu {
             ),
         ];
 
-        let menu = container(items.width(MENU_WIDTH)).padding(4).style(|theme: &iced::Theme| {
-            let palette = theme.extended_palette();
-            container::Style {
-                background: Some(iced::Background::Color(palette.background.weak.color)),
-                border: iced::Border {
-                    color: Color::from_rgb(0.4, 0.4, 0.4),
-                    width: 1.0,
-                    radius: 4.0.into(),
-                },
-                ..Default::default()
-            }
-        });
+        let menu = container(items.width(MENU_WIDTH)).padding(4).style(overlay_box);
 
         pin(menu).position(self.screen).into()
     }
