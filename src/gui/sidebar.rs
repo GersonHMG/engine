@@ -6,8 +6,8 @@ use iced::{Alignment, Element, Length};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarPanel {
-    Vision,
-    Radio,
+    /// Vision and radio connection settings.
+    Connections,
     Kalman,
     Recording,
     Control,
@@ -60,8 +60,7 @@ impl Sidebar {
         };
 
         let content = column![
-            panel(Icon::Eye, "Vision", SidebarPanel::Vision),
-            panel(Icon::Radio, "Radio", SidebarPanel::Radio),
+            panel(Icon::Radio, "Vision & radio", SidebarPanel::Connections),
             panel(Icon::Filter, "Kalman filter", SidebarPanel::Kalman),
             panel(Icon::Record, "Recording", SidebarPanel::Recording),
             panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),

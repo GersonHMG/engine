@@ -178,8 +178,7 @@ impl EngineApp {
             "Sysmic Engine".to_string()
         } else if let Some(panel) = self.window_to_panel.get(&window_id) {
             match panel {
-                SidebarPanel::Vision => "Vision Settings".to_string(),
-                SidebarPanel::Radio => "Radio Settings".to_string(),
+                SidebarPanel::Connections => "Vision & Radio".to_string(),
                 SidebarPanel::Kalman => "Kalman Filter".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
@@ -204,10 +203,10 @@ impl EngineApp {
             return iced::Task::none();
         }
 
-        let size = if panel == SidebarPanel::Charts {
-            iced::Size::new(640.0, 400.0)
-        } else {
-            iced::Size::new(300.0, 420.0)
+        let size = match panel {
+            SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
+            SidebarPanel::Connections => iced::Size::new(300.0, 470.0),
+            _ => iced::Size::new(300.0, 420.0),
         };
 
         let (id, task) = window::open(window::Settings {
@@ -469,6 +468,11 @@ impl EngineApp {
                     }
                 };
                 let _ = self.command_tx.try_send(command);
+            }
+            Message::BottomPanel(BottomPanelMessage::SetDraws(shown)) => {
+                self.toolbar.show_draws = shown;
+                self.field_data.show_lua_draws = shown;
+                self.field_canvas.request_redraw();
             }
             Message::Toolbar(ToolbarMessage::ToggleDraws) => {
                 self.toolbar.show_draws = !self.toolbar.show_draws;
@@ -1139,7 +1143,7 @@ impl EngineApp {
                 speed: toolbar::SimSpeed(self.toolbar.simulator.speed).to_string(),
                 robots: robot_counts,
             });
-            let bottom = self.bottom_panel.view(sim).map(Message::BottomPanel);
+            let bottom = self.bottom_panel.view(self.toolbar.show_draws, sim).map(Message::BottomPanel);
             column![
                 container(main_row.width(Length::Fill).height(Length::Fill))
                     .width(Length::Fill)
@@ -1156,8 +1160,12 @@ impl EngineApp {
 
     fn view_panel(&self, panel: SidebarPanel) -> Element<'_, Message> {
         let content: Element<'_, Message> = match panel {
-            SidebarPanel::Vision => self.vision_panel.view().map(Message::Vision),
-            SidebarPanel::Radio => self.radio_panel.view().map(Message::Radio),
+            SidebarPanel::Connections => column![
+                self.vision_panel.view().map(Message::Vision),
+                self.radio_panel.view().map(Message::Radio),
+            ]
+            .spacing(8)
+            .into(),
             SidebarPanel::Kalman => self.kalman_panel.view().map(Message::Kalman),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
