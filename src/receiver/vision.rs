@@ -171,6 +171,7 @@ pub fn gui_update(world: &World, pps: u32) -> VisionUpdate {
         robots_blue: world.blue_robots.values().filter(|r| r.active).map(robot_data).collect(),
         robots_yellow: world.yellow_robots.values().filter(|r| r.active).map(robot_data).collect(),
         pps,
+        sim_time: None,
     }
 }
 

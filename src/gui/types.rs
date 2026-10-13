@@ -23,6 +23,8 @@ pub struct VisionUpdate {
     pub robots_blue: Vec<RobotUpdateData>,
     pub robots_yellow: Vec<RobotUpdateData>,
     pub pps: u32,
+    /// Simulated time, s, when the update comes from the in-process simulator.
+    pub sim_time: Option<f64>,
 }
 
 #[derive(Debug, Clone)]
@@ -129,9 +131,13 @@ pub enum Message {
     ScriptFileSelected(Option<String>),
     ReplayFilePick,
     ReplayFileSelected(Option<String>),
-    ReplayPlay,
-    ReplayPause,
+    /// Plays the replay when paused, pauses it when playing.
+    ReplayTogglePlay,
+    ReplayScenarioNameChanged(String),
+    /// Saves where the robots and the ball are in the replay frame shown as a simulator scenario.
+    ReplaySaveScenario,
     ReplaySeek(u32),
+    ReplaySpeedSelected(super::replay::ReplaySpeed),
     LuaConsoleResizeStart,
     ConsoleInputChanged(String),
     ConsoleSubmit,

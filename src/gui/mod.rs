@@ -14,7 +14,7 @@ pub mod types;
 
 pub use types::{EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, Message, RobotUpdateData, SimulatorSettings, VisionUpdate};
 
-use iced::widget::{button, column, container, row, scrollable, slider, text};
+use iced::widget::{button, column, container, pick_list, row, scrollable, slider, text, text_input};
 use iced::widget::operation::snap_to_end;
 use iced::{Element, Length, Subscription, Theme};
 use iced::event::{self, Event};
@@ -27,6 +27,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::config::FieldConfig;
+use crate::sender::simulator::scenario;
 
 use field_canvas::{FieldCanvas, FieldData, FieldMessage, LuaDrawCommand, RobotData};
 use recorder::Recorder;
@@ -63,6 +64,8 @@ pub struct EngineApp {
     field_data: FieldData,
     robot_trace: Vec<(f64, f64)>,
     last_vision_time: std::time::Instant,
+    /// Simulated time of the last field update, s, while the simulator runs.
+    sim_time: Option<f64>,
     last_pps_time: std::time::Instant,
 
     // Channels (wrapped in Arc<Mutex> for Iced)
@@ -94,6 +97,10 @@ pub struct EngineApp {
 
     // Replay mode UI state
     replay: ReplayState,
+    // Name typed for the scenario saved from the replay (empty = a name from the frame)
+    replay_scenario_name: String,
+    // Outcome of the last scenario save, shown under the replay controls
+    replay_scenario_status: Option<Result<String, String>>,
     // Toolbar recorder (REC / REPLAY)
     recorder: Recorder,
     // Live Lua drawings, kept up to date while replay mode shows recorded ones
@@ -134,6 +141,7 @@ impl EngineApp {
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
+            sim_time: None,
             last_pps_time: std::time::Instant::now(),
             vision_rx: Arc::new(Mutex::new(channels.vision_rx)),
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
@@ -153,6 +161,8 @@ impl EngineApp {
             lua_console_resize_start_height: 0.0,
             window_height: 800.0,
             replay: ReplayState::default(),
+            replay_scenario_name: String::new(),
+            replay_scenario_status: None,
             recorder: Recorder::default(),
             live_draws: Vec::new(),
             teleport_menu: None,
@@ -280,9 +290,11 @@ impl EngineApp {
                 | Message::Toolbar(ToolbarMessage::ToggleDraws)
                 | Message::ReplayFilePick
                 | Message::ReplayFileSelected(_)
-                | Message::ReplayPlay
-                | Message::ReplayPause
+                | Message::ReplayTogglePlay
+                | Message::ReplayScenarioNameChanged(_)
+                | Message::ReplaySaveScenario
                 | Message::ReplaySeek(_)
+                | Message::ReplaySpeedSelected(_)
                 | Message::Tick
                 | Message::EventOccurred(_)
                 | Message::WindowOpened(_)
@@ -341,14 +353,31 @@ impl EngineApp {
                 }
             }
             Message::ReplayFileSelected(None) => {}
-            Message::ReplayPlay => {
-                self.replay.start_playback(&mut self.field_data, &mut self.robot_trace);
+            Message::ReplayTogglePlay => {
+                self.replay.toggle_playback(&mut self.field_data, &mut self.robot_trace);
             }
-            Message::ReplayPause => {
+            Message::ReplayScenarioNameChanged(name) => {
+                self.replay_scenario_name = name;
+            }
+            Message::ReplaySaveScenario => {
                 self.replay.pause();
+                let name = match self.replay_scenario_name.trim() {
+                    "" => self.replay.default_scenario_name(),
+                    name => name.to_string(),
+                };
+                self.replay_scenario_status = Some(match self.replay.current_scenario() {
+                    Some(setup) => match scenario::save(&name, &setup) {
+                        Ok(path) => Ok(format!("Saved {} — load it with `sim scenario load {name}`", path.display())),
+                        Err(e) => Err(e),
+                    },
+                    None => Err("no frame to save".to_string()),
+                });
             }
             Message::ReplaySeek(index) => {
                 self.replay.seek(index, &mut self.field_data, &mut self.robot_trace);
+            }
+            Message::ReplaySpeedSelected(speed) => {
+                self.replay.speed = speed.0;
             }
 
             // --- Toolbar ---
@@ -448,6 +477,27 @@ impl EngineApp {
             Message::Toolbar(ToolbarMessage::SimSpeedSelected(speed)) => {
                 self.toolbar.simulator.speed = speed.0;
                 let _ = self.command_tx.try_send(EngineCommand::SetSimulator(self.toolbar.simulator));
+            }
+            Message::Toolbar(ToolbarMessage::ScenarioMenuOpened) => {
+                self.toolbar.scenarios = scenario::list();
+            }
+            Message::Toolbar(ToolbarMessage::ScenarioSelected(name)) => {
+                let _ = self
+                    .command_tx
+                    .try_send(EngineCommand::ConsoleCommand(format!("sim scenario load {name}")));
+            }
+            Message::Toolbar(ToolbarMessage::AddRobot(team)) => {
+                if let Some(id) = self.free_robot_id(team) {
+                    // Without a position, the robot goes to a free spot on its half.
+                    let command = format!("sim add {} {id}", team_word(team));
+                    let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(command));
+                }
+            }
+            Message::Toolbar(ToolbarMessage::RemoveRobot(team)) => {
+                if let Some(id) = self.team_robots(team).iter().map(|r| r.id).max() {
+                    let command = format!("sim remove {} {id}", team_word(team));
+                    let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(command));
+                }
             }
             Message::ScriptFileSelected(Some(path)) => {
                 let _ = self.command_tx.try_send(EngineCommand::LoadScript { path: path.clone() });
@@ -661,6 +711,7 @@ impl EngineApp {
                         self.vision_panel.connected = true;
                         self.vision_panel.pps = update.pps;
                         self.toolbar.pps = update.pps;
+                        self.sim_time = update.sim_time;
                         if spark_push {
                             self.toolbar.push_pps(update.pps);
                             spark_push = false; // Prevents pushing multiple times per batch if loop repeats
@@ -751,7 +802,10 @@ impl EngineApp {
                 }
 
                 // Record what the field shows now (robots, ball, drawings)
-                self.recorder.capture(&self.field_data);
+                if !self.toolbar.simulator.enabled {
+                    self.sim_time = None;
+                }
+                self.recorder.capture(&self.field_data, self.sim_time);
                 self.toolbar.recording_s = self.recorder.elapsed_s();
                 self.toolbar.has_recording = self.recorder.has_recording();
 
@@ -913,6 +967,13 @@ impl EngineApp {
 
             let draws_btn = toolbar::draws_button(self.toolbar.show_draws, Message::Toolbar(ToolbarMessage::ToggleDraws));
 
+            let speed_list = pick_list(
+                replay::REPLAY_SPEEDS,
+                Some(replay::ReplaySpeed(self.replay.speed)),
+                Message::ReplaySpeedSelected,
+            )
+            .text_size(12);
+
             let exit_btn = button(text("Exit replay").size(12))
                 .on_press(Message::Sidebar(SidebarMessage::ToggleReplayMode))
                 .style(button::secondary);
@@ -923,6 +984,8 @@ impl EngineApp {
                     open_btn,
                     last_recording_btn,
                     draws_btn,
+                    text("Speed").size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
+                    speed_list,
                     text(replay_file_name).size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
                     iced::widget::Space::new().width(Length::Fill),
                     exit_btn,
@@ -978,21 +1041,27 @@ impl EngineApp {
         let field_stack: Element<'_, Message> = if self.replay.enabled {
             let can_control_replay = self.replay.has_frames();
 
-            let play_btn = if can_control_replay {
-                button(text("Play").size(12))
-                    .on_press(Message::ReplayPlay)
-                    .style(button::success)
-            } else {
-                button(text("Play").size(12)).style(button::secondary)
-            };
-
-            let pause_btn = if can_control_replay {
-                button(text("Pause").size(12))
-                    .on_press(Message::ReplayPause)
+            let play_pause_btn = if !can_control_replay {
+                button(text("▶ Play").size(12)).style(button::secondary)
+            } else if self.replay.is_playing {
+                button(text("⏸ Pause").size(12))
+                    .on_press(Message::ReplayTogglePlay)
                     .style(button::danger)
             } else {
-                button(text("Pause").size(12)).style(button::secondary)
+                button(text("▶ Play").size(12))
+                    .on_press(Message::ReplayTogglePlay)
+                    .style(button::success)
             };
+
+            let scenario_input = text_input(&self.replay.default_scenario_name(), &self.replay_scenario_name)
+                .on_input(Message::ReplayScenarioNameChanged)
+                .on_submit(Message::ReplaySaveScenario)
+                .size(12)
+                .width(Length::Fixed(180.0));
+
+            let save_btn = button(text("💾 Save state").size(12))
+                .on_press_maybe(can_control_replay.then_some(Message::ReplaySaveScenario))
+                .style(button::primary);
 
             let status_text = if self.replay.frames.is_empty() {
                 "Replay: no frames"
@@ -1032,16 +1101,22 @@ impl EngineApp {
             let replay_controls = container(
                 container(column![
                     row![
-                        play_btn,
-                        pause_btn,
+                        play_pause_btn,
                         text(status_text).size(12).color(iced::Color::WHITE),
                         text(frame_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
                         text(time_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
+                        iced::widget::Space::new().width(Length::Fill),
+                        scenario_input,
+                        save_btn,
                     ]
                     .spacing(8)
                     .align_y(iced::Alignment::Center),
                     timeline,
                 ]
+                .extend(self.replay_scenario_status.as_ref().map(|status| match status {
+                    Ok(msg) => text(msg.as_str()).size(11).color(iced::Color::from_rgb(0.5, 0.9, 0.5)).into(),
+                    Err(msg) => text(msg.as_str()).size(11).color(iced::Color::from_rgb(1.0, 0.45, 0.4)).into(),
+                }))
                 .spacing(6))
                 .padding([6, 10])
                 .style(|_theme: &iced::Theme| container::Style {
@@ -1176,6 +1251,11 @@ impl EngineApp {
         }
     }
 
+}
+
+/// Team name as the `sim` console commands take it (0 = blue, 1 = yellow).
+fn team_word(team: i32) -> &'static str {
+    if team == 0 { "blue" } else { "yellow" }
 }
 
 /// A Lua drawing from the engine, in the field canvas's format.

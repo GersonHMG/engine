@@ -1,7 +1,11 @@
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::time::Instant;
 
+use ssl_sim::Team;
+
 use super::field_canvas::{FieldData, LuaDrawCommand, RobotData};
+use crate::sender::simulator::scenario::{BallPlacement, RobotPlacement, Scenario};
 
 #[derive(Debug, Clone)]
 pub struct ReplayFrame {
@@ -11,6 +15,27 @@ pub struct ReplayFrame {
     pub ball: (f64, f64),
     /// Lua drawings on the field at this frame (empty for CSV replays).
     pub draws: Vec<LuaDrawCommand>,
+}
+
+/// Playback speeds offered in the replay toolbar.
+pub const REPLAY_SPEEDS: [ReplaySpeed; 7] = [
+    ReplaySpeed(0.1),
+    ReplaySpeed(0.25),
+    ReplaySpeed(0.5),
+    ReplaySpeed(1.0),
+    ReplaySpeed(2.0),
+    ReplaySpeed(4.0),
+    ReplaySpeed(8.0),
+];
+
+/// Replay playback speed, as a multiple of real time.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ReplaySpeed(pub f64);
+
+impl fmt::Display for ReplaySpeed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}x", self.0)
+    }
 }
 
 #[derive(Debug)]
@@ -23,6 +48,10 @@ pub struct ReplayState {
     pub frames: Vec<ReplayFrame>,
     pub frame_index: usize,
     pub elapsed_ms: u64,
+    /// Playback speed, as a multiple of real time.
+    pub speed: f64,
+    /// Played time not yet counted in `elapsed_ms` (under 1 ms), so slow speeds do not stall.
+    pending_ms: f64,
     last_tick: Instant,
 }
 
@@ -36,6 +65,8 @@ impl Default for ReplayState {
             frames: Vec::new(),
             frame_index: 0,
             elapsed_ms: 0,
+            speed: 1.0,
+            pending_ms: 0.0,
             last_tick: Instant::now(),
         }
     }
@@ -124,6 +155,44 @@ impl ReplayState {
         self.is_playing = false;
     }
 
+    /// Plays when paused and pauses when playing.
+    pub fn toggle_playback(&mut self, field_data: &mut FieldData, robot_trace: &mut Vec<(f64, f64)>) {
+        if self.is_playing {
+            self.pause();
+        } else {
+            self.start_playback(field_data, robot_trace);
+        }
+    }
+
+    /// Where the robots and the ball are in the frame shown, as a simulator scenario.
+    pub fn current_scenario(&self) -> Option<Scenario> {
+        let frame = self.frames.get(self.frame_index)?;
+        let placements = |robots: &[RobotData], team: Team| {
+            robots
+                .iter()
+                .map(move |r| RobotPlacement { team, id: r.id, x: r.x, y: r.y, theta: r.theta })
+                .collect::<Vec<_>>()
+        };
+        let mut robots = placements(&frame.robots_blue, Team::Blue);
+        robots.extend(placements(&frame.robots_yellow, Team::Yellow));
+        Some(Scenario { ball: BallPlacement { x: frame.ball.0, y: frame.ball.1 }, robots })
+    }
+
+    /// A scenario name for the frame shown, e.g. `attack_2v1_4520ms`.
+    pub fn default_scenario_name(&self) -> String {
+        let source = self
+            .file_path
+            .as_deref()
+            .and_then(|p| std::path::Path::new(p).file_stem())
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "recording".to_string());
+        let source: String = source
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        format!("{source}_{}ms", self.current_frame_elapsed_ms())
+    }
+
     pub fn seek(&mut self, index: u32, field_data: &mut FieldData, robot_trace: &mut Vec<(f64, f64)>) {
         if self.frames.is_empty() {
             return;
@@ -151,9 +220,11 @@ impl ReplayState {
 
         if self.is_playing {
             let now = Instant::now();
-            let delta_ms = now.duration_since(self.last_tick).as_millis() as u64;
+            self.pending_ms += now.duration_since(self.last_tick).as_secs_f64() * 1000.0 * self.speed;
             self.last_tick = now;
-            self.elapsed_ms = self.elapsed_ms.saturating_add(delta_ms);
+            let delta_ms = self.pending_ms.floor();
+            self.pending_ms -= delta_ms;
+            self.elapsed_ms = self.elapsed_ms.saturating_add(delta_ms as u64);
 
             while self.frame_index + 1 < self.frames.len()
                 && self.frames[self.frame_index + 1].elapsed_ms <= self.elapsed_ms
@@ -310,4 +381,62 @@ pub fn load_replay_frames(path: &str) -> Result<Vec<ReplayFrame>, String> {
     }
 
     Ok(frames)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn robot(id: u32, x: f64, y: f64, theta: f64) -> RobotData {
+        RobotData { id, x, y, theta, vx: 0.0, vy: 0.0, cmd_vx: 0.0, cmd_vy: 0.0, cmd_angular: 0.0 }
+    }
+
+    fn frame(elapsed_ms: u64, ball: (f64, f64)) -> ReplayFrame {
+        ReplayFrame {
+            elapsed_ms,
+            robots_blue: vec![robot(0, -1.0, 0.5, 0.3)],
+            robots_yellow: vec![robot(2, 1.5, -0.5, 3.0)],
+            ball,
+            draws: Vec::new(),
+        }
+    }
+
+    fn replay_with_frames() -> (ReplayState, FieldData, Vec<(f64, f64)>) {
+        let mut field = FieldData::new(9.0, 6.0);
+        let mut trace = Vec::new();
+        let mut replay = ReplayState::default();
+        let frames = vec![frame(0, (0.0, 0.0)), frame(4520, (0.25, 0.75))];
+        replay.load_recording(frames, "test".to_string(), &mut field, &mut trace);
+        (replay, field, trace)
+    }
+
+    #[test]
+    fn toggle_playback_plays_then_pauses() {
+        let (mut replay, mut field, mut trace) = replay_with_frames();
+        replay.toggle_playback(&mut field, &mut trace);
+        assert!(replay.is_playing);
+        replay.toggle_playback(&mut field, &mut trace);
+        assert!(!replay.is_playing);
+    }
+
+    #[test]
+    fn scenario_is_the_frame_shown() {
+        let (mut replay, mut field, mut trace) = replay_with_frames();
+        replay.seek(1, &mut field, &mut trace);
+        let scenario = replay.current_scenario().unwrap();
+        assert_eq!((scenario.ball.x, scenario.ball.y), (0.25, 0.75));
+        assert_eq!(
+            scenario.robots,
+            vec![
+                RobotPlacement { team: Team::Blue, id: 0, x: -1.0, y: 0.5, theta: 0.3 },
+                RobotPlacement { team: Team::Yellow, id: 2, x: 1.5, y: -0.5, theta: 3.0 },
+            ]
+        );
+        assert_eq!(replay.default_scenario_name(), "recording_4520ms");
+    }
+
+    #[test]
+    fn no_scenario_without_frames() {
+        assert!(ReplayState::default().current_scenario().is_none());
+    }
 }

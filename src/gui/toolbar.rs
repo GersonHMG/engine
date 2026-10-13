@@ -1,4 +1,4 @@
-// gui/toolbar.rs — Script toolbar (load/play/reload + record/replay + simulator switch + PPS sparkline + filename)
+// gui/toolbar.rs — Script toolbar (load/play/reload + record/replay + simulator switch + scenario menu + PPS sparkline + filename)
 
 use super::types::SimulatorSettings;
 use iced::widget::canvas::{self, Frame, Geometry, Path, Stroke};
@@ -24,6 +24,14 @@ pub enum ToolbarMessage {
     ToggleDraws,
     ToggleSimulator,
     SimSpeedSelected(SimSpeed),
+    /// The scenario menu was opened; its list of saved scenarios is refreshed.
+    ScenarioMenuOpened,
+    /// Loads a saved scenario into the simulator.
+    ScenarioSelected(String),
+    /// Adds a robot of this team (0 = blue, 1 = yellow) to the simulator.
+    AddRobot(i32),
+    /// Removes the highest-id robot of this team from the simulator.
+    RemoveRobot(i32),
 }
 
 /// Simulator speed as shown in the speed menu.
@@ -60,6 +68,8 @@ pub struct Toolbar {
     pub has_recording: bool,
     /// Whether the Lua drawings are shown on the field.
     pub show_draws: bool,
+    /// Saved scenario names offered in the scenario menu.
+    pub scenarios: Vec<String>,
 }
 
 impl Toolbar {
@@ -73,6 +83,7 @@ impl Toolbar {
             recording_s: None,
             has_recording: false,
             show_draws: true,
+            scenarios: Vec::new(),
         }
     }
 
@@ -185,6 +196,15 @@ impl Toolbar {
         .align_y(iced::Alignment::Center);
 
         if self.simulator.enabled {
+            content = content
+                .push(robot_count_buttons(0, Color::from_rgb(0.25, 0.5, 1.0)))
+                .push(robot_count_buttons(1, Color::from_rgb(0.95, 0.85, 0.1)));
+            content = content.push(
+                pick_list(self.scenarios.as_slice(), None::<String>, ToolbarMessage::ScenarioSelected)
+                    .placeholder("Load scenario…")
+                    .on_open(ToolbarMessage::ScenarioMenuOpened)
+                    .text_size(12),
+            );
             content = content.push(
                 pick_list(SIM_SPEEDS, Some(SimSpeed(self.simulator.speed)), ToolbarMessage::SimSpeedSelected)
                     .text_size(12),
@@ -208,6 +228,22 @@ pub fn draws_button<'a, M: Clone + 'a>(shown: bool, message: M) -> iced::widget:
     button(text("✎ DRAWS").size(12))
         .on_press(message)
         .style(if shown { button::success } else { button::secondary })
+}
+
+/// `− ● +` buttons removing or adding a robot of `team`, with a dot in the team color.
+fn robot_count_buttons<'a>(team: i32, color: Color) -> Element<'a, ToolbarMessage> {
+    row![
+        button(text("−").size(12))
+            .on_press(ToolbarMessage::RemoveRobot(team))
+            .style(button::secondary),
+        text("●").size(14).color(color),
+        button(text("+").size(12))
+            .on_press(ToolbarMessage::AddRobot(team))
+            .style(button::secondary),
+    ]
+    .spacing(2)
+    .align_y(iced::Alignment::Center)
+    .into()
 }
 
 fn toolbar_style(theme: &iced::Theme) -> container::Style {

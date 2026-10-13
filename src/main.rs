@@ -652,7 +652,9 @@ async fn run_engine(
 
             if r.has_simulator() {
                 r.step_simulator(&mut w, TICK.as_secs_f64());
-                let _ = vision_gui_tx.try_send(vision::gui_update(&w, SIM_FRAME_RATE));
+                let mut update = vision::gui_update(&w, SIM_FRAME_RATE);
+                update.sim_time = r.simulator_time();
+                let _ = vision_gui_tx.try_send(update);
             }
         }
 

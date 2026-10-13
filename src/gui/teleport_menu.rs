@@ -36,8 +36,8 @@ impl TeleportMenu {
         };
 
         let teleport_label = match selected {
-            Some((id, team)) => format!("Teleport {} {id} here", team_name(team)),
-            None => "Teleport robot here (click one first)".to_string(),
+            Some((id, team)) => format!("Move {} robot {id} here", team_name(team)),
+            None => "Move robot here (click one first)".to_string(),
         };
 
         let items = column![

@@ -8,7 +8,7 @@
 // that does not exist yet (like grSim turning a robot on).
 
 pub mod console;
-mod scenario;
+pub mod scenario;
 
 use crate::types::{RobotCommand, Vec2D};
 use crate::world::World;
