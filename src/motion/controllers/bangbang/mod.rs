@@ -135,7 +135,6 @@ impl Trajectory1D {
 pub struct Trajectory2D {
     traj_x: Trajectory1D,
     traj_y: Trajectory1D,
-    valid: bool,
 }
 
 impl Trajectory2D {
@@ -147,9 +146,13 @@ impl Trajectory2D {
         let mut max_alpha = std::f64::consts::FRAC_PI_2;
         let epsilon = 0.05;
 
+        // Bisect the angle that splits a_max and v_max between the axes until
+        // both axes take the same time. When it does not converge (one axis
+        // with almost no distance to cover, e.g. a target straight ahead, can
+        // jump between solutions), the closest split found is used: dropping
+        // it would command zero velocity on those ticks.
         let mut traj_x = Trajectory1D::default();
         let mut traj_y = Trajectory1D::default();
-        let mut valid = false;
 
         for _ in 0..20 {
             let mid_alpha = (min_alpha + max_alpha) / 2.0;
@@ -167,34 +170,25 @@ impl Trajectory2D {
                 wfy,
             );
 
-            if tx.tf() == 0.0 || ty.tf() == 0.0 {
-                traj_x = tx;
-                traj_y = ty;
-                valid = true;
+            let converged = tx.tf() == 0.0 || ty.tf() == 0.0 || (tx.tf() - ty.tf()).abs() < epsilon;
+            let x_slower = tx.tf() > ty.tf();
+            traj_x = tx;
+            traj_y = ty;
+            if converged {
                 break;
             }
 
-            if (tx.tf() - ty.tf()).abs() < epsilon {
-                traj_x = tx;
-                traj_y = ty;
-                valid = true;
-                break;
-            }
-
-            if tx.tf() > ty.tf() {
+            if x_slower {
                 max_alpha = mid_alpha;
             } else {
                 min_alpha = mid_alpha;
             }
         }
 
-        Self { traj_x, traj_y, valid }
+        Self { traj_x, traj_y }
     }
 
     pub fn get_next_velocity(&self) -> Vec2D {
-        if !self.valid {
-            return Vec2D::default();
-        }
         let (_, vx) = self.traj_x.get_solution();
         let (_, vy) = self.traj_y.get_solution();
         Vec2D::new(vx, vy)
@@ -279,6 +273,19 @@ mod tests {
     }
 
     #[test]
+    fn trajectory2d_target_straight_ahead_keeps_moving() {
+        // Target 2 mm aside and 0.43 m ahead, the robot drifting 1 cm/s sideways
+        // towards it: the axis split does not converge, which used to command zero.
+        let from = Vec2D::new(-1.268, 0.45);
+        let to = Vec2D::new(-1.270, 0.02);
+        for vx in [-0.01, 0.0, 0.01] {
+            let t = Trajectory2D::new(2.5, 5.0, Vec2D::new(vx, -0.3), from, to);
+            let vel = t.get_next_velocity();
+            assert!(vel.y < -0.5, "v0.x = {vx}: commanded {vel:?}");
+        }
+    }
+
+    #[test]
     fn trajectory2d_converges() {
         let t = Trajectory2D::new(
             2.5,
@@ -287,7 +294,6 @@ mod tests {
             Vec2D::new(0.0, 0.0),
             Vec2D::new(1.0, 1.0),
         );
-        assert!(t.valid);
         let vel = t.get_next_velocity();
         assert!(vel.x > 0.0);
         assert!(vel.y > 0.0);
