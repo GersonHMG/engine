@@ -3,6 +3,8 @@
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Canvas, Frame, Geometry, Path, Stroke, Text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
+
+use super::theme;
 use std::cell::Cell;
 
 pub use super::robot::RobotData;
@@ -294,15 +296,26 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         let mut frame = Frame::new(renderer, bounds.size());
 
         // Background
-        frame.fill_rectangle(
-            Point::ORIGIN,
-            bounds.size(),
-            Color::from_rgb(0.18, 0.18, 0.18),
-        );
+        frame.fill_rectangle(Point::ORIGIN, bounds.size(), theme::FIELD_BG);
 
         let cx = bounds.width / 2.0 + self.pan.x;
         let cy = bounds.height / 2.0 + self.pan.y;
         let s = self.scale;
+        let line = Stroke::default().with_color(theme::FIELD_LINE).with_width(1.25);
+
+        // Floor: the field plus its 0.3 m boundary
+        const BOUNDARY_MM: f32 = 300.0;
+        frame.fill_rectangle(
+            Point::new(
+                cx - (self.data.field_length_mm / 2.0 + BOUNDARY_MM) * s,
+                cy - (self.data.field_width_mm / 2.0 + BOUNDARY_MM) * s,
+            ),
+            Size::new(
+                (self.data.field_length_mm + 2.0 * BOUNDARY_MM) * s,
+                (self.data.field_width_mm + 2.0 * BOUNDARY_MM) * s,
+            ),
+            theme::FIELD_FLOOR,
+        );
 
         // Field outline
         let field_rect = Path::rectangle(
@@ -314,7 +327,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         );
         frame.stroke(
             &field_rect,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
 
         // Keeper areas (meters)
@@ -333,18 +346,18 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         let left_keeper = keeper_rect(-4.5, -3.5, -1.0, 1.0);
         frame.stroke(
             &right_keeper,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
         frame.stroke(
             &left_keeper,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
 
         // Center circle
         let center_circle = Path::circle(Point::new(cx, cy), 500.0 * s);
         frame.stroke(
             &center_circle,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
 
         // Center line
@@ -354,7 +367,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         );
         frame.stroke(
             &center_line,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
 
         // Center horizontal line
@@ -364,8 +377,21 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         );
         frame.stroke(
             &center_horizontal_line,
-            Stroke::default().with_color(Color::WHITE).with_width(1.0),
+            line,
         );
+
+        // Goals: 1 m wide, 0.18 m deep, in the color of the team defending them
+        // (blue on the left, yellow on the right)
+        let half_length = (self.data.field_length_mm / 2.0) as f64 / 1000.0;
+        for (side, color) in [(-1.0, theme::SSL_BLUE), (1.0, theme::SSL_YELLOW)] {
+            let goal = Path::new(|b| {
+                b.move_to(self.field_to_screen(bounds, side * half_length, -0.5));
+                b.line_to(self.field_to_screen(bounds, side * (half_length + 0.18), -0.5));
+                b.line_to(self.field_to_screen(bounds, side * (half_length + 0.18), 0.5));
+                b.line_to(self.field_to_screen(bounds, side * half_length, 0.5));
+            });
+            frame.stroke(&goal, Stroke::default().with_color(color).with_width(2.0));
+        }
 
         // Draw path waypoints
         if !self.data.path_points.is_empty() {
@@ -415,11 +441,13 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
                         b.line_to(*pt);
                     }
                 });
+                // In the color of the manually controlled robot's team
+                let team = self.data.highlight_robot.map_or(0, |(_, team)| team);
                 frame.stroke(
                     &path,
                     Stroke::default()
-                        .with_color(Color::from_rgb(0.0, 1.0, 1.0))
-                        .with_width(2.0),
+                        .with_color(Color { a: 0.45, ..theme::team_color(team) })
+                        .with_width(1.5),
                 );
             }
         }
@@ -441,12 +469,8 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
         // Draw ball
         {
             let pos = self.field_to_screen(bounds, self.data.ball.0, self.data.ball.1);
-            let ball_path = Path::circle(pos, 25.0 * s);
-            frame.fill(&ball_path, Color::from_rgb(1.0, 0.647, 0.0));
-            frame.stroke(
-                &ball_path,
-                Stroke::default().with_color(Color::BLACK).with_width(0.5),
-            );
+            let ball_path = Path::circle(pos, (25.0 * s).max(3.0));
+            frame.fill(&ball_path, theme::BALL);
         }
 
         // Draw Lua commands (unless hidden from the toolbar)
@@ -562,6 +586,7 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
                         position: pos,
                         color: text_color,
                         size: iced::Pixels((14.0 * (s / 0.08)).max(10.0)),
+                        font: theme::MONO,
                         align_x: iced::alignment::Horizontal::Center.into(),
                         align_y: iced::alignment::Vertical::Center.into(),
                         ..Text::default()
@@ -572,16 +597,13 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
 
         // Vision disconnected overlay
         if !self.data.vision_connected {
-            frame.fill_rectangle(
-                Point::ORIGIN,
-                bounds.size(),
-                Color::from_rgba(0.5, 0.5, 0.5, 0.5),
-            );
+            frame.fill_rectangle(Point::ORIGIN, bounds.size(), Color { a: 0.6, ..theme::BG });
             frame.fill_text(Text {
-                content: "No Vision Connected".to_string(),
+                content: "No vision connected".to_string(),
                 position: Point::new(bounds.width / 2.0, bounds.height / 2.0),
-                color: Color::WHITE,
-                size: iced::Pixels(30.0),
+                color: theme::TEXT_2,
+                size: iced::Pixels(20.0),
+                font: theme::SANS_BOLD,
                 align_x: iced::alignment::Horizontal::Center.into(),
                 align_y: iced::alignment::Vertical::Center.into(),
                 ..Text::default()

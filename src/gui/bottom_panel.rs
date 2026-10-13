@@ -1,9 +1,15 @@
-// gui/bottom_panel.rs — Toggle buttons + robot selector
+// gui/bottom_panel.rs — Robot selector + toggles, simulator summary and PPS meter
 
-use iced::widget::{button, checkbox, column, container, row, text, text_input, Space};
-use iced::{Element, Length};
+use iced::widget::canvas::{self, Canvas, Frame, Geometry, Path, Stroke};
+use iced::widget::{button, checkbox, container, row, text, tooltip, Space};
+use iced::{mouse, Alignment, Element, Length, Point, Rectangle, Renderer, Theme};
 
+use super::theme::{self, bar, btn, divider, group, tooltip_box, Btn};
 use crate::gui::panels::control::Team;
+
+const PPS_HISTORY: usize = 60;
+/// Highest robot id the selector offers.
+const MAX_ROBOT_ID: u32 = 12;
 
 #[derive(Debug, Clone)]
 pub enum BottomPanelMessage {
@@ -11,7 +17,6 @@ pub enum BottomPanelMessage {
     SetVectors(bool),
     SetManualControl(bool),
     TeamSelected(Team),
-    RobotIdChanged(String),
     IncrementRobotId,
     DecrementRobotId,
 }
@@ -22,6 +27,15 @@ pub struct BottomPanel {
     pub manual_control_on: bool,
     pub control_robot_id: String,
     pub control_team: Team,
+    pub pps: u32,
+    pub pps_history: Vec<u32>,
+}
+
+/// Simulator summary shown while the simulator is on: speed label and
+/// robots per team (blue, yellow).
+pub struct SimSummary {
+    pub speed: String,
+    pub robots: [usize; 2],
 }
 
 impl BottomPanel {
@@ -32,206 +46,167 @@ impl BottomPanel {
             manual_control_on: false,
             control_robot_id: "0".to_string(),
             control_team: Team::Blue,
+            pps: 0,
+            pps_history: vec![0; PPS_HISTORY],
         }
     }
 
-    pub fn view(&self) -> Element<BottomPanelMessage> {
-        // Team + ID selector — text_input with stacked ▲/▼ overlaid on the right, like <input type="number">
-        let id_val: i32 = self.control_robot_id.parse().unwrap_or(0);
-        let controls_enabled = self.manual_control_on;
-        let disabled_label_color = iced::Color::from_rgb(0.45, 0.45, 0.45);
+    pub fn push_pps(&mut self, pps: u32) {
+        self.pps = pps;
+        self.pps_history.remove(0);
+        self.pps_history.push(pps);
+    }
 
-        let spin_up = iced::widget::button(
-            text("▲").size(6).align_x(iced::alignment::Horizontal::Center),
-        )
-        .on_press_maybe(if controls_enabled && id_val < 12 {
-            Some(BottomPanelMessage::IncrementRobotId)
-        } else {
-            None
-        })
-        .style(|theme: &iced::Theme, status| {
-            let mut s = iced::widget::button::secondary(theme, status);
-            s.border.radius = 0.0.into();
-            s
-        })
-        .padding([0, 3])
-        .width(Length::Fixed(14.0))
-        .height(Length::Fixed(11.0));
+    pub fn view(&self, sim: Option<SimSummary>) -> Element<'_, BottomPanelMessage> {
+        let enabled = self.manual_control_on;
+        let id: u32 = self.control_robot_id.parse().unwrap_or(0);
 
-        let spin_down = iced::widget::button(
-            text("▼").size(6).align_x(iced::alignment::Horizontal::Center),
-        )
-        .on_press_maybe(if controls_enabled && id_val > 0 {
-            Some(BottomPanelMessage::DecrementRobotId)
-        } else {
-            None
-        })
-        .style(|theme: &iced::Theme, status| {
-            let mut s = iced::widget::button::secondary(theme, status);
-            s.border.radius = 0.0.into();
-            s
-        })
-        .padding([0, 3])
-        .width(Length::Fixed(14.0))
-        .height(Length::Fixed(11.0));
-
-        let spin_col = column![spin_up, spin_down].spacing(0);
-
-        // Overlay the spin column on the right side of the text_input
-        const INPUT_W: f32 = 54.0;
-        let id_input = if controls_enabled {
-            text_input("0", &self.control_robot_id)
-                .on_input(BottomPanelMessage::RobotIdChanged)
-                .size(10)
-                .width(Length::Fixed(INPUT_W))
-        } else {
-            text_input("0", &self.control_robot_id)
-                .size(10)
-                .width(Length::Fixed(INPUT_W))
-        };
-
-        let number_input = if controls_enabled {
-            iced::widget::stack![
-                id_input,
-                container(spin_col)
-                    .width(Length::Fixed(INPUT_W))
-                    .height(Length::Fill)
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .align_y(iced::alignment::Vertical::Center),
-            ]
-        } else {
-            let overlay = container(Space::new()).style(|theme: &iced::Theme| {
-                let palette = theme.extended_palette();
-                container::Style {
-                    background: Some(iced::Background::Color(iced::Color::from_rgba(
-                        0.0, 0.0, 0.0, 0.5,
-                    ))),
-                    border: iced::Border {
-                        color: palette.background.strong.color,
-                        width: 1.0,
-                        radius: 2.0.into(),
-                    },
-                    ..Default::default()
-                }
-            });
-
-            iced::widget::stack![
-                id_input,
-                container(spin_col)
-                    .width(Length::Fixed(INPUT_W))
-                    .height(Length::Fill)
-                    .align_x(iced::alignment::Horizontal::Right)
-                    .align_y(iced::alignment::Vertical::Center),
-                overlay
-                    .width(Length::Fixed(INPUT_W))
-                    .height(Length::Fill),
-            ]
-        };
-
-        let team_box = |team: Team, enabled: bool| {
+        // Team swatch: filled in the team color, ringed while selected.
+        let swatch = |team: Team| {
             let selected = self.control_team == team;
-            let disabled = !enabled;
-            let (r, g, b) = match team {
-                Team::Blue => (0.2, 0.55, 1.0),
-                Team::Yellow => (1.0, 0.85, 0.2),
-            };
-            let mut alpha = if selected { 1.0 } else { 0.35 };
-            if disabled {
-                alpha *= 0.25;
-            }
-            let bg = iced::Color::from_rgba(r, g, b, alpha);
-            let border_color = if selected && enabled {
-                iced::Color::WHITE
-            } else {
-                iced::Color::from_rgb(0.35, 0.35, 0.35)
-            };
-
-            button(
-                Space::new()
-                    .width(Length::Fixed(14.0))
-                    .height(Length::Fixed(14.0)),
-            )
-            .on_press_maybe(if enabled {
-                Some(BottomPanelMessage::TeamSelected(team))
-            } else {
-                None
-            })
-            .style(move |theme: &iced::Theme, status| {
-                let mut s = iced::widget::button::secondary(theme, status);
-                s.background = Some(iced::Background::Color(bg));
-                s.border.color = border_color;
-                s.border.width = if selected { 1.5 } else { 1.0 };
-                s.border.radius = 2.0.into();
-                s
-            })
-            .padding(0)
-            .width(Length::Fixed(18.0))
-            .height(Length::Fixed(18.0))
+            let color = theme::team_color(team.to_id());
+            button(Space::new().width(16).height(16))
+                .padding(0)
+                .style(move |th: &Theme, status| {
+                    let mut style = btn(Btn::Neutral)(th, status);
+                    let alpha = match (enabled, selected) {
+                        (true, true) => 1.0,
+                        (true, false) => 0.35,
+                        (false, true) => 0.4,
+                        (false, false) => 0.15,
+                    };
+                    style.background = Some(iced::Color { a: alpha, ..color }.into());
+                    style.border.color = if selected && enabled { theme::TEXT } else { theme::BTN_BORDER };
+                    style.border.width = if selected && enabled { 1.5 } else { 1.0 };
+                    style
+                })
+                .on_press_maybe(enabled.then_some(BottomPanelMessage::TeamSelected(team)))
         };
 
-        let team_label = if controls_enabled {
-            text("Team").size(10)
-        } else {
-            text("Team").size(10).color(disabled_label_color)
+        let step = |label: &'static str, message: Option<BottomPanelMessage>| {
+            button(text(label).size(13).center())
+                .width(22)
+                .height(24)
+                .padding(0)
+                .style(btn(Btn::Ghost))
+                .on_press_maybe(message)
         };
-
-        let id_label = if controls_enabled {
-            text("ID").size(10)
-        } else {
-            text("ID").size(10).color(disabled_label_color)
-        };
+        let id_color = if enabled { theme::TEXT } else { theme::MUTED };
+        let id_stepper = container(
+            row![
+                step("−", (enabled && id > 0).then_some(BottomPanelMessage::DecrementRobotId)),
+                text(id).size(12).font(theme::MONO_BOLD).color(id_color).width(24).center(),
+                step("+", (enabled && id < MAX_ROBOT_ID).then_some(BottomPanelMessage::IncrementRobotId)),
+            ]
+            .align_y(Alignment::Center),
+        )
+        .height(26)
+        .center_y(26)
+        .style(group);
 
         let selector = row![
-            team_label,
-            row![team_box(Team::Blue, controls_enabled), team_box(Team::Yellow, controls_enabled)]
-                .spacing(4)
-                .align_y(iced::Alignment::Center),
-            id_label,
-            number_input,
+            text("Robot").size(11).color(theme::MUTED),
+            swatch(Team::Blue),
+            swatch(Team::Yellow),
+            id_stepper,
         ]
-        .spacing(6)
-        .align_y(iced::Alignment::Center);
+        .spacing(8)
+        .align_y(Alignment::Center);
+        let selector: Element<'_, BottomPanelMessage> = if enabled {
+            selector.into()
+        } else {
+            tooltip(
+                selector,
+                container(text("Turn on Manual Control to pick a robot").size(12))
+                    .padding([4, 8])
+                    .style(tooltip_box),
+                tooltip::Position::Top,
+            )
+            .into()
+        };
 
-        let trace_check = checkbox(self.trace_on)
-            .label("Trace")
-            .on_toggle(BottomPanelMessage::SetTrace)
-            .size(14)
-            .text_size(10);
+        let check = |label: &'static str, on: bool, message: fn(bool) -> BottomPanelMessage| {
+            checkbox(on).label(label).on_toggle(message).style(theme::check).size(14).text_size(12)
+        };
 
-        let vectors_check = checkbox(self.vectors_on)
-            .label("Vectors")
-            .on_toggle(BottomPanelMessage::SetVectors)
-            .size(14)
-            .text_size(10);
+        let mut content = row![
+            selector,
+            divider(),
+            check("Manual Control", self.manual_control_on, BottomPanelMessage::SetManualControl),
+            check("Trace", self.trace_on, BottomPanelMessage::SetTrace),
+            check("Vectors", self.vectors_on, BottomPanelMessage::SetVectors),
+            Space::new().width(Length::Fill),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center);
 
-        let manual_check = checkbox(self.manual_control_on)
-            .label("Manual Control")
-            .on_toggle(BottomPanelMessage::SetManualControl)
-            .size(14)
-            .text_size(10);
+        if let Some(sim) = sim {
+            content = content
+                .push(
+                    text(format!("sim {} · {}B {}Y", sim.speed, sim.robots[0], sim.robots[1]))
+                        .size(11)
+                        .font(theme::MONO)
+                        .color(theme::MUTED),
+                )
+                .push(divider());
+        }
 
-        let content = row![selector, manual_check, trace_check, vectors_check,]
-            .spacing(16)
-            .padding(8)
-            .align_y(iced::Alignment::Center);
+        content = content
+            .push(Canvas::new(PpsSparkline { data: &self.pps_history }).width(60).height(16))
+            .push(
+                row![
+                    text(self.pps).size(12).font(theme::MONO_BOLD),
+                    text("PPS").size(11).color(theme::MUTED),
+                ]
+                .spacing(4)
+                .align_y(Alignment::Center),
+            );
 
         container(content)
             .width(Length::Fill)
-            .height(Length::Fixed(52.0))
-            .style(panel_style)
+            .height(34)
+            .padding([0, 10])
+            .center_y(34)
+            .style(bar(theme::BAR))
             .into()
     }
 }
 
-fn panel_style(theme: &iced::Theme) -> container::Style {
-    let palette = theme.extended_palette();
-    container::Style {
-        background: Some(iced::Background::Color(palette.background.weak.color)),
-        border: iced::Border {
-            color: palette.background.strong.color,
-            width: 1.0,
-            radius: 0.0.into(),
-        },
-        ..Default::default()
+/// Sparkline of the last PPS samples.
+struct PpsSparkline<'a> {
+    data: &'a [u32],
+}
+
+impl<'a, M> canvas::Program<M> for PpsSparkline<'a> {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &Self::State,
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut frame = Frame::new(renderer, bounds.size());
+        let (w, h) = (bounds.width, bounds.height);
+        let n = self.data.len();
+
+        if n >= 2 {
+            let max_pps = self.data.iter().copied().max().unwrap_or(1).max(1) as f32;
+            let path = Path::new(|b| {
+                for (i, v) in self.data.iter().enumerate() {
+                    let point = Point::new(i as f32 / (n - 1) as f32 * w, h - 1.0 - *v as f32 / max_pps * (h - 2.0));
+                    if i == 0 {
+                        b.move_to(point);
+                    } else {
+                        b.line_to(point);
+                    }
+                }
+            });
+            frame.stroke(&path, Stroke::default().with_color(theme::SELECT_RING).with_width(1.2));
+        }
+
+        vec![frame.into_geometry()]
     }
 }

@@ -10,11 +10,12 @@ pub mod recorder;
 pub mod replay;
 pub mod robot;
 pub mod teleport_menu;
+pub mod theme;
 pub mod types;
 
 pub use types::{EngineCommand, GuiChannels, LuaDrawCmd, LuaScriptStatusUpdate, Message, RobotUpdateData, SimulatorSettings, VisionUpdate};
 
-use iced::widget::{button, column, container, pick_list, row, scrollable, slider, text, text_input};
+use iced::widget::{column, container, pick_list, row, scrollable, slider, text, text_input};
 use iced::widget::operation::snap_to_end;
 use iced::{Element, Length, Subscription, Theme};
 use iced::event::{self, Event};
@@ -34,6 +35,7 @@ use recorder::Recorder;
 use replay::ReplayState;
 use sidebar::{Sidebar, SidebarMessage, SidebarPanel};
 use teleport_menu::{TeleportMenu, TeleportMenuMessage};
+use theme::Btn;
 use toolbar::{Toolbar, ToolbarMessage};
 use bottom_panel::{BottomPanel, BottomPanelMessage};
 use lua_console::LuaConsolePanel;
@@ -190,7 +192,7 @@ impl EngineApp {
     }
 
     pub fn theme(&self, _window_id: window::Id) -> Theme {
-        Theme::Dark
+        theme::app_theme()
     }
 
     fn open_panel_window(&mut self, panel: SidebarPanel) -> iced::Task<Message> {
@@ -422,6 +424,9 @@ impl EngineApp {
             Message::ConsoleInputChanged(input) => {
                 self.lua_console_panel.set_input(input);
             }
+            Message::ConsoleClear => {
+                self.lua_console_panel.clear();
+            }
             Message::ConsoleSubmit => {
                 if let Some(line) = self.lua_console_panel.take_input() {
                     let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(line));
@@ -553,21 +558,6 @@ impl EngineApp {
                     self.field_data.highlight_robot = Some((id, team.to_id()));
                 }
             }
-            Message::BottomPanel(BottomPanelMessage::RobotIdChanged(id)) => {
-                // Accept only digits, clamp to 0-12
-                let filtered: String = id.chars().filter(|c| c.is_ascii_digit()).collect();
-                let clamped = filtered.parse::<i32>().unwrap_or(0).clamp(0, 12).to_string();
-                // Keep raw input while typing so user can clear and retype; only clamp when valid
-                let new_id = if filtered.is_empty() { filtered.clone() } else { clamped };
-                self.bottom_panel.control_robot_id = new_id.clone();
-                self.control_panel.robot_id = new_id.clone();
-                if self.bottom_panel.manual_control_on {
-                    let robot_id = new_id.parse::<u32>().unwrap_or(0);
-                    let team = self.bottom_panel.control_team.to_id();
-                    self.field_data.highlight_robot = Some((robot_id, team));
-                }
-            }
-
             // --- Vision Panel ---
             Message::Vision(VisionMessage::IpChanged(ip)) => {
                 self.vision_panel.ip = ip;
@@ -674,7 +664,7 @@ impl EngineApp {
                 if self.replay.enabled {
                     self.vision_panel.connected = true;
                     self.vision_panel.pps = 0;
-                    self.toolbar.pps = 0;
+                    self.bottom_panel.pps = 0;
                     if let Some(draws) = self.drain_lua_draws() {
                         self.live_draws = draws;
                     }
@@ -688,7 +678,7 @@ impl EngineApp {
                 if !self.field_data.vision_connected {
                     self.vision_panel.connected = false;
                     self.vision_panel.pps = 0;
-                    self.toolbar.pps = 0;
+                    self.bottom_panel.pps = 0;
                 }
 
                 self.poll_keyboard_control();
@@ -701,7 +691,7 @@ impl EngineApp {
                 }
                 
                 if spark_push && !self.field_data.vision_connected {
-                    self.toolbar.push_pps(0);
+                    self.bottom_panel.push_pps(0);
                 }
 
                 // Drain vision channel
@@ -710,10 +700,10 @@ impl EngineApp {
                         self.last_vision_time = std::time::Instant::now();
                         self.vision_panel.connected = true;
                         self.vision_panel.pps = update.pps;
-                        self.toolbar.pps = update.pps;
+                        self.bottom_panel.pps = update.pps;
                         self.sim_time = update.sim_time;
                         if spark_push {
-                            self.toolbar.push_pps(update.pps);
+                            self.bottom_panel.push_pps(update.pps);
                             spark_push = false; // Prevents pushing multiple times per batch if loop repeats
                         }
 
@@ -935,10 +925,13 @@ impl EngineApp {
     }
 
     fn view_main(&self) -> Element<'_, Message> {
+        let robot_counts = [self.field_data.robots_blue.len(), self.field_data.robots_yellow.len()];
+
         // Sidebar
+        let open_panels: Vec<SidebarPanel> = self.panel_windows.keys().copied().collect();
         let sidebar = self
             .sidebar
-            .view(self.replay.enabled, self.lua_console_panel.open)
+            .view(&open_panels, self.replay.enabled, self.lua_console_panel.open)
             .map(Message::Sidebar);
 
         // Toolbar
@@ -953,18 +946,16 @@ impl EngineApp {
                     .unwrap_or_else(|| "No CSV selected".to_string())
             };
 
-            let open_btn = button(text("Open CSV").size(12))
-                .on_press(Message::ReplayFilePick)
-                .style(button::secondary);
+            let replay_pill = container(text("REPLAY").size(11).font(theme::MONO_BOLD).color(theme::ON_RED))
+                .padding([2, 8])
+                .style(theme::pill(theme::RED));
 
-            let last_recording_btn = if self.recorder.has_recording() {
-                button(text("⟲ Last recording").size(12))
-                    .on_press(Message::Toolbar(ToolbarMessage::PlayRecording))
-                    .style(button::secondary)
-            } else {
-                button(text("⟲ Last recording").size(12)).style(button::secondary)
-            };
-
+            let open_btn = toolbar::label_button("Open CSV".to_string(), Btn::Neutral, Some(Message::ReplayFilePick));
+            let last_recording_btn = toolbar::label_button(
+                "Last recording".to_string(),
+                Btn::Neutral,
+                self.recorder.has_recording().then_some(Message::Toolbar(ToolbarMessage::PlayRecording)),
+            );
             let draws_btn = toolbar::draws_button(self.toolbar.show_draws, Message::Toolbar(ToolbarMessage::ToggleDraws));
 
             let speed_list = pick_list(
@@ -972,45 +963,40 @@ impl EngineApp {
                 Some(replay::ReplaySpeed(self.replay.speed)),
                 Message::ReplaySpeedSelected,
             )
+            .width(64)
+            .font(theme::MONO)
             .text_size(12);
 
-            let exit_btn = button(text("Exit replay").size(12))
-                .on_press(Message::Sidebar(SidebarMessage::ToggleReplayMode))
-                .style(button::secondary);
+            let exit_btn = toolbar::label_button(
+                "Exit replay".to_string(),
+                Btn::Neutral,
+                Some(Message::Sidebar(SidebarMessage::ToggleReplayMode)),
+            );
 
             container(
                 row![
-                    text("Replay Mode").size(12).color(iced::Color::from_rgb(0.8, 0.8, 0.8)),
+                    replay_pill,
+                    text(replay_file_name).size(12).font(theme::MONO).color(theme::TEXT_2),
+                    theme::divider(),
                     open_btn,
                     last_recording_btn,
                     draws_btn,
-                    text("Speed").size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
+                    text("Speed").size(11).color(theme::MUTED),
                     speed_list,
-                    text(replay_file_name).size(12).color(iced::Color::from_rgb(0.6, 0.6, 0.6)),
                     iced::widget::Space::new().width(Length::Fill),
                     exit_btn,
                 ]
-                .spacing(8)
-                .padding(4)
+                .spacing(6)
                 .align_y(iced::Alignment::Center),
             )
             .width(Length::Fill)
-            .height(Length::Fixed(36.0))
-            .style(|theme: &iced::Theme| {
-                let palette = theme.extended_palette();
-                container::Style {
-                    background: Some(iced::Background::Color(palette.background.weak.color)),
-                    border: iced::Border {
-                        color: palette.background.strong.color,
-                        width: 1.0,
-                        radius: 0.0.into(),
-                    },
-                    ..Default::default()
-                }
-            })
+            .height(36)
+            .padding([0, 8])
+            .center_y(36)
+            .style(theme::bar(theme::REPLAY_BAR))
             .into()
         } else {
-            self.toolbar.view().map(Message::Toolbar)
+            self.toolbar.view(robot_counts).map(Message::Toolbar)
         };
 
         // Field canvas
@@ -1018,69 +1004,55 @@ impl EngineApp {
             .field_canvas
             .view(&self.field_data, Message::Field);
 
-        // Mouse coords overlay
-        let mouse_pos_text = if let Some((x, y)) = self.field_canvas.mouse_field_pos() {
-            format!("{:.2}, {:.2}", x, y)
-        } else {
-            "0.00, 0.00".to_string()
-        };
-
-        let mouse_overlay = container(
-            container(
-                text(mouse_pos_text).size(12).color(iced::Color::WHITE),
+        // Mouse coords overlay, while the cursor is over the field
+        let mouse_overlay: Element<'_, Message> = match self.field_canvas.mouse_field_pos() {
+            Some((x, y)) => container(
+                container(text(format!("{x:.2}, {y:.2} m")).size(11).font(theme::MONO))
+                    .padding([3, 7])
+                    .style(theme::overlay_box),
             )
-            .padding(4)
-            .style(|_theme: &iced::Theme| container::Style {
-                background: Some(iced::Background::Color(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.5))),
-                border: iced::Border { radius: 4.0.into(), ..Default::default() },
-                ..Default::default()
-            })
-        )
-        .padding(8);
+            .padding(8)
+            .into(),
+            None => iced::widget::Space::new().into(),
+        };
 
         let field_stack: Element<'_, Message> = if self.replay.enabled {
             let can_control_replay = self.replay.has_frames();
 
-            let play_pause_btn = if !can_control_replay {
-                button(text("▶ Play").size(12)).style(button::secondary)
-            } else if self.replay.is_playing {
-                button(text("⏸ Pause").size(12))
-                    .on_press(Message::ReplayTogglePlay)
-                    .style(button::danger)
+            let play_pause_btn = if self.replay.is_playing {
+                toolbar::label_button("❚❚ Pause".to_string(), Btn::Neutral, Some(Message::ReplayTogglePlay))
             } else {
-                button(text("▶ Play").size(12))
-                    .on_press(Message::ReplayTogglePlay)
-                    .style(button::success)
+                toolbar::label_button(
+                    "▶ Play".to_string(),
+                    Btn::Play,
+                    can_control_replay.then_some(Message::ReplayTogglePlay),
+                )
             };
 
             let scenario_input = text_input(&self.replay.default_scenario_name(), &self.replay_scenario_name)
                 .on_input(Message::ReplayScenarioNameChanged)
                 .on_submit(Message::ReplaySaveScenario)
                 .size(12)
+                .padding([4, 8])
+                .style(theme::input)
                 .width(Length::Fixed(180.0));
 
-            let save_btn = button(text("💾 Save state").size(12))
-                .on_press_maybe(can_control_replay.then_some(Message::ReplaySaveScenario))
-                .style(button::primary);
-
-            let status_text = if self.replay.frames.is_empty() {
-                "Replay: no frames"
-            } else if self.replay.is_playing {
-                "Replay: playing"
-            } else {
-                "Replay: paused"
-            };
+            let save_btn = toolbar::label_button(
+                "Save state".to_string(),
+                Btn::Neutral,
+                can_control_replay.then_some(Message::ReplaySaveScenario),
+            );
 
             let frame_text = if self.replay.frames.is_empty() {
-                "Frame 0/0".to_string()
+                "frame 0/0".to_string()
             } else {
-                format!("Frame {}/{}", self.replay.frame_index + 1, self.replay.frames.len())
+                format!("frame {}/{}", self.replay.frame_index + 1, self.replay.frames.len())
             };
 
             let time_text = if self.replay.frames.is_empty() {
-                "0.00s".to_string()
+                "0.00 s".to_string()
             } else {
-                format!("{:.2}s", self.replay.current_frame_elapsed_ms() as f64 / 1000.0)
+                format!("{:.2} s", self.replay.current_frame_elapsed_ms() as f64 / 1000.0)
             };
 
             let timeline: Element<'_, Message> = if can_control_replay {
@@ -1093,7 +1065,7 @@ impl EngineApp {
                 .width(Length::Fill)
                 .into()
             } else {
-                container(text("Load a CSV replay to enable timeline").size(11).color(iced::Color::from_rgb(0.8, 0.8, 0.8)))
+                container(text("Load a CSV replay to enable the timeline").size(11).color(theme::MUTED))
                     .width(Length::Fill)
                     .into()
             };
@@ -1102,9 +1074,8 @@ impl EngineApp {
                 container(column![
                     row![
                         play_pause_btn,
-                        text(status_text).size(12).color(iced::Color::WHITE),
-                        text(frame_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
-                        text(time_text).size(12).color(iced::Color::from_rgb(0.7, 0.9, 1.0)),
+                        text(time_text).size(12).font(theme::MONO_BOLD),
+                        text(frame_text).size(11).font(theme::MONO).color(theme::MUTED),
                         iced::widget::Space::new().width(Length::Fill),
                         scenario_input,
                         save_btn,
@@ -1114,24 +1085,23 @@ impl EngineApp {
                     timeline,
                 ]
                 .extend(self.replay_scenario_status.as_ref().map(|status| match status {
-                    Ok(msg) => text(msg.as_str()).size(11).color(iced::Color::from_rgb(0.5, 0.9, 0.5)).into(),
-                    Err(msg) => text(msg.as_str()).size(11).color(iced::Color::from_rgb(1.0, 0.45, 0.4)).into(),
+                    Ok(msg) => text(msg.as_str()).size(11).color(theme::GREEN).into(),
+                    Err(msg) => text(msg.as_str()).size(11).color(theme::RED_FG).into(),
                 }))
                 .spacing(6))
-                .padding([6, 10])
-                .style(|_theme: &iced::Theme| container::Style {
-                    background: Some(iced::Background::Color(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.55))),
-                    border: iced::Border { radius: 6.0.into(), ..Default::default() },
-                    ..Default::default()
-                }),
+                .padding([8, 10])
+                .style(theme::overlay_box),
             )
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(iced::alignment::Horizontal::Center)
             .align_y(iced::alignment::Vertical::Bottom)
-            .padding(8);
+            .padding(10);
 
-            iced::widget::stack![canvas, mouse_overlay, replay_controls].into()
+            let frame = container(iced::widget::Space::new().width(Length::Fill).height(Length::Fill))
+                .style(theme::replay_frame);
+
+            iced::widget::stack![canvas, frame, mouse_overlay, replay_controls].into()
         } else if let Some(menu) = &self.teleport_menu {
             let menu = menu
                 .view(
@@ -1146,7 +1116,7 @@ impl EngineApp {
 
         let mut canvas_area = column![toolbar, field_stack];
         if self.lua_console_panel.open {
-            canvas_area = canvas_area.push(self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit));
+            canvas_area = canvas_area.push(self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit, Message::ConsoleClear));
         }
 
         // Main content area = sidebar + canvas
@@ -1165,7 +1135,11 @@ impl EngineApp {
                     .height(Length::Fill),
             ]
         } else {
-            let bottom = self.bottom_panel.view().map(Message::BottomPanel);
+            let sim = self.toolbar.simulator.enabled.then(|| bottom_panel::SimSummary {
+                speed: toolbar::SimSpeed(self.toolbar.simulator.speed).to_string(),
+                robots: robot_counts,
+            });
+            let bottom = self.bottom_panel.view(sim).map(Message::BottomPanel);
             column![
                 container(main_row.width(Length::Fill).height(Length::Fill))
                     .width(Length::Fill)
@@ -1188,7 +1162,7 @@ impl EngineApp {
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
-            SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit),
+            SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit, Message::ConsoleClear),
         };
 
         container(scrollable(content))
