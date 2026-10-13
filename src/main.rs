@@ -120,10 +120,10 @@ fn mcp_snapshot(
     mcp::Snapshot::new(&world, simulator, sim_time, script, script_path)
 }
 
-/// Real time to spend per tick, or `None` to run flat out. Only the
+/// Real time to spend per tick, or `None` to run flat out. Only a running
 /// simulator can run faster than real time.
-fn frame_duration(simulator: SimulatorSettings) -> Option<Duration> {
-    if !simulator.enabled {
+fn frame_duration(simulator: SimulatorSettings, sim_paused: bool) -> Option<Duration> {
+    if !simulator.enabled || sim_paused {
         Some(TICK)
     } else if simulator.speed > 0.0 {
         Some(TICK.div_f64(simulator.speed))
@@ -608,6 +608,11 @@ async fn run_engine(
             let _ = lua_draw_gui_tx.try_send(to_gui_draws(&draw_cmds));
         }
 
+        // The simulation stands still while the script is paused, so the
+        // situation can be inspected (and robots or the ball moved) and the
+        // script resumed from exactly there.
+        let sim_paused = script_state == ScriptExecState::Paused;
+
         // Prepare radio frame
         {
             let mut r = radio.lock().unwrap();
@@ -656,7 +661,11 @@ async fn run_engine(
             r.send_commands(&mut w);
 
             if r.has_simulator() {
-                r.step_simulator(&mut w, TICK.as_secs_f64());
+                if sim_paused {
+                    r.sync_simulator(&mut w);
+                } else {
+                    r.step_simulator(&mut w, TICK.as_secs_f64());
+                }
                 let mut update = vision::gui_update(&w, SIM_FRAME_RATE);
                 update.sim_time = r.simulator_time();
                 let _ = vision_gui_tx.try_send(update);
@@ -664,7 +673,7 @@ async fn run_engine(
         }
 
         // Sleep for remaining frame time, or just yield when running flat out
-        match frame_duration(simulator) {
+        match frame_duration(simulator, sim_paused) {
             Some(frame_duration) => {
                 let elapsed = frame_start.elapsed();
                 if elapsed < frame_duration {

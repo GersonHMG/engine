@@ -90,6 +90,14 @@ impl Radio {
         }
     }
 
+    /// Writes the in-process simulator's state into the world without
+    /// advancing it (simulation paused). Does nothing without a simulator.
+    pub fn sync_simulator(&self, world: &mut crate::world::World) {
+        if let Some(simulator) = self.simulator.as_ref() {
+            simulator.write_world(world);
+        }
+    }
+
     pub fn reconfigure(&mut self, use_radio: bool, port_name: &str, baud_rate: u32) {
         self.use_radio = use_radio;
         self.port_name = port_name.to_string();
