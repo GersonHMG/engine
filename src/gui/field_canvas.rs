@@ -380,17 +380,16 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
             line,
         );
 
-        // Goals: 1 m wide, 0.18 m deep, in the color of the team defending them
-        // (blue on the left, yellow on the right)
+        // Goals: 1 m wide, 0.18 m deep. Neutral: either team can defend either side.
         let half_length = (self.data.field_length_mm / 2.0) as f64 / 1000.0;
-        for (side, color) in [(-1.0, theme::SSL_BLUE), (1.0, theme::SSL_YELLOW)] {
+        for side in [-1.0, 1.0] {
             let goal = Path::new(|b| {
                 b.move_to(self.field_to_screen(bounds, side * half_length, -0.5));
                 b.line_to(self.field_to_screen(bounds, side * (half_length + 0.18), -0.5));
                 b.line_to(self.field_to_screen(bounds, side * (half_length + 0.18), 0.5));
                 b.line_to(self.field_to_screen(bounds, side * half_length, 0.5));
             });
-            frame.stroke(&goal, Stroke::default().with_color(color).with_width(2.0));
+            frame.stroke(&goal, Stroke::default().with_color(theme::GOAL).with_width(2.0));
         }
 
         // Draw path waypoints

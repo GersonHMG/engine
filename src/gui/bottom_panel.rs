@@ -15,6 +15,8 @@ const MAX_ROBOT_ID: u32 = 12;
 pub enum BottomPanelMessage {
     SetTrace(bool),
     SetVectors(bool),
+    /// Shows or hides the Lua drawings on the field.
+    SetDraws(bool),
     SetManualControl(bool),
     TeamSelected(Team),
     IncrementRobotId,
@@ -57,7 +59,8 @@ impl BottomPanel {
         self.pps_history.push(pps);
     }
 
-    pub fn view(&self, sim: Option<SimSummary>) -> Element<'_, BottomPanelMessage> {
+    /// `show_draws`: whether the Lua drawings are shown.
+    pub fn view(&self, show_draws: bool, sim: Option<SimSummary>) -> Element<'_, BottomPanelMessage> {
         let enabled = self.manual_control_on;
         let id: u32 = self.control_robot_id.parse().unwrap_or(0);
 
@@ -135,6 +138,7 @@ impl BottomPanel {
             check("Manual Control", self.manual_control_on, BottomPanelMessage::SetManualControl),
             check("Trace", self.trace_on, BottomPanelMessage::SetTrace),
             check("Vectors", self.vectors_on, BottomPanelMessage::SetVectors),
+            check("Lua draws", show_draws, BottomPanelMessage::SetDraws),
             Space::new().width(Length::Fill),
         ]
         .spacing(10)

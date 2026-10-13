@@ -142,7 +142,6 @@ impl Toolbar {
             Btn::Neutral,
             (self.has_recording && self.recording_s.is_none()).then_some(ToolbarMessage::PlayRecording),
         );
-        let draws_btn = draws_button(self.show_draws, ToolbarMessage::ToggleDraws);
 
         let mut content = row![
             load_btn,
@@ -165,7 +164,6 @@ impl Toolbar {
             .push(divider())
             .push(rec_btn)
             .push(replay_btn)
-            .push(draws_btn)
             .push(Space::new().width(Length::Fill))
             .push(label_button(
                 "SIM".to_string(),

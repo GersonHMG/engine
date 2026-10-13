@@ -62,6 +62,7 @@ pub const SELECT_RING: Color = color!(0x3ddc84);
 pub const HEADING_TICK: Color = color!(0xff3b3b);
 pub const VECTOR: Color = color!(0xf472b6);
 pub const FIELD_LINE: Color = color!(0xe8eaed);
+pub const GOAL: Color = color!(0x9aa0a8);
 
 /// Color of a team's robots (0 = blue, 1 = yellow).
 pub fn team_color(team: i32) -> Color {
@@ -92,7 +93,6 @@ pub fn app_theme() -> Theme {
 #[derive(Debug, Clone, Copy)]
 pub enum Icon {
     Chart,
-    Eye,
     Filter,
     Folder,
     Gamepad,
@@ -111,7 +111,6 @@ pub fn icon<'a>(icon: Icon, size: f32, tint: Option<Color>) -> svg::Svg<'a> {
     static HANDLES: LazyLock<Vec<svg::Handle>> = LazyLock::new(|| {
         [
             include_bytes!("../../icons/ui/chart.svg").as_slice(),
-            include_bytes!("../../icons/ui/eye.svg"),
             include_bytes!("../../icons/ui/filter.svg"),
             include_bytes!("../../icons/ui/folder.svg"),
             include_bytes!("../../icons/ui/gamepad.svg"),
