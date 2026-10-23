@@ -96,7 +96,15 @@ return to the center when within 0.5 m of a wall):
 | `prbs.lua` | random piecewise-constant commands on all axes at once, held 0.1–1 s: coupling, broad coverage |
 | `spin_translate.lua` | constant ω with constant vx/vy: rotation–translation coupling |
 | `creep.lua` | slow commands (< 0.3 m/s, < 1 rad/s): dead-zone |
+| `creep_long.lua` | slow single-axis holds of 1.5–4 s: steady-state friction at low speed |
+| `sprint.lua` | line up at one end, run the full field at 1.5–3 m/s in a random body direction, brake: sustained high speed |
 | existing skills | `move_to`, plays: the command distribution the model will meet |
+
+`creep_long` and `sprint` were added after the first synthetic experiment
+(`twin/`): with the other scripts, the geofence cut every fast run short and
+slow steady driving was only ~2 s per robot, and the model was weakest
+exactly there. Check coverage (time spent per speed/acceleration region)
+after every recording day.
 
 Repeat each excitation script several times: repeated runs of the same
 command sequence let the noise average out and show how much of the
@@ -184,7 +192,7 @@ inputs at tick k:
   robot embedding e_id (8-d, learned)             per physical robot
 
 prior   = fitted first-order model with delay       (baseline 2)
-GRU(64, 2 layers) over [s, u, e_id] → MLP head
+GRU(96, 2 layers) over [s, u_{k-H..k}, e_id] → MLP head
 output  = Δ(v_t, v_n, ω) relative to the prior      deterministic
 next velocity = prior + Δ
 pose update   = integrate body velocity over the tick
@@ -196,7 +204,7 @@ pose update   = integrate body velocity over the tick
 - **Residual on a physics prior**: plausible behaviour outside the data,
   faster training, less data needed.
 - **GRU with command history**: captures latency and motor lag.
-- **Small** (≤ 50k parameters): with noisy targets, a large model overfits
+- **Small** (~100k parameters): with noisy targets, a large model overfits
   the noise first.
 
 Alternatives in the same pipeline: MLP over a flattened window (simplest);
@@ -204,14 +212,18 @@ a small TCN if the GRU trains slowly.
 
 ### 4.3 Training (noise-aware)
 
-- Python + PyTorch in a new `twin/` directory (`data.py`, `smoother.py`,
-  `models.py`, `train.py`, `eval.py`, `simulate.py`, `pyproject.toml`).
+- Python + PyTorch in `twin/` (implemented: see `twin/README.md`).
+- **The model runs in a loop on its own predictions** (as a simulator, and
+  inside the engine's control loop), so it is trained that way: every
+  training sample warms the GRU up on measured history, then free-runs it on
+  its own outputs.
 - **Multi-step rollout loss on raw measurements**: unroll the model on its
   own predictions for *N* ticks from a smoothed initial state, integrate the
   pose, and compare to the raw (cleaned) vision poses along the way. Vision
   noise is zero-mean and independent between frames, so it averages out
   over the horizon instead of being fitted; it is also what makes the model
-  stable in long simulations. Curriculum *N* = 1 → 10 → 30 → 60 (1 s).
+  stable in long simulations. Curriculum *N* = 10 → 30 → 60 → 120 (2 s);
+  stopping at 1 s left visible errors in 2-s maneuvers and closed-loop runs.
 - Add a one-step velocity term against the smoothed velocities, weighted by
   the smoother's inverse variance, so confident samples count more.
 - **Huber loss** on both terms, so remaining outliers do not dominate.
@@ -219,9 +231,11 @@ a small TCN if the GRU trains slowly.
   during training, so the model does not rely on exact state values and
   stays stable on its own predictions.
 - Regularization: weight decay, dropout in the head, early stopping on
-  validation rollout error at 1 s.
-- Augmentation: mirror y (flip `vy`, `ω`, `v_n`) to double the data and
-  remove left/right bias.
+  validation rollout error at 2 s.
+- Delay: chosen per robot by fitting the prior with each candidate delay and
+  keeping the best on validation (cross-correlation alone overestimated it).
+- **No mirror augmentation**: flipping y assumes a left/right symmetric robot,
+  which is exactly what a faulty robot (bad wheel) is not.
 - Validate the whole pipeline first on the noisy `ssl-sim` dataset: the
   trained model must recover the simulator's true (noise-free) response.
 
@@ -259,6 +273,8 @@ through the model open-loop and comparing to what the real robot did:
 | open-loop heading error at 1 s | rotation |
 | latency, rise time, overshoot, settling on step tests | match to the hardware response |
 | error per command region (speed, accel, low-speed) | where the model is weak |
+| **free run of whole sessions** (minutes) on its own predictions | stability in the loop: velocity error must not grow |
+| **closed loop**: a controller drives the twin from the twin's own pose vs. the same controller on the robot | the real use; settle time and path separation |
 
 Noise-aware reading of the results:
 

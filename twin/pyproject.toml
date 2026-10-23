@@ -1,0 +1,13 @@
+[project]
+name = "twin"
+version = "0.1.0"
+description = "Deep-learning digital twin of the robot's dynamics (see docs/digital-twin-plan.md)"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.26", "torch>=2.2"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["twin"]
