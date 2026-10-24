@@ -207,6 +207,7 @@ def main():
     parser.add_argument("--checkpoint", type=Path, default=Path("checkpoints/adaptive.pt"))
     parser.add_argument("--out", type=Path, default=Path("reports"))
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--name", default="evaluation_adaptive", help="report file name (without extension)")
     args = parser.parse_args()
     device = torch.device(args.device)
 
@@ -268,7 +269,10 @@ def main():
             r["second_half_calibration"] = float(np.median(np.concatenate(fixed)[:, 59]))
         params = json.loads((args.data / "test" / name / "calibration.json").read_text())["params"]
         params["wheel"] = tuple(params["wheel"])
+        # From rest, with the estimated z and with the true-hardware z: separates
+        # dynamics error from identification error.
         r["maneuvers"], r["closed_loop"] = maneuvers_and_loop(model, mu30, params, device)
+        r["maneuvers_oracle"], r["closed_loop_oracle"] = maneuvers_and_loop(model, z_oracle, params, device)
         report["robots"][name] = r
         ctx_cells = " | ".join(f"{r['pos_1s_by_context'][c] * 100:.1f}" for c in CONTEXTS_S)
         lines.append(f"| {name} | {ctx_cells} | {r['pos_1s_tta'] * 100:.1f} | {r['pos_1s_oracle'] * 100:.1f} | {r['pos_1s_fitted_physics'] * 100:.1f} | "
@@ -280,13 +284,20 @@ def main():
     if d:
         lines += [f"Degrading wheel, second half of the test sessions: rolling 30 s context {d['second_half_rolling'] * 100:.1f} cm "
                   f"vs. healthy calibration {d['second_half_calibration'] * 100:.1f} cm.", ""]
-    lines += ["| robot | z std (30 s ctx) | worst maneuver (2 s) | closed loop worst separation | closed loop worst settle diff |", "|---|---|---|---|---|"]
+    lines += ["From rest: 10 maneuvers (end error after 2 s) and 6 closed-loop legs (max path separation), "
+              "median / worst, in cm. 'estimated' = z from 30 s of calibration, 'true' = z from the true hardware.", "",
+              "| robot | maneuvers, estimated z | maneuvers, true z | closed loop, estimated z | closed loop, true z | worst maneuver (estimated z) |",
+              "|---|---|---|---|---|---|"]
+
+    def med_worst(rows, key):
+        v = np.array([m[key] for m in rows]) * 100
+        return f"{np.median(v):.1f} / {v.max():.1f}"
+
     for name, r in report["robots"].items():
         wm = max(r["maneuvers"], key=lambda m: m["end error m"])
-        wl = max(r["closed_loop"], key=lambda m: m["separation m"])
-        ws = max(m["settle diff s"] for m in r["closed_loop"])
-        lines.append(f"| {name} | {r['z_std_30']:.3f} | {wm['maneuver']}: {wm['end error m'] * 100:.1f} cm, {wm['heading error deg']:.1f}° | "
-                     f"{wl['leg']}: {wl['separation m'] * 100:.1f} cm | {ws:.2f} s |")
+        lines.append(f"| {name} | {med_worst(r['maneuvers'], 'end error m')} | {med_worst(r['maneuvers_oracle'], 'end error m')} | "
+                     f"{med_worst(r['closed_loop'], 'separation m')} | {med_worst(r['closed_loop_oracle'], 'separation m')} | "
+                     f"{wm['maneuver']}: {wm['end error m'] * 100:.1f} cm, {wm['heading error deg']:.1f}° |")
 
     checks = {}
     rb = report["robots"]
@@ -301,8 +312,8 @@ def main():
     report["checks"] = checks
     lines += ["", "| check | result |", "|---|---|"] + [f"| {k} | {'pass' if v else 'FAIL'} |" for k, v in checks.items()]
     args.out.mkdir(parents=True, exist_ok=True)
-    (args.out / "evaluation_adaptive.md").write_text("\n".join(lines) + "\n")
-    (args.out / "evaluation_adaptive.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
+    (args.out / f"{args.name}.md").write_text("\n".join(lines) + "\n")
+    (args.out / f"{args.name}.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
     print("\n".join(lines[-(len(checks) + 2):]))
 
 

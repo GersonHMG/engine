@@ -7,894 +7,1650 @@
  "robots": {
   "bad_wheel": {
    "pos_1s_by_context": {
-    "0": 0.11132745444774628,
-    "1": 0.08781681954860687,
-    "5": 0.08799430727958679,
-    "30": 0.03903024271130562,
-    "120": 0.03515440970659256
+    "0": 0.11942949146032333,
+    "1": 0.08688812702894211,
+    "5": 0.08456232398748398,
+    "30": 0.03941525146365166,
+    "120": 0.03916186839342117
    },
-   "pos_2s_30": 0.08715809136629105,
-   "heading_1s_30": 3.223712682723999,
-   "z_std_30": 0.44491273164749146,
-   "pos_1s_oracle": 0.025075068697333336,
-   "pos_1s_tta": 0.018208380788564682,
+   "pos_2s_30": 0.08928953111171722,
+   "heading_1s_30": 2.3896849155426025,
+   "z_std_30": 0.4958456754684448,
+   "pos_1s_oracle": 0.02532428689301014,
+   "pos_1s_tta": 0.019723260775208473,
    "pos_1s_fitted_physics": 0.13946709036827087,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.10077185616063425,
-     "heading error deg": 0.712481507728077
+     "end error m": 0.1078259878204239,
+     "heading error deg": 0.7220392183840583
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.2599356735816659,
-     "heading error deg": 0.773330613336615
+     "end error m": 0.1438491880278252,
+     "heading error deg": 3.3497240138642264
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.33099102753730025,
-     "heading error deg": 6.128489185934863
+     "end error m": 0.2204188340612457,
+     "heading error deg": 3.600166221135268
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.09186406333293869,
-     "heading error deg": 4.655530040608333
+     "end error m": 0.08264110530928445,
+     "heading error deg": 3.587282607986534
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.20382705067396467,
-     "heading error deg": 8.333873263021427
+     "end error m": 0.15659414170699973,
+     "heading error deg": 10.57756345736169
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.0029005818320602355,
-     "heading error deg": 0.11510154532105271
+     "end error m": 0.0056919282483488725,
+     "heading error deg": 0.26956605249204363
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.005803133006424297,
-     "heading error deg": 0.017765863364410328
+     "end error m": 0.01437076346086291,
+     "heading error deg": 0.012222225371485923
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.2012722673753859,
-     "heading error deg": 3.8769934889161837
+     "end error m": 0.16441041207847348,
+     "heading error deg": 3.346387900980213
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0006411618208353491,
-     "heading error deg": 0.009573951661618925
+     "end error m": 0.0012112155631048818,
+     "heading error deg": 0.9254426069168392
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.08281337068286415,
-     "heading error deg": 0.24793127977382529
+     "end error m": 0.06011413689585145,
+     "heading error deg": 0.34698954948339594
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.07810221587694842,
-     "settle diff s": 0.4666666666666668
+     "separation m": 0.04433093682753722,
+     "settle diff s": 0.5
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.37670374534209533,
-     "settle diff s": 0.33333333333333304
+     "separation m": 0.2980397867379646,
+     "settle diff s": 0.4166666666666665
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.3728630172761465,
-     "settle diff s": 0.016666666666666607
+     "separation m": 0.30357897375369347,
+     "settle diff s": 0.1333333333333333
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.5487321719079695,
-     "settle diff s": 0.1499999999999999
+     "separation m": 0.3926897858171041,
+     "settle diff s": 0.21666666666666634
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.012713539900040226,
-     "settle diff s": 0.0
+     "separation m": 0.006861628098698266,
+     "settle diff s": 0.016666666666666607
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.7755975579737548,
-     "settle diff s": 0.11666666666666625
+     "separation m": 0.556719350797909,
+     "settle diff s": 0.11666666666666714
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.0635662153876185,
+     "heading error deg": 4.429298930256454
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.4628973202266486,
+     "heading error deg": 27.34756153002121
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.04237950088024023,
+     "heading error deg": 0.4860859833087563
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.07069765234535204,
+     "heading error deg": 4.0663507409603
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.06886665155359183,
+     "heading error deg": 1.4158512301312676
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.0015157873347726738,
+     "heading error deg": 0.13342277464183935
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.010168905967864203,
+     "heading error deg": 0.039895892890021115
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.09664061435141487,
+     "heading error deg": 1.668483395694592
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0009584108282966932,
+     "heading error deg": 1.498299157181155
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.06764653845167455,
+     "heading error deg": 3.9965766116307195
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.02852192230248402,
+     "settle diff s": 0.5
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.06560116234332582,
+     "settle diff s": 0.583333333333333
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.11161557763477845,
+     "settle diff s": 0.20000000000000018
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.12063058445837788,
+     "settle diff s": 0.19999999999999973
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.01096260142303389,
+     "settle diff s": 0.050000000000000044
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.18743355402266995,
+     "settle diff s": 0.3166666666666669
     }
    ]
   },
   "bad_wheel_lateral": {
    "pos_1s_by_context": {
-    "0": 0.26029109954833984,
-    "1": 0.06372241675853729,
-    "5": 0.06547566503286362,
-    "30": 0.028708791360259056,
-    "120": 0.028952471911907196
+    "0": 0.25594276189804077,
+    "1": 0.07838498800992966,
+    "5": 0.06681428849697113,
+    "30": 0.030945751816034317,
+    "120": 0.02708190493285656
    },
-   "pos_2s_30": 0.05620039626955986,
-   "heading_1s_30": 2.5770065784454346,
-   "z_std_30": 0.4921278953552246,
-   "pos_1s_oracle": 0.024122660979628563,
-   "pos_1s_tta": 0.02853574976325035,
+   "pos_2s_30": 0.06251709163188934,
+   "heading_1s_30": 2.3420989513397217,
+   "z_std_30": 0.5871428847312927,
+   "pos_1s_oracle": 0.02429286763072014,
+   "pos_1s_tta": 0.028028059750795364,
    "pos_1s_fitted_physics": 0.22450865805149078,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.08534587241552756,
-     "heading error deg": 4.9521010969933865
+     "end error m": 0.09202865757877789,
+     "heading error deg": 6.119838025699908
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.35706898647799906,
-     "heading error deg": 1.1427963228450706
+     "end error m": 0.4593526067458278,
+     "heading error deg": 27.6382776279325
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.2624910601860057,
-     "heading error deg": 12.449257786389738
+     "end error m": 0.33619608711547994,
+     "heading error deg": 27.97293168106074
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.20240513280798858,
-     "heading error deg": 25.963259497388343
+     "end error m": 0.2259765810235562,
+     "heading error deg": 25.638064510171116
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.3134682086021743,
-     "heading error deg": 51.28400154627414
+     "end error m": 0.2997715875799671,
+     "heading error deg": 45.808099252216344
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.0319777595780863,
-     "heading error deg": 1.274400725618909
+     "end error m": 0.03235919220145826,
+     "heading error deg": 1.0533285949525653
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.017161196159071922,
-     "heading error deg": 0.34353743524707075
+     "end error m": 0.018137507629122473,
+     "heading error deg": 0.350613767470466
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.07453547194145131,
-     "heading error deg": 4.686532107245683
+     "end error m": 0.07122698459102643,
+     "heading error deg": 4.119043887138296
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.00038027411092252567,
-     "heading error deg": 0.28700334868178146
+     "end error m": 0.00043169232984958863,
+     "heading error deg": 0.728503034058972
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.13437170783725516,
-     "heading error deg": 3.6502181703187784
+     "end error m": 0.14395330807899331,
+     "heading error deg": 3.1894926054658916
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.28370614030204216,
-     "settle diff s": 0.2999999999999998
+     "separation m": 0.37907177962452493,
+     "settle diff s": 0.4166666666666665
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.30022526152472917,
-     "settle diff s": 0.5166666666666666
+     "separation m": 0.29094251807624105,
+     "settle diff s": 0.5
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.26936072317365983,
+     "separation m": 0.2548425642448492,
      "settle diff s": 0.4333333333333327
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.3120126757776407,
-     "settle diff s": 0.25
+     "separation m": 0.43396311046334957,
+     "settle diff s": 0.2999999999999998
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.010960764044000504,
+     "separation m": 0.012435838319811843,
      "settle diff s": 0.050000000000000044
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.6059272315069405,
+     "separation m": 0.6375333715639527,
      "settle diff s": 0.16666666666666607
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.08986304967530423,
+     "heading error deg": 5.25107205263282
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.5279363827503815,
+     "heading error deg": 37.97106682107866
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.3772232218841835,
+     "heading error deg": 30.101380690461752
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.08279345942746444,
+     "heading error deg": 14.842702079335174
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.05747363251011048,
+     "heading error deg": 16.171762624328284
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.02086120476813666,
+     "heading error deg": 0.015921453319154937
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.021618772972419546,
+     "heading error deg": 0.5635986863547348
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.08184257989577746,
+     "heading error deg": 0.075255818646931
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0009461155649210761,
+     "heading error deg": 1.0354831032030078
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.028881259722700982,
+     "heading error deg": 2.3076773893338958
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.4177607961657974,
+     "settle diff s": 0.5666666666666664
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.05583660650089677,
+     "settle diff s": 0.04999999999999982
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.07123811513734114,
+     "settle diff s": 0.04999999999999982
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.5970806956580081,
+     "settle diff s": 0.5999999999999996
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.009692812097108325,
+     "settle diff s": 0.06666666666666665
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.21831877940682756,
+     "settle diff s": 0.15000000000000036
     }
    ]
   },
   "degrading_wheel": {
    "pos_1s_by_context": {
-    "0": 0.11663097143173218,
-    "1": 0.16711118817329407,
-    "5": 0.0749686062335968,
-    "30": 0.08389066159725189,
-    "120": 0.07025256752967834
+    "0": 0.10914146900177002,
+    "1": 0.16165991127490997,
+    "5": 0.07181208580732346,
+    "30": 0.08098666369915009,
+    "120": 0.0752907544374466
    },
-   "pos_2s_30": 0.20483675599098206,
-   "heading_1s_30": 5.862296104431152,
-   "z_std_30": 0.3830774426460266,
-   "pos_1s_oracle": 0.06259321421384811,
-   "pos_1s_tta": 0.07608218491077423,
+   "pos_2s_30": 0.21645745635032654,
+   "heading_1s_30": 6.751676082611084,
+   "z_std_30": 0.386284202337265,
+   "pos_1s_oracle": 0.06700055301189423,
+   "pos_1s_tta": 0.06369040906429291,
    "pos_1s_fitted_physics": 0.17288359999656677,
-   "second_half_rolling": 0.04574213922023773,
-   "second_half_calibration": 0.1322479397058487,
+   "second_half_rolling": 0.04773596674203873,
+   "second_half_calibration": 0.1339789181947708,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.023409837024350177,
-     "heading error deg": 3.7363138949136934
+     "end error m": 0.026950107791384795,
+     "heading error deg": 4.779014521199269
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.11400368338886088,
-     "heading error deg": 1.0490630146431772
+     "end error m": 0.2538195096419151,
+     "heading error deg": 5.971208867221807
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.03696162530056848,
-     "heading error deg": 3.675231283381115
+     "end error m": 0.05638852808210601,
+     "heading error deg": 7.135697571180136
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.07479578795721202,
-     "heading error deg": 0.1343626042520089
+     "end error m": 0.10907596426096446,
+     "heading error deg": 5.14911895121035
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.44577518901507146,
-     "heading error deg": 18.03199437551304
+     "end error m": 0.8636810751022088,
+     "heading error deg": 25.436789664606103
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.00258614149023018,
-     "heading error deg": 0.11789856142844976
+     "end error m": 0.011438072202386107,
+     "heading error deg": 0.1152398569331689
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.009485810784839515,
-     "heading error deg": 0.07050193187270277
+     "end error m": 0.01944492819731763,
+     "heading error deg": 0.02887210497228632
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.11165879543517045,
-     "heading error deg": 1.8726825368763735
+     "end error m": 0.08478016183495639,
+     "heading error deg": 1.0324039216909817
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0006052956639143404,
-     "heading error deg": 1.1761521257893384
+     "end error m": 0.001750317921458577,
+     "heading error deg": 2.1395742015747663
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.0903738159987763,
-     "heading error deg": 3.6670854237336985
+     "end error m": 0.09318184400580418,
+     "heading error deg": 4.816246651587053
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.044825951236386455,
-     "settle diff s": 0.08333333333333348
+     "separation m": 0.030649059567288164,
+     "settle diff s": 0.050000000000000266
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.1162602010923427,
-     "settle diff s": 0.23333333333333295
+     "separation m": 0.11538615833574382,
+     "settle diff s": 0.1333333333333333
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.15819067492812472,
-     "settle diff s": 0.6999999999999997
+     "separation m": 0.10801793471194568,
+     "settle diff s": 0.3333333333333335
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.16388197264480364,
-     "settle diff s": 0.7166666666666668
+     "separation m": 0.1289366625587241,
+     "settle diff s": 0.7666666666666666
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.012701926505888458,
+     "separation m": 0.015036555501570681,
+     "settle diff s": 0.0
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.2360103053963969,
+     "settle diff s": 0.6833333333333331
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.02832491185288466,
+     "heading error deg": 3.8896812915160512
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.2986421467532236,
+     "heading error deg": 1.3396737157965464
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.09456951735012044,
+     "heading error deg": 5.083281599295727
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.043617383312631576,
+     "heading error deg": 4.050578906218674
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.27667124712046737,
+     "heading error deg": 12.988411515650974
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.005293105175048872,
+     "heading error deg": 0.03941240199638327
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.014063794431550087,
+     "heading error deg": 0.019593915972784808
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.058146308882221685,
+     "heading error deg": 1.0963857705455755
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.002410439416912437,
+     "heading error deg": 0.3645065720733771
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.033793348412092576,
+     "heading error deg": 1.3168223351355028
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.03758016141856601,
+     "settle diff s": 0.03333333333333366
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.03271099421810655,
+     "settle diff s": 0.04999999999999982
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.05670220418249138,
+     "settle diff s": 0.10000000000000009
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.13513578752435848,
+     "settle diff s": 0.4666666666666668
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.011567713974941518,
      "settle diff s": 0.033333333333333326
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.30811632496275854,
-     "settle diff s": 0.5333333333333332
+     "separation m": 0.09804154682985049,
+     "settle diff s": 0.19999999999999973
     }
    ]
   },
   "heavy_bad_wheel": {
    "pos_1s_by_context": {
-    "0": 0.013991723768413067,
-    "1": 0.01468227244913578,
-    "5": 0.015138360671699047,
-    "30": 0.009777966886758804,
-    "120": 0.008869696408510208
+    "0": 0.01407360378652811,
+    "1": 0.01339193806052208,
+    "5": 0.013696342706680298,
+    "30": 0.009456757456064224,
+    "120": 0.008087342604994774
    },
-   "pos_2s_30": 0.02205289900302887,
-   "heading_1s_30": 1.1350698471069336,
-   "z_std_30": 0.4080180525779724,
-   "pos_1s_oracle": 0.007075190078467131,
-   "pos_1s_tta": 0.007439630571752787,
+   "pos_2s_30": 0.020675156265497208,
+   "heading_1s_30": 1.2796835899353027,
+   "z_std_30": 0.45536506175994873,
+   "pos_1s_oracle": 0.007648026570677757,
+   "pos_1s_tta": 0.006960598286241293,
    "pos_1s_fitted_physics": 0.019979426637291908,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.0740945593483441,
-     "heading error deg": 0.7473866793988792
+     "end error m": 0.057642922613210766,
+     "heading error deg": 0.962526690517647
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.263480622451041,
-     "heading error deg": 29.594552638466443
+     "end error m": 0.141002063150454,
+     "heading error deg": 29.94314259078101
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.3095554848352728,
-     "heading error deg": 2.801344728889968
+     "end error m": 0.23865303837820792,
+     "heading error deg": 0.23343182693549244
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.11726277626823137,
-     "heading error deg": 0.08824247046458633
+     "end error m": 0.10650955346058212,
+     "heading error deg": 0.25330654379708617
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.26903014505945794,
-     "heading error deg": 7.967421895491867
+     "end error m": 0.19401858436453287,
+     "heading error deg": 1.1007035682356936
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.004221230144064071,
-     "heading error deg": 0.08613703944949705
+     "end error m": 0.005677037388999317,
+     "heading error deg": 0.1589495678192066
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.007405410243718034,
-     "heading error deg": 0.08046203004687293
+     "end error m": 0.009529810672487881,
+     "heading error deg": 0.04849865894064227
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.06686759071831629,
-     "heading error deg": 0.8589326401052356
+     "end error m": 0.04500356773997825,
+     "heading error deg": 0.7010943348672309
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.00047170237244251184,
-     "heading error deg": 0.5354134768915769
+     "end error m": 0.0008452310775176012,
+     "heading error deg": 0.24821894217842236
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.2601990922108159,
-     "heading error deg": 4.148381083574373
+     "end error m": 0.263234728441103,
+     "heading error deg": 1.784868503485524
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.19833281421457497,
-     "settle diff s": 0.4833333333333334
+     "separation m": 0.18426762254441928,
+     "settle diff s": 0.3999999999999999
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.15370837052803693,
-     "settle diff s": 0.5499999999999998
+     "separation m": 0.15795441490567041,
+     "settle diff s": 0.9499999999999997
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.21587549579150006,
-     "settle diff s": 0.6166666666666663
+     "separation m": 0.25132914673317996,
+     "settle diff s": 0.6333333333333333
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.20666860086965244,
-     "settle diff s": 0.3666666666666667
+     "separation m": 0.17921144771136166,
+     "settle diff s": 0.20000000000000018
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.01670181896170439,
-     "settle diff s": 0.04999999999999993
+     "separation m": 0.008763041713236533,
+     "settle diff s": 0.033333333333333326
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.5898714017394119,
-     "settle diff s": 0.4500000000000002
+     "separation m": 0.6117228688152289,
+     "settle diff s": 0.36666666666666714
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.06707821875471168,
+     "heading error deg": 1.922579867544771
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.25135610380737766,
+     "heading error deg": 23.938536727238304
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.08241004870318916,
+     "heading error deg": 3.1295713852168223
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.05970094290599347,
+     "heading error deg": 2.2031195205143628
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.17630521662896786,
+     "heading error deg": 15.969982772676694
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.015077101162572767,
+     "heading error deg": 0.16964878170323433
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.007493064163226106,
+     "heading error deg": 0.20087952226254135
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.05997018499904058,
+     "heading error deg": 2.065737424147562
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.00037991544523173384,
+     "heading error deg": 0.39234893595800674
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.03562819188737104,
+     "heading error deg": 3.233094846538798
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.09520383477555391,
+     "settle diff s": 0.16666666666666652
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.0689473271430941,
+     "settle diff s": 0.08333333333333304
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.0652194854483763,
+     "settle diff s": 0.09999999999999964
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.12957277448976678,
+     "settle diff s": 0.1499999999999999
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.0073776086468299844,
+     "settle diff s": 0.0
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.2469696089697424,
+     "settle diff s": 0.20000000000000018
     }
    ]
   },
   "lateral": {
    "pos_1s_by_context": {
-    "0": 0.04606832563877106,
-    "1": 0.032181404531002045,
-    "5": 0.031049922108650208,
-    "30": 0.022586213424801826,
-    "120": 0.01840829849243164
+    "0": 0.04406174272298813,
+    "1": 0.032035913318395615,
+    "5": 0.032148152589797974,
+    "30": 0.026722153648734093,
+    "120": 0.01794273778796196
    },
-   "pos_2s_30": 0.056973714381456375,
-   "heading_1s_30": 2.5561025142669678,
-   "z_std_30": 0.5902528762817383,
-   "pos_1s_oracle": 0.015878694131970406,
-   "pos_1s_tta": 0.025923486799001694,
+   "pos_2s_30": 0.058292992413043976,
+   "heading_1s_30": 2.371906042098999,
+   "z_std_30": 0.6426057815551758,
+   "pos_1s_oracle": 0.016344288364052773,
+   "pos_1s_tta": 0.0265966709703207,
    "pos_1s_fitted_physics": 0.15842075645923615,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.10349491586427112,
-     "heading error deg": 1.2629970789982727
+     "end error m": 0.09496489063335163,
+     "heading error deg": 2.078910045931434
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.8910496329596959,
-     "heading error deg": 21.752144772050578
+     "end error m": 0.9409669620229265,
+     "heading error deg": 16.32981938833769
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.4780175199697055,
-     "heading error deg": 11.324569684003766
+     "end error m": 0.41495671247526994,
+     "heading error deg": 6.605187251987813
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.5015108356547804,
-     "heading error deg": 22.619709627543056
+     "end error m": 0.48615430782079916,
+     "heading error deg": 19.61701626517872
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.5768287263976901,
-     "heading error deg": 141.7742285624758
+     "end error m": 0.24620104852372787,
+     "heading error deg": 101.45050680235246
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.028619424084153557,
-     "heading error deg": 0.05971632891450168
+     "end error m": 0.02517277747097883,
+     "heading error deg": 0.30461716195801597
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.01354053370487649,
-     "heading error deg": 0.1815475645583537
+     "end error m": 0.017895769254794764,
+     "heading error deg": 0.20911516559791332
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.07755390407654486,
-     "heading error deg": 2.7944250244448225
+     "end error m": 0.08026998722792618,
+     "heading error deg": 3.1581574708535167
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0002481150878440612,
-     "heading error deg": 0.47938458264344835
+     "end error m": 0.0001806082212097545,
+     "heading error deg": 0.25296598022784766
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.1679570743851779,
-     "heading error deg": 21.307683667044294
+     "end error m": 0.18154386725568145,
+     "heading error deg": 22.529284493248174
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.4795650129684117,
-     "settle diff s": 0.2333333333333334
+     "separation m": 0.5269585058282186,
+     "settle diff s": 0.5
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.705420357962533,
-     "settle diff s": 0.7999999999999998
+     "separation m": 0.8645187581737853,
+     "settle diff s": 1.1833333333333336
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.19168447901869687,
-     "settle diff s": 0.18333333333333357
+     "separation m": 0.23694704751318424,
+     "settle diff s": 0.20000000000000018
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.5371127505511424,
-     "settle diff s": 0.44999999999999973
+     "separation m": 0.7400953293627124,
+     "settle diff s": 0.5499999999999998
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.006586295368736461,
-     "settle diff s": 0.01666666666666672
+     "separation m": 0.008567781202173134,
+     "settle diff s": 0.016666666666666607
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.3618353781562998,
-     "settle diff s": 0.08333333333333393
+     "separation m": 0.5481398837099596,
+     "settle diff s": 0.2666666666666666
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.06271665830800299,
+     "heading error deg": 2.297780936209009
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.5253087169533494,
+     "heading error deg": 12.62532039282066
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.2179767700125624,
+     "heading error deg": 5.252586635124265
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.05826604504340889,
+     "heading error deg": 0.5859226903092838
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.23476744327449622,
+     "heading error deg": 12.209920814627052
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.005744789930328967,
+     "heading error deg": 0.10273632076870476
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.03969026641622881,
+     "heading error deg": 0.18282527589567713
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.07762123972967515,
+     "heading error deg": 0.3379438844238888
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0015417791686328178,
+     "heading error deg": 1.173318167236892
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.027134823327172104,
+     "heading error deg": 0.7542698797393018
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.18095880931942268,
+     "settle diff s": 0.1333333333333333
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.040133445230211624,
+     "settle diff s": 0.06666666666666687
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.19907527091301483,
+     "settle diff s": 0.21666666666666679
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.24913357152622553,
+     "settle diff s": 0.25
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.01309266009765654,
+     "settle diff s": 0.016666666666666607
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.4084455858752822,
+     "settle diff s": 0.4833333333333334
     }
    ]
   },
   "ood_dead_wheel": {
    "pos_1s_by_context": {
-    "0": 0.02685163915157318,
-    "1": 0.016363833099603653,
-    "5": 0.018545538187026978,
-    "30": 0.01365622878074646,
-    "120": 0.010185105726122856
+    "0": 0.027627598494291306,
+    "1": 0.017909817397594452,
+    "5": 0.018571898341178894,
+    "30": 0.015050112269818783,
+    "120": 0.011135995388031006
    },
-   "pos_2s_30": 0.026553457602858543,
-   "heading_1s_30": 1.7892637252807617,
-   "z_std_30": 0.4574573338031769,
-   "pos_1s_oracle": 0.012280462309718132,
-   "pos_1s_tta": 0.013218548148870468,
+   "pos_2s_30": 0.029130902141332626,
+   "heading_1s_30": 1.7872909307479858,
+   "z_std_30": 0.5722143054008484,
+   "pos_1s_oracle": 0.010388890281319618,
+   "pos_1s_tta": 0.01120235025882721,
    "pos_1s_fitted_physics": 0.03799162805080414,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.25940142987937914,
-     "heading error deg": 4.55523433390758
+     "end error m": 0.220725547177799,
+     "heading error deg": 3.219569078876821
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 1.3317799740706968,
-     "heading error deg": 162.4069934717861
+     "end error m": 1.2874160001058312,
+     "heading error deg": 149.55156988021838
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.9316201964652382,
-     "heading error deg": 12.714084100250888
+     "end error m": 0.9426753435040031,
+     "heading error deg": 14.487354204009174
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.2902730482529813,
-     "heading error deg": 4.277587538893048
+     "end error m": 0.25801991528152673,
+     "heading error deg": 1.6627505315043767
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.4100217705847143,
-     "heading error deg": 4.681030103862021
+     "end error m": 0.38162473696491406,
+     "heading error deg": 19.094139772696792
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.014237685699023887,
-     "heading error deg": 0.8115011042113822
+     "end error m": 0.008280580137053236,
+     "heading error deg": 0.7012171366692704
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.003985106208549284,
-     "heading error deg": 0.28516434416631853
+     "end error m": 0.0014943710975664373,
+     "heading error deg": 0.06871540482583098
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.2747741514611422,
-     "heading error deg": 15.413224791594688
+     "end error m": 0.2624917878390217,
+     "heading error deg": 13.95481050230126
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0012668678025461475,
-     "heading error deg": 0.40421380440545085
+     "end error m": 0.0010684757704505247,
+     "heading error deg": 0.3883634001406905
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.11554417115974148,
-     "heading error deg": 3.847689048724405
+     "end error m": 0.11282726866668767,
+     "heading error deg": 1.3680756162326861
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.1090140609461533,
-     "settle diff s": 0.10000000000000009
+     "separation m": 0.10017931846054451,
+     "settle diff s": 0.06666666666666643
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.4155728389588396,
-     "settle diff s": 0.25
+     "separation m": 0.46494926558046296,
+     "settle diff s": 0.19999999999999973
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.6362504660445789,
-     "settle diff s": 0.050000000000000266
+     "separation m": 0.631988440363569,
+     "settle diff s": 0.4333333333333331
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.5149673838924781,
+     "separation m": 0.5501359412753205,
      "settle diff s": 0.050000000000000266
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.026710125300643362,
+     "separation m": 0.03216945855937788,
      "settle diff s": 0.033333333333333326
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 1.082013699240331,
-     "settle diff s": 0.06666666666666732
+     "separation m": 1.053962519981504,
+     "settle diff s": 0.05000000000000071
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.05662373169888454,
+     "heading error deg": 0.7226997549691864
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.37648040866753624,
+     "heading error deg": 63.69217312453154
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.39237778439043886,
+     "heading error deg": 7.352617098624149
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.11742468141162113,
+     "heading error deg": 1.0611599264173788
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.11289440256181282,
+     "heading error deg": 1.4687567425065995
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.01804268006134305,
+     "heading error deg": 0.32717460714246316
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.004329165478994972,
+     "heading error deg": 0.08617032973893633
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.11281855982498153,
+     "heading error deg": 7.146878953168746
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0004938738680492182,
+     "heading error deg": 0.9629658256449583
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.07726182663093288,
+     "heading error deg": 2.536644687453518
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.16119151700926512,
+     "settle diff s": 0.19999999999999973
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.035219230480818105,
+     "settle diff s": 0.1166666666666667
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.08863042127960166,
+     "settle diff s": 0.16666666666666652
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.19234846179589218,
+     "settle diff s": 0.5166666666666666
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.01360869190427386,
+     "settle diff s": 0.033333333333333326
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.33865130825127393,
+     "settle diff s": 0.1999999999999993
     }
    ]
   },
   "ood_slow_radio": {
    "pos_1s_by_context": {
-    "0": 0.10816092044115067,
-    "1": 0.06344085931777954,
-    "5": 0.06803552061319351,
-    "30": 0.06398691236972809,
-    "120": 0.06332996487617493
+    "0": 0.11096660792827606,
+    "1": 0.05821181461215019,
+    "5": 0.060356687754392624,
+    "30": 0.06501780450344086,
+    "120": 0.06302390992641449
    },
-   "pos_2s_30": 0.1336776316165924,
-   "heading_1s_30": 5.247620582580566,
-   "z_std_30": 0.43115004897117615,
-   "pos_1s_oracle": 0.04548889771103859,
-   "pos_1s_tta": 0.03273467347025871,
+   "pos_2s_30": 0.14649556577205658,
+   "heading_1s_30": 5.593498706817627,
+   "z_std_30": 0.5296815037727356,
+   "pos_1s_oracle": 0.047174591571092606,
+   "pos_1s_tta": 0.036576490849256516,
    "pos_1s_fitted_physics": 0.06206716597080231,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.01846624658882085,
-     "heading error deg": 0.3106853848203586
+     "end error m": 0.17203601603198104,
+     "heading error deg": 1.6981692000364732
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.2001936106553504,
-     "heading error deg": 4.352480621529572
+     "end error m": 1.248316089396623,
+     "heading error deg": 25.973941467868677
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.048516487272125326,
-     "heading error deg": 1.4529504621801725
+     "end error m": 0.5666847355257919,
+     "heading error deg": 7.962030463532739
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.20155786208104123,
-     "heading error deg": 6.563310112578167
+     "end error m": 0.43006431797949707,
+     "heading error deg": 11.940799323073573
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 1.1002823700049806,
-     "heading error deg": 35.40255569837425
+     "end error m": 1.9760580496156142,
+     "heading error deg": 73.99580556029977
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.010935573340340754,
-     "heading error deg": 0.18185849830224204
+     "end error m": 0.01086627411531435,
+     "heading error deg": 0.3570605101299967
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.003230467663327898,
-     "heading error deg": 0.02628649800860694
+     "end error m": 0.0023395883508066525,
+     "heading error deg": 0.003080416872035725
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.22853408376503476,
-     "heading error deg": 4.500859764214874
+     "end error m": 0.21142885754485624,
+     "heading error deg": 3.6587660671675497
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0005567623838240242,
-     "heading error deg": 0.6900270427195188
+     "end error m": 0.000814271004453238,
+     "heading error deg": 0.22193831769066164
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.1592102361142027,
-     "heading error deg": 9.278460431813604
+     "end error m": 0.22389182274225336,
+     "heading error deg": 14.052558138952763
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.12568446020538102,
-     "settle diff s": 0.10000000000000009
+     "separation m": 0.24055237656070452,
+     "settle diff s": 0.25
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.187876796712019,
-     "settle diff s": 0.08333333333333348
+     "separation m": 0.4840953089721295,
+     "settle diff s": 0.3500000000000001
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.4216435544537877,
-     "settle diff s": 0.7666666666666666
+     "separation m": 0.31907410274864556,
+     "settle diff s": 0.5166666666666666
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.8275233752040273,
-     "settle diff s": 1.5166666666666662
+     "separation m": 0.6270932372736724,
+     "settle diff s": 1.5333333333333328
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.06143623369916666,
+     "separation m": 0.04995179110714897,
+     "settle diff s": 0.016666666666666607
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.4827901886070974,
+     "settle diff s": 0.5333333333333332
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.0276018197864919,
+     "heading error deg": 2.59294091153949
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.26502298379078454,
+     "heading error deg": 4.216271774030087
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.11641501856876683,
+     "heading error deg": 3.0813033585510596
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.05614179868526658,
+     "heading error deg": 0.35241358611327683
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.15533966966849697,
+     "heading error deg": 7.142387849943295
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.007956051550827832,
+     "heading error deg": 0.1481488987909788
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.006141378395110177,
+     "heading error deg": 0.0444771391099611
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.07391511629963571,
+     "heading error deg": 1.4254628304248602
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0019832594563331807,
+     "heading error deg": 0.5678792879053366
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.09663709717030593,
+     "heading error deg": 2.7108069240674832
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.10657727269208239,
+     "settle diff s": 0.1499999999999999
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.19141327746218653,
+     "settle diff s": 0.3833333333333333
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.33056174345879014,
+     "settle diff s": 0.7000000000000002
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.9223615873999154,
+     "settle diff s": 1.3999999999999995
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.051703126120048536,
      "settle diff s": 0.01666666666666672
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.5255649906121931,
+     "separation m": 0.5269431820300071,
      "settle diff s": 0.8666666666666671
     }
    ]
   },
   "perfect": {
    "pos_1s_by_context": {
-    "0": 0.09710847586393356,
-    "1": 0.20262648165225983,
-    "5": 0.21363894641399384,
-    "30": 0.04659159108996391,
-    "120": 0.043760884553194046
+    "0": 0.0961398184299469,
+    "1": 0.20341774821281433,
+    "5": 0.20087258517742157,
+    "30": 0.04224983602762222,
+    "120": 0.043441690504550934
    },
-   "pos_2s_30": 0.09707879275083542,
-   "heading_1s_30": 1.802596092224121,
-   "z_std_30": 0.41039711236953735,
-   "pos_1s_oracle": 0.03432035446166992,
-   "pos_1s_tta": 0.030553849413990974,
+   "pos_2s_30": 0.09914892166852951,
+   "heading_1s_30": 1.91731595993042,
+   "z_std_30": 0.44739317893981934,
+   "pos_1s_oracle": 0.035011276602745056,
+   "pos_1s_tta": 0.028789451345801353,
    "pos_1s_fitted_physics": 0.1298828125,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.06816779579331084,
-     "heading error deg": 3.827408071622923
+     "end error m": 0.07967716022620826,
+     "heading error deg": 1.432285881816157
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.6374146589918256,
-     "heading error deg": 9.87855094007697
+     "end error m": 0.7678274219078615,
+     "heading error deg": 6.854660926501616
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.2809353333461998,
-     "heading error deg": 6.477276840537531
+     "end error m": 0.3779724656708874,
+     "heading error deg": 1.2024276860623002
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.07672132397783989,
-     "heading error deg": 4.371601916500364
+     "end error m": 0.05527989125452463,
+     "heading error deg": 0.376474652186565
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.29768427943750125,
-     "heading error deg": 13.877515419064757
+     "end error m": 0.2838126999974437,
+     "heading error deg": 12.528246271547395
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.002508113496154183,
-     "heading error deg": 0.0939820537400547
+     "end error m": 0.010731997840365529,
+     "heading error deg": 0.12059493910638701
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.009772882478861147,
-     "heading error deg": 0.055523116247496236
+     "end error m": 0.02033675356051165,
+     "heading error deg": 0.08335357068061085
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.15206119166419485,
-     "heading error deg": 1.9553764288993747
+     "end error m": 0.14694040346486326,
+     "heading error deg": 2.3891302876422773
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 0.0007741177434450642,
-     "heading error deg": 0.2596711950411099
+     "end error m": 0.0008462279021209819,
+     "heading error deg": 1.2258688083995195
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.035912569674241515,
-     "heading error deg": 0.47053665330166
+     "end error m": 0.06462526568356966,
+     "heading error deg": 4.676045989184158
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.08315813536693564,
+     "separation m": 0.06902816002826039,
+     "settle diff s": 0.016666666666666607
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.08195454495122004,
+     "settle diff s": 0.04999999999999982
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.06992170350974403,
+     "settle diff s": 0.16666666666666652
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.18153167274200555,
+     "settle diff s": 0.16666666666666652
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.006327554197574835,
+     "settle diff s": 0.016666666666666607
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.48927342383004824,
+     "settle diff s": 0.04999999999999982
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.02832491185288466,
+     "heading error deg": 3.8896812915160512
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.2986421467532236,
+     "heading error deg": 1.3396737157965464
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.09456951735012044,
+     "heading error deg": 5.083281599295727
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.043617383312631576,
+     "heading error deg": 4.050578906218674
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.27667124712046737,
+     "heading error deg": 12.988411515650974
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.005293105175048872,
+     "heading error deg": 0.03941240199638327
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.014063794431550087,
+     "heading error deg": 0.019593915972784808
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.058146308882221685,
+     "heading error deg": 1.0963857705455755
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.002410439416912437,
+     "heading error deg": 0.3645065720733771
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.033793348412092576,
+     "heading error deg": 1.3168223351355028
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.03758016141856601,
      "settle diff s": 0.03333333333333366
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.17250971812248062,
-     "settle diff s": 0.11666666666666625
+     "separation m": 0.03271099421810655,
+     "settle diff s": 0.04999999999999982
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.10691443197526988,
+     "separation m": 0.05670220418249138,
      "settle diff s": 0.10000000000000009
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.15089885300956724,
-     "settle diff s": 0.19999999999999973
+     "separation m": 0.13513578752435848,
+     "settle diff s": 0.4666666666666668
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.006495020390983579,
-     "settle diff s": 0.0
+     "separation m": 0.011567713974941518,
+     "settle diff s": 0.033333333333333326
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.5760731151908136,
-     "settle diff s": 0.4833333333333334
+     "separation m": 0.09804154682985049,
+     "settle diff s": 0.19999999999999973
     }
    ]
   },
   "two_bad_wheels": {
    "pos_1s_by_context": {
-    "0": 0.3229195475578308,
-    "1": 0.17817825078964233,
-    "5": 0.1634255200624466,
-    "30": 0.08854160457849503,
-    "120": 0.06603503972291946
+    "0": 0.31915074586868286,
+    "1": 0.16670064628124237,
+    "5": 0.1500772088766098,
+    "30": 0.0838591605424881,
+    "120": 0.06088128685951233
    },
-   "pos_2s_30": 0.21344757080078125,
-   "heading_1s_30": 3.065361499786377,
-   "z_std_30": 0.4917323887348175,
-   "pos_1s_oracle": 0.04488325119018555,
-   "pos_1s_tta": 0.04412979632616043,
+   "pos_2s_30": 0.20371894538402557,
+   "heading_1s_30": 3.942713737487793,
+   "z_std_30": 0.5717451572418213,
+   "pos_1s_oracle": 0.04279521852731705,
+   "pos_1s_tta": 0.032497331500053406,
    "pos_1s_fitted_physics": 0.2893269658088684,
    "maneuvers": [
     {
      "maneuver": "forward 1 m/s",
-     "end error m": 0.07050221443573787,
-     "heading error deg": 0.9853282830155675
+     "end error m": 0.031403181610715626,
+     "heading error deg": 0.6082838067802444
     },
     {
      "maneuver": "forward 2.5 m/s",
-     "end error m": 0.36409562633307735,
-     "heading error deg": 6.0640654971731855
+     "end error m": 0.463877303884339,
+     "heading error deg": 15.702164242133234
     },
     {
      "maneuver": "backward 1.5 m/s",
-     "end error m": 0.1328026789604353,
-     "heading error deg": 10.520109623024647
+     "end error m": 0.4013706772882512,
+     "heading error deg": 1.2165737906205518
     },
     {
      "maneuver": "left 1 m/s",
-     "end error m": 0.18145639085561388,
-     "heading error deg": 4.035537716590209
+     "end error m": 0.11551893314296022,
+     "heading error deg": 4.053859377761976
     },
     {
      "maneuver": "right 2 m/s",
-     "end error m": 0.4489912034756554,
-     "heading error deg": 30.763464777739415
+     "end error m": 0.3696327105881036,
+     "heading error deg": 15.964171759046003
     },
     {
      "maneuver": "left creep 0.15 m/s",
-     "end error m": 0.0028185009752550246,
-     "heading error deg": 0.0007818600422240915
+     "end error m": 0.004774894106079693,
+     "heading error deg": 0.1472102951556781
     },
     {
      "maneuver": "forward creep 0.1 m/s",
-     "end error m": 0.0058850356846785615,
-     "heading error deg": 0.12976095439667923
+     "end error m": 0.011174838209602939,
+     "heading error deg": 0.06456593988151303
     },
     {
      "maneuver": "diagonal 1.5 m/s",
-     "end error m": 0.2746817873208804,
-     "heading error deg": 5.609269216780603
+     "end error m": 0.31892159371268836,
+     "heading error deg": 6.917203950193923
     },
     {
      "maneuver": "spin 4 rad/s",
-     "end error m": 9.846407463179273e-05,
-     "heading error deg": 0.0514213661044817
+     "end error m": 0.0012568933905195035,
+     "heading error deg": 0.4281924904483507
     },
     {
      "maneuver": "forward 1 m/s + spin 3 rad/s",
-     "end error m": 0.2116965633991756,
-     "heading error deg": 12.180640035656758
+     "end error m": 0.23631099305676753,
+     "heading error deg": 15.315899816215726
     }
    ],
    "closed_loop": [
     {
      "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
-     "separation m": 0.26211444064428413,
-     "settle diff s": 0.833333333333333
+     "separation m": 0.18444291911956934,
+     "settle diff s": 0.7666666666666666
     },
     {
      "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
-     "separation m": 0.48939202452609465,
-     "settle diff s": 0.033333333333333215
+     "separation m": 0.3603563041213655,
+     "settle diff s": 0.1499999999999999
     },
     {
      "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
-     "separation m": 0.25916899866554255,
-     "settle diff s": 0.5333333333333332
+     "separation m": 0.2510930906245297,
+     "settle diff s": 0.5499999999999998
     },
     {
      "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
-     "separation m": 0.38826608200458984,
-     "settle diff s": 0.41666666666666696
+     "separation m": 0.531697932350819,
+     "settle diff s": 0.3166666666666669
     },
     {
      "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
-     "separation m": 0.008111212181623091,
+     "separation m": 0.00977039894719259,
      "settle diff s": 0.01666666666666672
     },
     {
      "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
-     "separation m": 0.8297735685479052,
-     "settle diff s": 0.41666666666666696
+     "separation m": 0.973378813021517,
+     "settle diff s": 0.25
+    }
+   ],
+   "maneuvers_oracle": [
+    {
+     "maneuver": "forward 1 m/s",
+     "end error m": 0.029872259240875196,
+     "heading error deg": 0.6195331232017123
+    },
+    {
+     "maneuver": "forward 2.5 m/s",
+     "end error m": 0.17081366983617938,
+     "heading error deg": 7.12020589770554
+    },
+    {
+     "maneuver": "backward 1.5 m/s",
+     "end error m": 0.03926263188154989,
+     "heading error deg": 1.4298248894473113
+    },
+    {
+     "maneuver": "left 1 m/s",
+     "end error m": 0.12876910930993046,
+     "heading error deg": 2.50052134116842
+    },
+    {
+     "maneuver": "right 2 m/s",
+     "end error m": 0.20279298917516766,
+     "heading error deg": 4.054404201439695
+    },
+    {
+     "maneuver": "left creep 0.15 m/s",
+     "end error m": 0.010826749609073363,
+     "heading error deg": 0.3399403414498278
+    },
+    {
+     "maneuver": "forward creep 0.1 m/s",
+     "end error m": 0.003216045611518992,
+     "heading error deg": 0.15501282493253413
+    },
+    {
+     "maneuver": "diagonal 1.5 m/s",
+     "end error m": 0.07571836655966896,
+     "heading error deg": 1.8346247412500196
+    },
+    {
+     "maneuver": "spin 4 rad/s",
+     "end error m": 0.0004594297027589746,
+     "heading error deg": 0.3503723708192152
+    },
+    {
+     "maneuver": "forward 1 m/s + spin 3 rad/s",
+     "end error m": 0.05828224262487024,
+     "heading error deg": 2.1505603923722267
+    }
+   ],
+   "closed_loop_oracle": [
+    {
+     "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0",
+     "separation m": 0.06642409687900391,
+     "settle diff s": 0.16666666666666696
+    },
+    {
+     "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0",
+     "separation m": 0.37827083305153975,
+     "settle diff s": 0.1499999999999999
+    },
+    {
+     "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5",
+     "separation m": 0.1790154444692737,
+     "settle diff s": 0.10000000000000009
+    },
+    {
+     "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0",
+     "separation m": 0.09500161892047443,
+     "settle diff s": 0.06666666666666643
+    },
+    {
+     "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0",
+     "separation m": 0.010594454893513077,
+     "settle diff s": 0.033333333333333326
+    },
+    {
+     "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0",
+     "separation m": 0.28078479658732675,
+     "settle diff s": 0.20000000000000018
     }
    ]
   }

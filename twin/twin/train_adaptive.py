@@ -289,9 +289,12 @@ def cmd_train(args):
         else:
             ctx_len = lambda: 0
             out_name = "adaptive_teacher.pt"
+            if args.resume:
+                load(model, args.out / out_name, device)
         params = [p for p in model.parameters() if p.requires_grad]
         opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-4)
-        schedule = curriculum(args.iters) if args.phase == "teacher" else [(120, args.iters)]
+        fresh = args.phase == "teacher" and not args.resume
+        schedule = curriculum(args.iters) if fresh else [(120, args.iters)]
         total = sum(k for _, k in schedule)
         sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: 0.5 * (1 + math.cos(math.pi * min(i, total) / total)))
         val_batches = [val.sample(args.batch, 120, 1800 if args.phase == "finetune" else 0, vrng, device) for _ in range(4)]
@@ -309,7 +312,9 @@ def cmd_train(args):
             model.train()
             return float(np.mean(out))
 
-        best, step = float("inf"), 0
+        # Only replace the saved model when this run beats it (same validation set).
+        best, step = (validate() if not fresh else float("inf")), 0
+        print(f"starting validation loss {best:.3f}", flush=True)
         for horizon, iters in schedule:
             for _ in range(iters):
                 batch = perturb(train.sample(args.batch, horizon, ctx_len(), rng, device), None)
@@ -384,6 +389,7 @@ def main():
     t.add_argument("--val-every", type=int, default=250)
     t.add_argument("--seed", type=int, default=0)
     t.add_argument("--phase", choices=("teacher", "student", "finetune"), default="teacher")
+    t.add_argument("--resume", action="store_true", help="teacher: continue from checkpoints/adaptive_teacher.pt at the 2 s horizon")
     args = parser.parse_args()
     {"prepare": cmd_prepare, "train": cmd_train}[args.cmd](args)
 

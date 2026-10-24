@@ -138,17 +138,27 @@ python -m twin.train_adaptive train --phase student --lr 1e-3
 python -m twin.evaluate_adaptive                           # -> reports/evaluation_adaptive.md
 ```
 
-First results (1-s open-loop error, cm, median; `reports/evaluation_adaptive.md`):
+Results (1-s open-loop error, cm, median; `reports/evaluation_adaptive.md`):
 
 | held-out robot | no context | 30 s context | 30 s + test-time adaptation | true hardware (upper bound) | ssl-sim fitted to 120 s |
 |---|---|---|---|---|---|
-| perfect | 9.7 | 4.7 | 3.1 | 3.4 | 13.0 |
-| bad_wheel | 11.1 | 3.9 | 1.8 | 2.5 | 13.9 |
-| lateral | 4.6 | 2.3 | 2.6 | 1.6 | 15.8 |
-| two_bad_wheels | 32.3 | 8.9 | 4.4 | 4.5 | 28.9 |
-| bad_wheel_lateral | 26.0 | 2.9 | 2.9 | 2.4 | 22.5 |
-| heavy_bad_wheel | 1.4 | 1.0 | 0.7 | 0.7 | 2.0 |
+| perfect | 9.6 | 4.2 | 2.9 | 3.5 | 13.0 |
+| bad_wheel | 11.9 | 3.9 | 2.0 | 2.5 | 13.9 |
+| lateral | 4.4 | 2.7 | 2.7 | 1.6 | 15.8 |
+| two_bad_wheels | 31.9 | 8.4 | 3.2 | 4.3 | 28.9 |
+| bad_wheel_lateral | 25.6 | 3.1 | 2.8 | 2.4 | 22.5 |
+| heavy_bad_wheel | 1.4 | 0.9 | 0.7 | 0.8 | 2.0 |
 
-Not yet usable as a simulator: from rest (2-s maneuvers, closed loop) it
-drifts 30–130 cm, and about 14 cm even with the true hardware code. The v6 twin
+A wheel that weakens during a session: a rolling 30 s context gives 4.8 cm in
+the second half, the stale healthy calibration 13.4 cm.
+
+Not yet usable as a simulator. From rest (10 maneuvers, 6 closed-loop legs),
+median errors are 4–10 cm (maneuvers) and 5–26 cm (closed loop) even with the
+true-hardware `z`, and 7–24 / 8–54 cm with the estimated one. Both the
+population dynamics model and the identification still need work; the v6 twin
 above remains the better model for robots it was trained on.
+
+Tried and dropped: fine-tuning the dynamics with the student's `z`
+(`--phase finetune`) made held-out errors worse
+(`reports/evaluation_adaptive_finetuned.md`). Training the teacher longer
+gained little (validation 30.8 → 29.8).
