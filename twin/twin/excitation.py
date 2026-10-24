@@ -13,7 +13,7 @@ MAX_SPEED = 3.0  # m/s, translation commands are kept under this
 MAX_OMEGA = 6.0  # rad/s
 FENCE = (3.6, 2.4)  # |x|, |y| that trigger the return to the center, m
 
-PROGRAMS = ("steps", "chirp", "prbs", "spin_translate", "creep", "creep_long", "sprint", "move_to", "still")
+PROGRAMS = ("steps", "chirp", "prbs", "spin_translate", "spin_fast", "creep", "creep_long", "sprint", "move_to", "still")
 
 
 def _segments(rng, ticks, hold, make):
@@ -77,6 +77,18 @@ def open_loop(program: str, ticks: int, rng: np.random.Generator) -> np.ndarray:
             return (speed * np.cos(angle), speed * np.sin(angle), rng.choice([-1, 1]) * rng.uniform(1.0, 6.0))
 
         return _segments(rng, ticks, (2.0, 4.0), make)
+
+    if program == "spin_fast":
+        # Fast translation while spinning hard: wheel saturation (circles of
+        # radius v/omega, under 1 m, so the robot stays on the field).
+        def make():
+            if rng.random() < 0.2:
+                return (0.0, 0.0, 0.0)
+            angle = rng.uniform(-np.pi, np.pi)
+            speed = rng.uniform(2.0, MAX_SPEED)
+            return (speed * np.cos(angle), speed * np.sin(angle), rng.choice([-1, 1]) * rng.uniform(3.0, MAX_OMEGA))
+
+        return _segments(rng, ticks, (1.0, 2.5), make)
 
     if program == "creep":
         def make():

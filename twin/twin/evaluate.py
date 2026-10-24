@@ -45,13 +45,16 @@ CRITERIA = {
 }
 
 # Closed-loop legs: (start x, y, theta) -> (target x, y, theta), max speed.
+# Heading changes stay below 180°: at exactly 180° the controller's choice of
+# turning direction flips on vision-level noise, and the real robot's own runs
+# from starts 2.5 mm apart end 60-85 cm apart (not predictable by any model).
 LEGS = [
     ((-2.0, 0.0, 0.0), (1.0, 0.0, 0.0), 2.0),
     ((0.0, -1.5, 0.0), (0.0, 1.5, 0.0), 2.0),
     ((-1.0, -1.0, 0.0), (1.0, 1.0, 1.57), 2.5),
-    ((1.5, 0.5, 3.14), (-1.5, -0.5, 0.0), 3.0),
+    ((1.5, 0.5, 3.14), (-1.5, -0.5, 0.35), 3.0),
     ((0.0, 0.0, 0.0), (0.3, 0.2, 0.0), 1.0),
-    ((-2.0, 1.0, -1.57), (2.0, -1.0, 1.57), 3.0),
+    ((-2.0, 1.0, -1.57), (2.0, -1.0, 1.22), 3.0),
 ]
 
 # (name, command held 1.5 s, then 0.5 s of zero command)
@@ -96,6 +99,23 @@ def rollout_metrics(models, test: Windows, robot_index, robot):
             m[f"pos {label} median m"] = float(np.median(pos[:, j]))
             m[f"pos {label} p90 m"] = float(np.percentile(pos[:, j], 90))
             m[f"heading {label} median deg"] = float(np.median(head[:, j]))
+        if name == "GRU twin":
+            # Where the twin can be trusted: 1-s error by the fastest command in the window.
+            cmd = batch["cmd"].numpy()[:, -HORIZON:]
+            speed = np.linalg.norm(cmd[:, :60, :2], axis=-1).max(1)
+            spin = np.abs(cmd[:, :60, 2]).max(1)
+            regimes = {
+                "≤ 1 m/s": speed <= 1.0,
+                "1–2 m/s": (speed > 1.0) & (speed <= 2.0),
+                "2–2.5 m/s": (speed > 2.0) & (speed <= 2.5),
+                "> 2.5 m/s, spin ≤ 3 rad/s": (speed > 2.5) & (spin <= 3.0),
+                "> 2.5 m/s, spin > 3 rad/s": (speed > 2.5) & (spin > 3.0),
+            }
+            m["by regime"] = {
+                k: {"windows": int(v.sum()), "pos 1 s median m": float(np.median(pos[v, 59])) if v.any() else None,
+                    "heading 1 s median deg": float(np.median(head[v, 59])) if v.any() else None}
+                for k, v in regimes.items()
+            }
         seen = ~np.isnan(raw[:, 59, 0])
         m["pos 1 s median vs raw vision m"] = float(np.median(np.linalg.norm(poses[seen, 59, :2] - raw[seen, 59, :2], axis=-1)))
         out[name] = m
@@ -283,6 +303,11 @@ def main():
                 f"| {name} | {m['pos 0.5 s median m'] * 100:.1f} cm | {m['pos 1 s median m'] * 100:.1f} cm | {m['pos 1 s p90 m'] * 100:.1f} cm | "
                 f"{m['pos 2 s median m'] * 100:.1f} cm | {m['heading 1 s median deg']:.2f}° | {m['one-step velocity RMSE vt, vn, ω']} |"
             )
+        lines += ["", "GRU twin, 1-s open-loop error by the fastest command in the first second:", ""]
+        lines += ["| regime | windows | pos 1 s median | heading 1 s median |", "|---|---|---|---|"]
+        for k, v in metrics["GRU twin"]["by regime"].items():
+            if v["windows"]:
+                lines.append(f"| {k} | {v['windows']} | {v['pos 1 s median m'] * 100:.1f} cm | {v['heading 1 s median deg']:.2f}° |")
         nf = metrics["noise floor"]
         lines += ["", f"Noise floor: raw vision vs truth {nf['raw vision error vs truth, m'] * 1000:.1f} mm; smoothed start pose vs truth {nf['start pose error (smoothed vs truth), m'] * 1000:.1f} mm.", ""]
         lines += [f"Residual structure (R² of one-step residuals explained by state + commands, vt, vn, ω): {r2}", ""]

@@ -38,6 +38,13 @@ COVERAGE_SESSIONS = [
     ("val", "creep_long", 1),
 ]
 
+# Added after the third evaluation: fast driving while spinning hard (wheel
+# saturation) was ~2 % of the data and where the twin was weakest.
+SATURATION_SESSIONS = [
+    ("train", "spin_fast", 2),
+    ("val", "spin_fast", 1),
+]
+
 COLUMNS = (
     "tick,t_engine,id,team,cmd_vx,cmd_vy,cmd_omega,cmd_kick,cmd_dribbler,"
     "raw_x,raw_y,raw_theta,t_capture,camera_id,seen,"
@@ -130,11 +137,17 @@ def main():
     parser.add_argument("--out", type=Path, default=Path("data/synthetic"))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--coverage", action="store_true", help="only the coverage sessions (seed + 1)")
+    parser.add_argument("--saturation", action="store_true", help="only the saturation sessions (seed + 2)")
     args = parser.parse_args()
 
-    rng = np.random.default_rng(args.seed + (1 if args.coverage else 0))
+    if args.saturation:
+        rng, plan = np.random.default_rng(args.seed + 2), SATURATION_SESSIONS
+    elif args.coverage:
+        rng, plan = np.random.default_rng(args.seed + 1), COVERAGE_SESSIONS
+    else:
+        rng, plan = np.random.default_rng(args.seed), SESSIONS
     for robot_id, robot in enumerate(SCENARIOS):
-        for split, program, count in COVERAGE_SESSIONS if args.coverage else SESSIONS:
+        for split, program, count in plan:
             cmds, poses, body = run_sessions(robot, program, count, rng)
             for i in range(count):
                 folder = args.out / robot / split

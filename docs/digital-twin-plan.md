@@ -97,13 +97,14 @@ return to the center when within 0.5 m of a wall):
 | `spin_translate.lua` | constant ω with constant vx/vy: rotation–translation coupling |
 | `creep.lua` | slow commands (< 0.3 m/s, < 1 rad/s): dead-zone |
 | `creep_long.lua` | slow single-axis holds of 1.5–4 s: steady-state friction at low speed |
+| `spin_fast.lua` | 2–3 m/s while spinning 3–6 rad/s: wheel saturation |
 | `sprint.lua` | line up at one end, run the full field at 1.5–3 m/s in a random body direction, brake: sustained high speed |
 | existing skills | `move_to`, plays: the command distribution the model will meet |
 
-`creep_long` and `sprint` were added after the first synthetic experiment
+`creep_long`, `sprint` and `spin_fast` were added after synthetic experiments
 (`twin/`): with the other scripts, the geofence cut every fast run short and
-slow steady driving was only ~2 s per robot, and the model was weakest
-exactly there. Check coverage (time spent per speed/acceleration region)
+slow steady driving was only ~2 s per robot, fast driving while spinning ~2 %
+of the data, and the model was weakest exactly there. Check coverage (time spent per speed/acceleration region)
 after every recording day.
 
 Repeat each excitation script several times: repeated runs of the same
@@ -205,7 +206,10 @@ pose update   = integrate body velocity over the tick
   faster training, less data needed.
 - **GRU with command history**: captures latency and motor lag.
 - **Small** (~100k parameters): with noisy targets, a large model overfits
-  the noise first.
+  the noise first. Feed the whole command window to the GRU at every tick,
+  not only the current command: on the synthetic robots, that change
+  (together with 96 units and longer training) cut the 1-s error by ~25 %
+  and most of a spin-rate bias while translating.
 
 Alternatives in the same pipeline: MLP over a flattened window (simplest);
 a small TCN if the GRU trains slowly.
@@ -236,6 +240,10 @@ a small TCN if the GRU trains slowly.
   keeping the best on validation (cross-correlation alone overestimated it).
 - **No mirror augmentation**: flipping y assumes a left/right symmetric robot,
   which is exactly what a faulty robot (bad wheel) is not.
+- **Recovery training**: in a quarter of the windows, knock the start
+  velocity off and score only the velocity after a 0.25 s grace period. A
+  model only ever started from correct states can lock into a wrong state
+  once it is fed its own predictions (seen in a 2-min free run).
 - Validate the whole pipeline first on the noisy `ssl-sim` dataset: the
   trained model must recover the simulator's true (noise-free) response.
 

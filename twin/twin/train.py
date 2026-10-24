@@ -75,12 +75,22 @@ def noise_loss(poses, bodies, batch, noise_std, velocity_weight=0.2):
     raw = batch["raw"]
     seen = ~torch.isnan(raw[..., 0])
     raw = torch.nan_to_num(raw)
+    vel_mask = torch.ones_like(seen, dtype=torch.float32)
+    if "kicked" in batch:
+        # Recovery samples: no pose target, velocity scored after the grace period.
+        seen = seen & ~batch["kicked"][:, None]
+        vel_mask[batch["kicked"], :RECOVERY_GRACE] = 0.0
     sig = noise_std[batch["robot"]][:, None, :]  # (B, 1, 3)
     err = (poses - raw) / sig
     pose_loss = (F.huber_loss(err, torch.zeros_like(err), reduction="none").sum(-1) * seen).sum() / seen.sum()
     floor = torch.tensor([0.02, 0.02, 0.05])
     verr = (bodies - batch["body"]) / (batch["body_std"] + floor)
-    vel_loss = F.huber_loss(verr, torch.zeros_like(verr), reduction="none").sum(-1).mean()
+    vel_loss = (F.huber_loss(verr, torch.zeros_like(verr), reduction="none").sum(-1) * vel_mask).sum() / vel_mask.sum()
+    if "kicked" in batch:
+        # Recovery samples only have the velocity term; weigh it like a pose term.
+        kicked = batch["kicked"][:, None].float() * vel_mask
+        rec = (F.huber_loss(verr, torch.zeros_like(verr), reduction="none").sum(-1) * kicked).sum() / kicked.sum().clamp_min(1)
+        vel_loss = vel_loss + rec
     return pose_loss + velocity_weight * vel_loss
 
 
@@ -151,18 +161,35 @@ def fit_arx(segments: list[Segment], robots: list[str], history: int = 12) -> AR
     return model
 
 
-def perturb(batch, noise_std, scale=1.0):
+RECOVERY_FRACTION = 0.25  # samples whose start velocity is knocked far off
+RECOVERY_KICK = torch.tensor([0.3, 0.3, 1.5])  # std of the kick, m/s, m/s, rad/s
+RECOVERY_GRACE = 15  # ticks the model gets to recover before it is scored
+
+
+def perturb(batch, noise_std, scale=1.0, recovery=False):
     """Input noise injection: the start state the model is given is never exact,
-    neither from the smoother nor from its own earlier predictions."""
+    neither from the smoother nor from its own earlier predictions.
+
+    With `recovery`, some samples start from a velocity far from the measured
+    one. The real robot's velocity converges back to what the commands drive it
+    to (its velocity dynamics are contracting), so those samples are scored on
+    velocity only, after a grace period: the model learns to come back from its
+    own mistakes instead of locking into them when fed its own predictions."""
     b = dict(batch)
     sig = noise_std[b["robot"]]
     b["pose0"] = b["pose0"] + torch.randn_like(b["pose0"]) * sig * scale
     vel_noise = torch.tensor([0.015, 0.015, 0.1]) * scale
     b["v_warm"] = b["v_warm"] + torch.randn_like(b["v_warm"]) * vel_noise
+    if recovery:
+        kicked = torch.rand(b["v_warm"].shape[0]) < RECOVERY_FRACTION
+        v_warm = b["v_warm"].clone()
+        v_warm[kicked, -1] += torch.randn(int(kicked.sum()), 3) * RECOVERY_KICK
+        b["v_warm"] = v_warm
+        b["kicked"] = kicked
     return b
 
 
-def train_rollout(model, params, train, val, noise_std, schedule, lr, rng, batch=128, log="", val_horizon=60, noise_injection=False):
+def train_rollout(model, params, train, val, noise_std, schedule, lr, rng, batch=128, log="", val_horizon=60, noise_injection=False, recovery=False):
     """Adam on the free-run rollout loss with a horizon curriculum: the model is
     fed its own predictions, as when it runs as a simulator. Keeps the best
     validation state."""
@@ -179,7 +206,7 @@ def train_rollout(model, params, train, val, noise_std, schedule, lr, rng, batch
             model.train()
             b = train.sample(batch, horizon, rng)
             if noise_injection:
-                b = perturb(b, noise_std)
+                b = perturb(b, noise_std, recovery=recovery)
             poses, bodies = run(model, b, horizon)
             loss = noise_loss(poses, bodies, b, noise_std)
             opt.zero_grad()
@@ -206,6 +233,7 @@ def main():
     parser.add_argument("--out", type=Path, default=Path("checkpoints"))
     parser.add_argument("--iters", type=int, default=9000, help="GRU training steps")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--finetune", type=Path, help="continue a trained twin (keeps its prior, delays and baselines)")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -219,6 +247,15 @@ def main():
     val = Windows(data["splits"]["val"], index)
     args.out.mkdir(parents=True, exist_ok=True)
     meta = {"robots": robots, "noise_std": noise_std, "jerk": data["jerk"]}
+
+    if args.finetune:
+        ckpt = torch.load(args.finetune, weights_only=False)
+        twin = GRUTwin(Prior(len(robots), ckpt["delays"], trainable=False), len(robots), hidden=ckpt["hidden"])
+        twin.load_state_dict(ckpt["state"])
+        params = [p for p in twin.parameters() if p.requires_grad]
+        train_rollout(twin, params, train, val, noise_std, [(120, args.iters)], 5e-4, rng, log="tune ", val_horizon=120, noise_injection=True, recovery=True)
+        torch.save({**ckpt, "state": twin.state_dict(), "recovery": True}, args.out / "twin_gru.pt")
+        return
 
     # Cross-correlation gives a first guess; the delay that fits best wins.
     guess = estimate_delays(data["splits"]["train"], robots)
@@ -251,7 +288,7 @@ def main():
     n = args.iters
     # Curriculum up to 2 s of free-running on its own predictions.
     schedule = [(10, n // 6), (30, n // 6), (60, n // 3), (120, n // 3)]
-    train_rollout(twin, params, train, val, noise_std, schedule, 2e-3, rng, log="twin ", val_horizon=120, noise_injection=True)
+    train_rollout(twin, params, train, val, noise_std, schedule, 2e-3, rng, log="twin ", val_horizon=120, noise_injection=True, recovery=True)
     torch.save({"kind": "gru", "state": twin.state_dict(), "delays": delays, "hidden": twin.hidden, **meta}, args.out / "twin_gru.pt")
 
 

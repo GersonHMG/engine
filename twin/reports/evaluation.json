@@ -1,0 +1,1121 @@
+{
+  "criteria": {
+    "pos_1s_median_m": 0.03,
+    "heading_1s_median_deg": 2.0,
+    "improvement_vs_fitted": 0.5,
+    "maneuver_pos_m": 0.05,
+    "maneuver_heading_deg": 3.0,
+    "freerun_vel_rmse_ms": 0.1,
+    "freerun_omega_rmse_rads": 0.5,
+    "freerun_growth": 1.5,
+    "loop_settle_s": 0.15,
+    "loop_path_m": 0.05
+  },
+  "robots": {
+    "bad_wheel": {
+      "windows": 624,
+      "metrics": {
+        "noise floor": {
+          "start pose error (smoothed vs truth), m": 0.0015640170313417912,
+          "raw vision error vs truth, m": 0.003799572354182601
+        },
+        "ssl-sim (default)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0452,
+            0.0535,
+            0.4743
+          ],
+          "pos 0.5 s median m": 0.22577440738677979,
+          "pos 0.5 s p90 m": 0.45882242918014526,
+          "heading 0.5 s median deg": 13.838796615600586,
+          "pos 1 s median m": 0.43649572134017944,
+          "pos 1 s p90 m": 1.0669152736663818,
+          "heading 1 s median deg": 25.243000030517578,
+          "pos 2 s median m": 0.7471953630447388,
+          "pos 2 s p90 m": 2.206543445587158,
+          "heading 2 s median deg": 46.057708740234375,
+          "pos 1 s median vs raw vision m": 0.44512540102005005
+        },
+        "ssl-sim (fitted)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0181,
+            0.019,
+            0.1965
+          ],
+          "pos 0.5 s median m": 0.05731021612882614,
+          "pos 0.5 s p90 m": 0.14861471951007843,
+          "heading 0.5 s median deg": 9.782146453857422,
+          "pos 1 s median m": 0.17378801107406616,
+          "pos 1 s p90 m": 0.5452905297279358,
+          "heading 1 s median deg": 29.06395721435547,
+          "pos 2 s median m": 0.5620255470275879,
+          "pos 2 s p90 m": 1.8415549993515015,
+          "heading 2 s median deg": 50.52008056640625,
+          "pos 1 s median vs raw vision m": 0.17553696036338806
+        },
+        "ARX (linear)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0197,
+            0.0168,
+            0.1804
+          ],
+          "pos 0.5 s median m": 0.0756784975528717,
+          "pos 0.5 s p90 m": 0.15054503083229065,
+          "heading 0.5 s median deg": 10.243842124938965,
+          "pos 1 s median m": 0.22607341408729553,
+          "pos 1 s p90 m": 0.42270541191101074,
+          "heading 1 s median deg": 35.857086181640625,
+          "pos 2 s median m": 0.5465866327285767,
+          "pos 2 s p90 m": 1.4540361166000366,
+          "heading 2 s median deg": 66.52908325195312,
+          "pos 1 s median vs raw vision m": 0.225340336561203
+        },
+        "GRU twin": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0127,
+            0.0121,
+            0.114
+          ],
+          "pos 0.5 s median m": 0.008982561528682709,
+          "pos 0.5 s p90 m": 0.02095307968556881,
+          "heading 0.5 s median deg": 0.7333983182907104,
+          "pos 1 s median m": 0.018459651619195938,
+          "pos 1 s p90 m": 0.047661930322647095,
+          "heading 1 s median deg": 1.1883435249328613,
+          "pos 2 s median m": 0.04155358299612999,
+          "pos 2 s p90 m": 0.1363772600889206,
+          "heading 2 s median deg": 2.3627262115478516,
+          "by regime": {
+            "≤ 1 m/s": {
+              "windows": 137,
+              "pos 1 s median m": 0.004275273997336626,
+              "heading 1 s median deg": 0.3638851046562195
+            },
+            "1–2 m/s": {
+              "windows": 233,
+              "pos 1 s median m": 0.022212497889995575,
+              "heading 1 s median deg": 1.6761829853057861
+            },
+            "2–2.5 m/s": {
+              "windows": 126,
+              "pos 1 s median m": 0.019651470705866814,
+              "heading 1 s median deg": 1.1748803853988647
+            },
+            "> 2.5 m/s, spin ≤ 3 rad/s": {
+              "windows": 61,
+              "pos 1 s median m": 0.0212554894387722,
+              "heading 1 s median deg": 1.896770715713501
+            },
+            "> 2.5 m/s, spin > 3 rad/s": {
+              "windows": 67,
+              "pos 1 s median m": 0.0335882306098938,
+              "heading 1 s median deg": 3.725294351577759
+            }
+          },
+          "pos 1 s median vs raw vision m": 0.018060773611068726
+        }
+      },
+      "residual_r2": [
+        0.012,
+        0.003,
+        0.02
+      ],
+      "maneuvers": [
+        {
+          "maneuver": "forward 1 m/s",
+          "real end (x, y, θ°)": [
+            1.423,
+            0.327,
+            4.3
+          ],
+          "twin end (x, y, θ°)": [
+            1.422,
+            0.3,
+            3.9
+          ],
+          "end position error m": 0.0272,
+          "end heading error deg": 0.4,
+          "max position error m": 0.0304
+        },
+        {
+          "maneuver": "forward 2.5 m/s",
+          "real end (x, y, θ°)": [
+            1.363,
+            2.213,
+            55.8
+          ],
+          "twin end (x, y, θ°)": [
+            1.308,
+            2.218,
+            55.9
+          ],
+          "end position error m": 0.0552,
+          "end heading error deg": 0.09,
+          "max position error m": 0.0552
+        },
+        {
+          "maneuver": "backward 1.5 m/s",
+          "real end (x, y, θ°)": [
+            -1.744,
+            1.038,
+            -20.4
+          ],
+          "twin end (x, y, θ°)": [
+            -1.727,
+            1.052,
+            -20.1
+          ],
+          "end position error m": 0.0229,
+          "end heading error deg": 0.23,
+          "max position error m": 0.0249
+        },
+        {
+          "maneuver": "left 1 m/s",
+          "real end (x, y, θ°)": [
+            0.418,
+            1.306,
+            -10.8
+          ],
+          "twin end (x, y, θ°)": [
+            0.446,
+            1.295,
+            -11.8
+          ],
+          "end position error m": 0.0304,
+          "end heading error deg": 1.02,
+          "max position error m": 0.0304
+        },
+        {
+          "maneuver": "right 2 m/s",
+          "real end (x, y, θ°)": [
+            1.105,
+            -1.284,
+            75.2
+          ],
+          "twin end (x, y, θ°)": [
+            1.096,
+            -1.291,
+            73.8
+          ],
+          "end position error m": 0.0111,
+          "end heading error deg": 1.39,
+          "max position error m": 0.0126
+        },
+        {
+          "maneuver": "left creep 0.15 m/s",
+          "real end (x, y, θ°)": [
+            0.011,
+            0.183,
+            -1.7
+          ],
+          "twin end (x, y, θ°)": [
+            0.009,
+            0.195,
+            -1.0
+          ],
+          "end position error m": 0.0118,
+          "end heading error deg": 0.73,
+          "max position error m": 0.0129
+        },
+        {
+          "maneuver": "forward creep 0.1 m/s",
+          "real end (x, y, θ°)": [
+            0.13,
+            0.007,
+            0.8
+          ],
+          "twin end (x, y, θ°)": [
+            0.145,
+            0.003,
+            0.2
+          ],
+          "end position error m": 0.0158,
+          "end heading error deg": 0.55,
+          "max position error m": 0.0184
+        },
+        {
+          "maneuver": "diagonal 1.5 m/s",
+          "real end (x, y, θ°)": [
+            1.739,
+            1.014,
+            -9.5
+          ],
+          "twin end (x, y, θ°)": [
+            1.733,
+            0.998,
+            -9.3
+          ],
+          "end position error m": 0.0164,
+          "end heading error deg": 0.14,
+          "max position error m": 0.0164
+        },
+        {
+          "maneuver": "spin 4 rad/s",
+          "real end (x, y, θ°)": [
+            0.001,
+            0.001,
+            343.4
+          ],
+          "twin end (x, y, θ°)": [
+            0.001,
+            0.004,
+            342.7
+          ],
+          "end position error m": 0.0033,
+          "end heading error deg": 0.69,
+          "max position error m": 0.0033
+        },
+        {
+          "maneuver": "forward 1 m/s + spin 3 rad/s",
+          "real end (x, y, θ°)": [
+            -0.193,
+            0.709,
+            222.0
+          ],
+          "twin end (x, y, θ°)": [
+            -0.249,
+            0.682,
+            224.3
+          ],
+          "end position error m": 0.0622,
+          "end heading error deg": 2.29,
+          "max position error m": 0.0663
+        }
+      ],
+      "free_runs": [
+        {
+          "session": "move_to",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0367,
+            0.0409,
+            0.14
+          ],
+          "growth": 2.47,
+          "final position drift m": 2.348,
+          "max |v| twin": 2.23
+        },
+        {
+          "session": "prbs",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0645,
+            0.0663,
+            0.3372
+          ],
+          "growth": 1.29,
+          "final position drift m": 3.989,
+          "max |v| twin": 1.93
+        },
+        {
+          "session": "spin_translate",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0428,
+            0.0457,
+            0.1796
+          ],
+          "growth": 0.84,
+          "final position drift m": 0.855,
+          "max |v| twin": 1.4
+        },
+        {
+          "session": "steps",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0207,
+            0.019,
+            0.1582
+          ],
+          "growth": 0.63,
+          "final position drift m": 1.071,
+          "max |v| twin": 2.01
+        }
+      ],
+      "closed_loop": [
+        {
+          "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0 m/s",
+          "real settle s": 2.833,
+          "twin settle s": 2.833,
+          "max path separation m": 0.0132
+        },
+        {
+          "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0 m/s",
+          "real settle s": 3.217,
+          "twin settle s": 3.267,
+          "max path separation m": 0.0173
+        },
+        {
+          "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5 m/s",
+          "real settle s": 3.283,
+          "twin settle s": 3.317,
+          "max path separation m": 0.029
+        },
+        {
+          "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0 m/s",
+          "real settle s": 3.333,
+          "twin settle s": 3.183,
+          "max path separation m": 0.1219
+        },
+        {
+          "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0 m/s",
+          "real settle s": 0.817,
+          "twin settle s": 0.9,
+          "max path separation m": 0.0178
+        },
+        {
+          "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0 m/s",
+          "real settle s": 3.883,
+          "twin settle s": 3.967,
+          "max path separation m": 0.127
+        }
+      ],
+      "checks": {
+        "1 s median position error ≤ 3 cm": true,
+        "1 s median heading error ≤ 2.0°": true,
+        "≥ 50 % better than fitted ssl-sim at 1 s": true,
+        "every maneuver ends within 5 cm and 3.0°": false,
+        "2-min free runs: vel RMSE ≤ 0.1 m/s, ω ≤ 0.5 rad/s, error growth ≤ 1.5×": false,
+        "closed loop: settles within 0.15 s of the real robot, paths within 5 cm": false
+      },
+      "passed": false
+    },
+    "lateral": {
+      "windows": 691,
+      "metrics": {
+        "noise floor": {
+          "start pose error (smoothed vs truth), m": 0.001615359098650515,
+          "raw vision error vs truth, m": 0.003798458259552717
+        },
+        "ssl-sim (default)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0421,
+            0.0602,
+            0.397
+          ],
+          "pos 0.5 s median m": 0.23017889261245728,
+          "pos 0.5 s p90 m": 0.4999412000179291,
+          "heading 0.5 s median deg": 8.641183853149414,
+          "pos 1 s median m": 0.3839801251888275,
+          "pos 1 s p90 m": 1.1971397399902344,
+          "heading 1 s median deg": 17.965417861938477,
+          "pos 2 s median m": 0.7311668395996094,
+          "pos 2 s p90 m": 2.0920357704162598,
+          "heading 2 s median deg": 26.57976531982422,
+          "pos 1 s median vs raw vision m": 0.3765195310115814
+        },
+        "ssl-sim (fitted)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0202,
+            0.0205,
+            0.1574
+          ],
+          "pos 0.5 s median m": 0.08159938454627991,
+          "pos 0.5 s p90 m": 0.1893794685602188,
+          "heading 0.5 s median deg": 4.299358367919922,
+          "pos 1 s median m": 0.262173056602478,
+          "pos 1 s p90 m": 0.6120778918266296,
+          "heading 1 s median deg": 17.439842224121094,
+          "pos 2 s median m": 0.6520529389381409,
+          "pos 2 s p90 m": 1.6101727485656738,
+          "heading 2 s median deg": 46.45427322387695,
+          "pos 1 s median vs raw vision m": 0.264202356338501
+        },
+        "ARX (linear)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0204,
+            0.0194,
+            0.1371
+          ],
+          "pos 0.5 s median m": 0.07129234820604324,
+          "pos 0.5 s p90 m": 0.1440315991640091,
+          "heading 0.5 s median deg": 3.5647573471069336,
+          "pos 1 s median m": 0.19449664652347565,
+          "pos 1 s p90 m": 0.34510987997055054,
+          "heading 1 s median deg": 10.514884948730469,
+          "pos 2 s median m": 0.34337103366851807,
+          "pos 2 s p90 m": 0.8350087404251099,
+          "heading 2 s median deg": 22.87523078918457,
+          "pos 1 s median vs raw vision m": 0.19540667533874512
+        },
+        "GRU twin": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0129,
+            0.0121,
+            0.1067
+          ],
+          "pos 0.5 s median m": 0.007099215406924486,
+          "pos 0.5 s p90 m": 0.01882125623524189,
+          "heading 0.5 s median deg": 0.5999638438224792,
+          "pos 1 s median m": 0.013373651541769505,
+          "pos 1 s p90 m": 0.040776293724775314,
+          "heading 1 s median deg": 1.1300411224365234,
+          "pos 2 s median m": 0.027556588873267174,
+          "pos 2 s p90 m": 0.10040213912725449,
+          "heading 2 s median deg": 2.3816871643066406,
+          "by regime": {
+            "≤ 1 m/s": {
+              "windows": 174,
+              "pos 1 s median m": 0.006536176428198814,
+              "heading 1 s median deg": 0.41153591871261597
+            },
+            "1–2 m/s": {
+              "windows": 263,
+              "pos 1 s median m": 0.014937205240130424,
+              "heading 1 s median deg": 1.5328582525253296
+            },
+            "2–2.5 m/s": {
+              "windows": 96,
+              "pos 1 s median m": 0.01285042054951191,
+              "heading 1 s median deg": 1.8930723667144775
+            },
+            "> 2.5 m/s, spin ≤ 3 rad/s": {
+              "windows": 72,
+              "pos 1 s median m": 0.01379136648029089,
+              "heading 1 s median deg": 1.330855369567871
+            },
+            "> 2.5 m/s, spin > 3 rad/s": {
+              "windows": 86,
+              "pos 1 s median m": 0.027117419987916946,
+              "heading 1 s median deg": 4.029326438903809
+            }
+          },
+          "pos 1 s median vs raw vision m": 0.01291106827557087
+        }
+      },
+      "residual_r2": [
+        0.005,
+        0.009,
+        0.084
+      ],
+      "maneuvers": [
+        {
+          "maneuver": "forward 1 m/s",
+          "real end (x, y, θ°)": [
+            1.444,
+            -0.0,
+            -0.0
+          ],
+          "twin end (x, y, θ°)": [
+            1.442,
+            -0.01,
+            -0.6
+          ],
+          "end position error m": 0.0106,
+          "end heading error deg": 0.63,
+          "max position error m": 0.0109
+        },
+        {
+          "maneuver": "forward 2.5 m/s",
+          "real end (x, y, θ°)": [
+            2.955,
+            0.0,
+            0.0
+          ],
+          "twin end (x, y, θ°)": [
+            2.926,
+            -0.027,
+            -1.2
+          ],
+          "end position error m": 0.0396,
+          "end heading error deg": 1.15,
+          "max position error m": 0.0396
+        },
+        {
+          "maneuver": "backward 1.5 m/s",
+          "real end (x, y, θ°)": [
+            -2.119,
+            -0.0,
+            0.0
+          ],
+          "twin end (x, y, θ°)": [
+            -2.124,
+            -0.004,
+            0.4
+          ],
+          "end position error m": 0.0068,
+          "end heading error deg": 0.41,
+          "max position error m": 0.0071
+        },
+        {
+          "maneuver": "left 1 m/s",
+          "real end (x, y, θ°)": [
+            -0.026,
+            1.145,
+            -0.2
+          ],
+          "twin end (x, y, θ°)": [
+            -0.022,
+            1.13,
+            1.0
+          ],
+          "end position error m": 0.0151,
+          "end heading error deg": 1.26,
+          "max position error m": 0.016
+        },
+        {
+          "maneuver": "right 2 m/s",
+          "real end (x, y, θ°)": [
+            -0.104,
+            -1.222,
+            -31.3
+          ],
+          "twin end (x, y, θ°)": [
+            -0.123,
+            -1.219,
+            -31.1
+          ],
+          "end position error m": 0.0194,
+          "end heading error deg": 0.21,
+          "max position error m": 0.0214
+        },
+        {
+          "maneuver": "left creep 0.15 m/s",
+          "real end (x, y, θ°)": [
+            0.002,
+            0.141,
+            -1.5
+          ],
+          "twin end (x, y, θ°)": [
+            -0.002,
+            0.146,
+            -0.9
+          ],
+          "end position error m": 0.0067,
+          "end heading error deg": 0.57,
+          "max position error m": 0.0076
+        },
+        {
+          "maneuver": "forward creep 0.1 m/s",
+          "real end (x, y, θ°)": [
+            0.132,
+            -0.0,
+            -0.0
+          ],
+          "twin end (x, y, θ°)": [
+            0.143,
+            -0.003,
+            -0.0
+          ],
+          "end position error m": 0.0109,
+          "end heading error deg": 0.01,
+          "max position error m": 0.0139
+        },
+        {
+          "maneuver": "diagonal 1.5 m/s",
+          "real end (x, y, θ°)": [
+            1.208,
+            0.401,
+            -24.1
+          ],
+          "twin end (x, y, θ°)": [
+            1.193,
+            0.369,
+            -24.9
+          ],
+          "end position error m": 0.0352,
+          "end heading error deg": 0.82,
+          "max position error m": 0.0361
+        },
+        {
+          "maneuver": "spin 4 rad/s",
+          "real end (x, y, θ°)": [
+            0.0,
+            0.0,
+            343.5
+          ],
+          "twin end (x, y, θ°)": [
+            0.001,
+            0.002,
+            343.6
+          ],
+          "end position error m": 0.0016,
+          "end heading error deg": 0.16,
+          "max position error m": 0.0016
+        },
+        {
+          "maneuver": "forward 1 m/s + spin 3 rad/s",
+          "real end (x, y, θ°)": [
+            -0.237,
+            0.515,
+            237.2
+          ],
+          "twin end (x, y, θ°)": [
+            -0.211,
+            0.527,
+            237.0
+          ],
+          "end position error m": 0.0288,
+          "end heading error deg": 0.18,
+          "max position error m": 0.029
+        }
+      ],
+      "free_runs": [
+        {
+          "session": "move_to",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0607,
+            0.0263,
+            0.1596
+          ],
+          "growth": 1.38,
+          "final position drift m": 2.534,
+          "max |v| twin": 2.36
+        },
+        {
+          "session": "prbs",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0482,
+            0.0423,
+            0.3071
+          ],
+          "growth": 1.14,
+          "final position drift m": 3.389,
+          "max |v| twin": 1.61
+        },
+        {
+          "session": "spin_translate",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0339,
+            0.0376,
+            0.1535
+          ],
+          "growth": 2.08,
+          "final position drift m": 2.49,
+          "max |v| twin": 1.39
+        },
+        {
+          "session": "steps",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0197,
+            0.0127,
+            0.1068
+          ],
+          "growth": 1.0,
+          "final position drift m": 0.697,
+          "max |v| twin": 1.98
+        }
+      ],
+      "closed_loop": [
+        {
+          "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0 m/s",
+          "real settle s": 2.233,
+          "twin settle s": 2.15,
+          "max path separation m": 0.0236
+        },
+        {
+          "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0 m/s",
+          "real settle s": 3.8,
+          "twin settle s": 3.817,
+          "max path separation m": 0.0233
+        },
+        {
+          "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5 m/s",
+          "real settle s": 3.3,
+          "twin settle s": 3.317,
+          "max path separation m": 0.0155
+        },
+        {
+          "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0 m/s",
+          "real settle s": 2.7,
+          "twin settle s": 2.583,
+          "max path separation m": 0.0518
+        },
+        {
+          "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0 m/s",
+          "real settle s": 0.917,
+          "twin settle s": 0.983,
+          "max path separation m": 0.0121
+        },
+        {
+          "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0 m/s",
+          "real settle s": 5.1,
+          "twin settle s": 5.133,
+          "max path separation m": 0.0628
+        }
+      ],
+      "checks": {
+        "1 s median position error ≤ 3 cm": true,
+        "1 s median heading error ≤ 2.0°": true,
+        "≥ 50 % better than fitted ssl-sim at 1 s": true,
+        "every maneuver ends within 5 cm and 3.0°": true,
+        "2-min free runs: vel RMSE ≤ 0.1 m/s, ω ≤ 0.5 rad/s, error growth ≤ 1.5×": false,
+        "closed loop: settles within 0.15 s of the real robot, paths within 5 cm": false
+      },
+      "passed": false
+    },
+    "perfect": {
+      "windows": 690,
+      "metrics": {
+        "noise floor": {
+          "start pose error (smoothed vs truth), m": 0.003986692987382412,
+          "raw vision error vs truth, m": 0.004299996420741081
+        },
+        "ssl-sim (default)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0402,
+            0.0495,
+            0.39
+          ],
+          "pos 0.5 s median m": 0.20123037695884705,
+          "pos 0.5 s p90 m": 0.4051230847835541,
+          "heading 0.5 s median deg": 6.2049055099487305,
+          "pos 1 s median m": 0.3715772032737732,
+          "pos 1 s p90 m": 0.9304936528205872,
+          "heading 1 s median deg": 13.49062728881836,
+          "pos 2 s median m": 0.6528856754302979,
+          "pos 2 s p90 m": 1.739119052886963,
+          "heading 2 s median deg": 20.17955780029297,
+          "pos 1 s median vs raw vision m": 0.36845168471336365
+        },
+        "ssl-sim (fitted)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0201,
+            0.0198,
+            0.151
+          ],
+          "pos 0.5 s median m": 0.04412126541137695,
+          "pos 0.5 s p90 m": 0.1484186202287674,
+          "heading 0.5 s median deg": 5.240228652954102,
+          "pos 1 s median m": 0.14183121919631958,
+          "pos 1 s p90 m": 0.5109578371047974,
+          "heading 1 s median deg": 12.951482772827148,
+          "pos 2 s median m": 0.4163568615913391,
+          "pos 2 s p90 m": 1.5554579496383667,
+          "heading 2 s median deg": 21.926820755004883,
+          "pos 1 s median vs raw vision m": 0.14102505147457123
+        },
+        "ARX (linear)": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0239,
+            0.0195,
+            0.1476
+          ],
+          "pos 0.5 s median m": 0.07317272573709488,
+          "pos 0.5 s p90 m": 0.1879672408103943,
+          "heading 0.5 s median deg": 4.064249038696289,
+          "pos 1 s median m": 0.21987009048461914,
+          "pos 1 s p90 m": 0.46033594012260437,
+          "heading 1 s median deg": 12.077108383178711,
+          "pos 2 s median m": 0.44055595993995667,
+          "pos 2 s p90 m": 1.0875171422958374,
+          "heading 2 s median deg": 29.190235137939453,
+          "pos 1 s median vs raw vision m": 0.21855133771896362
+        },
+        "GRU twin": {
+          "one-step velocity RMSE vt, vn, ω": [
+            0.0144,
+            0.0136,
+            0.1091
+          ],
+          "pos 0.5 s median m": 0.007856925949454308,
+          "pos 0.5 s p90 m": 0.020055117085576057,
+          "heading 0.5 s median deg": 0.6628835201263428,
+          "pos 1 s median m": 0.015685781836509705,
+          "pos 1 s p90 m": 0.05282832682132721,
+          "heading 1 s median deg": 1.0366027355194092,
+          "pos 2 s median m": 0.03326348215341568,
+          "pos 2 s p90 m": 0.1353711038827896,
+          "heading 2 s median deg": 1.891822338104248,
+          "by regime": {
+            "≤ 1 m/s": {
+              "windows": 150,
+              "pos 1 s median m": 0.005016033072024584,
+              "heading 1 s median deg": 0.42053472995758057
+            },
+            "1–2 m/s": {
+              "windows": 277,
+              "pos 1 s median m": 0.017720505595207214,
+              "heading 1 s median deg": 1.0445270538330078
+            },
+            "2–2.5 m/s": {
+              "windows": 122,
+              "pos 1 s median m": 0.018112463876605034,
+              "heading 1 s median deg": 1.0539186000823975
+            },
+            "> 2.5 m/s, spin ≤ 3 rad/s": {
+              "windows": 69,
+              "pos 1 s median m": 0.016040224581956863,
+              "heading 1 s median deg": 1.2353488206863403
+            },
+            "> 2.5 m/s, spin > 3 rad/s": {
+              "windows": 72,
+              "pos 1 s median m": 0.034154295921325684,
+              "heading 1 s median deg": 3.109520435333252
+            }
+          },
+          "pos 1 s median vs raw vision m": 0.015233106911182404
+        }
+      },
+      "residual_r2": [
+        0.039,
+        0.022,
+        0.058
+      ],
+      "maneuvers": [
+        {
+          "maneuver": "forward 1 m/s",
+          "real end (x, y, θ°)": [
+            1.477,
+            -0.0,
+            -0.0
+          ],
+          "twin end (x, y, θ°)": [
+            1.473,
+            -0.015,
+            -0.3
+          ],
+          "end position error m": 0.0156,
+          "end heading error deg": 0.28,
+          "max position error m": 0.0161
+        },
+        {
+          "maneuver": "forward 2.5 m/s",
+          "real end (x, y, θ°)": [
+            3.372,
+            -0.0,
+            0.0
+          ],
+          "twin end (x, y, θ°)": [
+            3.356,
+            -0.072,
+            -0.6
+          ],
+          "end position error m": 0.0739,
+          "end heading error deg": 0.59,
+          "max position error m": 0.0739
+        },
+        {
+          "maneuver": "backward 1.5 m/s",
+          "real end (x, y, θ°)": [
+            -2.196,
+            -0.0,
+            0.0
+          ],
+          "twin end (x, y, θ°)": [
+            -2.204,
+            0.03,
+            -0.4
+          ],
+          "end position error m": 0.0308,
+          "end heading error deg": 0.43,
+          "max position error m": 0.031
+        },
+        {
+          "maneuver": "left 1 m/s",
+          "real end (x, y, θ°)": [
+            -0.005,
+            1.409,
+            -1.6
+          ],
+          "twin end (x, y, θ°)": [
+            0.017,
+            1.412,
+            -1.7
+          ],
+          "end position error m": 0.0222,
+          "end heading error deg": 0.04,
+          "max position error m": 0.0223
+        },
+        {
+          "maneuver": "right 2 m/s",
+          "real end (x, y, θ°)": [
+            -0.316,
+            -2.536,
+            2.1
+          ],
+          "twin end (x, y, θ°)": [
+            -0.373,
+            -2.526,
+            0.2
+          ],
+          "end position error m": 0.0584,
+          "end heading error deg": 1.84,
+          "max position error m": 0.0586
+        },
+        {
+          "maneuver": "left creep 0.15 m/s",
+          "real end (x, y, θ°)": [
+            0.001,
+            0.193,
+            -0.6
+          ],
+          "twin end (x, y, θ°)": [
+            0.002,
+            0.198,
+            -0.6
+          ],
+          "end position error m": 0.005,
+          "end heading error deg": 0.06,
+          "max position error m": 0.0064
+        },
+        {
+          "maneuver": "forward creep 0.1 m/s",
+          "real end (x, y, θ°)": [
+            0.135,
+            -0.0,
+            -0.0
+          ],
+          "twin end (x, y, θ°)": [
+            0.146,
+            -0.001,
+            0.0
+          ],
+          "end position error m": 0.0107,
+          "end heading error deg": 0.04,
+          "max position error m": 0.0127
+        },
+        {
+          "maneuver": "diagonal 1.5 m/s",
+          "real end (x, y, θ°)": [
+            1.718,
+            1.046,
+            -6.4
+          ],
+          "twin end (x, y, θ°)": [
+            1.691,
+            1.076,
+            -5.8
+          ],
+          "end position error m": 0.0402,
+          "end heading error deg": 0.61,
+          "max position error m": 0.0402
+        },
+        {
+          "maneuver": "spin 4 rad/s",
+          "real end (x, y, θ°)": [
+            0.001,
+            0.0,
+            343.5
+          ],
+          "twin end (x, y, θ°)": [
+            0.001,
+            0.0,
+            343.4
+          ],
+          "end position error m": 0.0008,
+          "end heading error deg": 0.13,
+          "max position error m": 0.0018
+        },
+        {
+          "maneuver": "forward 1 m/s + spin 3 rad/s",
+          "real end (x, y, θ°)": [
+            -0.126,
+            0.614,
+            228.8
+          ],
+          "twin end (x, y, θ°)": [
+            -0.141,
+            0.557,
+            234.2
+          ],
+          "end position error m": 0.0591,
+          "end heading error deg": 5.47,
+          "max position error m": 0.0591
+        }
+      ],
+      "free_runs": [
+        {
+          "session": "move_to",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0282,
+            0.0282,
+            0.1288
+          ],
+          "growth": 1.13,
+          "final position drift m": 1.579,
+          "max |v| twin": 2.41
+        },
+        {
+          "session": "prbs",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0939,
+            0.0939,
+            0.325
+          ],
+          "growth": 2.42,
+          "final position drift m": 4.433,
+          "max |v| twin": 2.48
+        },
+        {
+          "session": "spin_translate",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0359,
+            0.0431,
+            0.1933
+          ],
+          "growth": 0.86,
+          "final position drift m": 1.825,
+          "max |v| twin": 1.57
+        },
+        {
+          "session": "steps",
+          "seconds": 120.0,
+          "vel RMSE vt, vn (m/s), ω (rad/s)": [
+            0.0156,
+            0.0161,
+            0.1186
+          ],
+          "growth": 1.93,
+          "final position drift m": 0.242,
+          "max |v| twin": 2.41
+        }
+      ],
+      "closed_loop": [
+        {
+          "leg": "(-2.0, 0.0) -> (1.0, 0.0) @ 2.0 m/s",
+          "real settle s": 2.067,
+          "twin settle s": 2.033,
+          "max path separation m": 0.0142
+        },
+        {
+          "leg": "(0.0, -1.5) -> (0.0, 1.5) @ 2.0 m/s",
+          "real settle s": 2.2,
+          "twin settle s": 2.2,
+          "max path separation m": 0.0095
+        },
+        {
+          "leg": "(-1.0, -1.0) -> (1.0, 1.0) @ 2.5 m/s",
+          "real settle s": 2.85,
+          "twin settle s": 2.883,
+          "max path separation m": 0.0207
+        },
+        {
+          "leg": "(1.5, 0.5) -> (-1.5, -0.5) @ 3.0 m/s",
+          "real settle s": 2.9,
+          "twin settle s": 2.7,
+          "max path separation m": 0.1059
+        },
+        {
+          "leg": "(0.0, 0.0) -> (0.3, 0.2) @ 1.0 m/s",
+          "real settle s": 0.8,
+          "twin settle s": 0.883,
+          "max path separation m": 0.0156
+        },
+        {
+          "leg": "(-2.0, 1.0) -> (2.0, -1.0) @ 3.0 m/s",
+          "real settle s": 3.733,
+          "twin settle s": 3.8,
+          "max path separation m": 0.0857
+        }
+      ],
+      "checks": {
+        "1 s median position error ≤ 3 cm": true,
+        "1 s median heading error ≤ 2.0°": true,
+        "≥ 50 % better than fitted ssl-sim at 1 s": true,
+        "every maneuver ends within 5 cm and 3.0°": false,
+        "2-min free runs: vel RMSE ≤ 0.1 m/s, ω ≤ 0.5 rad/s, error growth ≤ 1.5×": false,
+        "closed loop: settles within 0.15 s of the real robot, paths within 5 cm": false
+      },
+      "passed": false
+    }
+  },
+  "passed": false
+}
