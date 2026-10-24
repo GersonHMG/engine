@@ -25,7 +25,8 @@ from .robots import TICK
 
 Z_DIM = 8
 N_DELAYS = HISTORY  # soft command delay over 0 … HISTORY - 1 ticks
-TRANSITION_DIM = 3 * HISTORY + 6  # command window, velocity, velocity change
+FUTURE = HISTORY - 1  # ticks of response after each context tick (200 ms)
+TRANSITION_DIM = 3 * HISTORY + 3 * (HISTORY + FUTURE)  # 200 ms of commands, ±200 ms of velocity
 
 # Physics parameter layout: (name, size, low, high, nominal). Rates and limits
 # are mapped log-uniformly into [low, high].
@@ -152,6 +153,8 @@ class AdaptiveTwin(nn.Module):
         nn.init.zeros_(self.head[-1].weight)
         nn.init.zeros_(self.head[-1].bias)
         self.privileged_head = nn.Sequential(nn.Linear(Z_DIM, 64), nn.Tanh(), nn.Linear(64, len(PRIVILEGED)))
+        # Teacher (training in sim only): z from the true hardware parameters.
+        self.teacher = nn.Sequential(nn.Linear(len(PRIVILEGED), 64), nn.ReLU(), nn.Linear(64, 64), nn.ReLU(), nn.Linear(64, Z_DIM))
 
     def encode(self, context, mask):
         return self.encoder(context, mask)
@@ -211,17 +214,27 @@ def rollout(model, z, cmd, v_warm, pose0, warm, horizon, prefix):
 
 
 def transitions(cmd: np.ndarray, body: np.ndarray) -> np.ndarray:
-    """Context features for every tick of a segment that has a full command
-    window and a next tick: (N, TRANSITION_DIM), float32."""
+    """Context features for every tick of a segment with a full command window
+    before it and FUTURE ticks after it: (N, TRANSITION_DIM), float32."""
+    ks = np.arange(HISTORY - 1, len(cmd) - FUTURE)
+    return transition_features(cmd, body, ks)
+
+
+def transition_features(cmd: np.ndarray, body: np.ndarray, ks: np.ndarray) -> np.ndarray:
+    """For each tick k: commands k-12 … k and body velocities k-12 … k+12,
+    the velocities expressed in the robot frame of tick k (heading changes
+    integrated from omega). A local input/response clip of the robot."""
     scale = np.array([2.0, 2.0, 5.0])
-    L = len(cmd)
-    if L < HISTORY + 1:
+    if len(ks) == 0:
         return np.zeros((0, TRANSITION_DIM), dtype=np.float32)
-    ks = np.arange(HISTORY - 1, L - 1)
-    windows = np.stack([cmd[k - HISTORY + 1 : k + 1] for k in ks]) / scale  # (N, HISTORY, 3)
-    v = body[ks]
-    nxt = body[ks + 1]
-    a = nxt[:, 2] * TICK  # next velocity back into the frame of tick k
-    nxt_k = np.stack([np.cos(a) * nxt[:, 0] - np.sin(a) * nxt[:, 1], np.sin(a) * nxt[:, 0] + np.cos(a) * nxt[:, 1], nxt[:, 2]], 1)
-    feats = np.concatenate([windows.reshape(len(ks), -1), v / scale, (nxt_k - v) / (0.1 * scale)], axis=1)
-    return feats.astype(np.float32)
+    c_off = np.arange(-(HISTORY - 1), 1)
+    v_off = np.arange(-(HISTORY - 1), FUTURE + 1)
+    windows = cmd[ks[:, None] + c_off] / scale  # (N, HISTORY, 3)
+    v = body[ks[:, None] + v_off]  # (N, 25, 3)
+    # Heading relative to tick k, from the integrated angular velocity.
+    w = v[..., 2] * TICK
+    rel = np.cumsum(w, axis=1)
+    rel = rel - rel[:, HISTORY - 1 : HISTORY]
+    c, s_ = np.cos(rel), np.sin(rel)
+    vk = np.stack([c * v[..., 0] - s_ * v[..., 1], s_ * v[..., 0] + c * v[..., 1], v[..., 2]], -1) / scale
+    return np.concatenate([windows.reshape(len(ks), -1), vk.reshape(len(ks), -1)], 1).astype(np.float32)

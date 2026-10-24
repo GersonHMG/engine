@@ -119,3 +119,36 @@ for cmd in commands:                     # (vt, vn, omega), robot frame
 
 The state is what vision would report (including its delay). Runs are
 deterministic.
+
+## Context-adaptive twin (generalization to unseen robots)
+
+Design: `docs/digital-twin-generalization.md`. No robot ID: an encoder reads a
+recording of the robot driving and outputs a dynamics code `z`, which sets a
+wheel-level physics prior and conditions (FiLM) the GRU correction. Trained on
+400 randomized robots (`population.py`), tested on 9 robots never seen in
+training. Training is teacher–student: the teacher computes `z` from the true
+hardware (simulation only), and the context encoder (student) learns to
+reproduce it from driving data.
+
+```sh
+python -m twin.population                                  # 400 + 50 random robots, 9 held-out test robots
+python -m twin.train_adaptive prepare
+python -m twin.train_adaptive train --phase teacher        # add --device cuda on a GPU
+python -m twin.train_adaptive train --phase student --lr 1e-3
+python -m twin.evaluate_adaptive                           # -> reports/evaluation_adaptive.md
+```
+
+First results (1-s open-loop error, cm, median; `reports/evaluation_adaptive.md`):
+
+| held-out robot | no context | 30 s context | 30 s + test-time adaptation | true hardware (upper bound) | ssl-sim fitted to 120 s |
+|---|---|---|---|---|---|
+| perfect | 9.7 | 4.7 | 3.1 | 3.4 | 13.0 |
+| bad_wheel | 11.1 | 3.9 | 1.8 | 2.5 | 13.9 |
+| lateral | 4.6 | 2.3 | 2.6 | 1.6 | 15.8 |
+| two_bad_wheels | 32.3 | 8.9 | 4.4 | 4.5 | 28.9 |
+| bad_wheel_lateral | 26.0 | 2.9 | 2.9 | 2.4 | 22.5 |
+| heavy_bad_wheel | 1.4 | 1.0 | 0.7 | 0.7 | 2.0 |
+
+Not yet usable as a simulator: from rest (2-s maneuvers, closed loop) it
+drifts 30–130 cm, and about 14 cm even with the true hardware code. The v6 twin
+above remains the better model for robots it was trained on.

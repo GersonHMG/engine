@@ -18,15 +18,15 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from .adaptive import AdaptiveTwin, rollout
+from .adaptive import TRANSITION_DIM, AdaptiveTwin, rollout
 from .evaluate import LEGS, MANEUVERS, heading_err, settle_time
 from .excitation import go_to
 from .models import MAX_DELAY, Prior, PriorModel
 from .models import rollout as prior_rollout
 from .population import Batch, PopulationSim
 from .robots import TICK, quantize
-from .train_adaptive import (PREFIX, STILL_TICKS, WARM, Session, collate, rollout_loss, target_window,
-                             transition_features)
+from .adaptive import transition_features
+from .train_adaptive import PREFIX, STILL_TICKS, WARM, Session, collate, rollout_loss, target_window
 
 CONTEXTS_S = (0, 1, 5, 30, 120)
 HORIZON = 120
@@ -43,10 +43,10 @@ def calibration_context(sess: Session, seconds: float) -> np.ndarray:
     start = int(np.searchsorted(sess.idx, STILL_TICKS))
     n = int(seconds / TICK)
     ks = sess.idx[start : start + n]
-    return transition_features(sess.cmd, sess.body, ks) if len(ks) else np.zeros((0, 45), np.float32)
+    return transition_features(sess.cmd, sess.body, ks) if len(ks) else np.zeros((0, TRANSITION_DIM), np.float32)
 
 
-def windows(sess: Session, every=30, lo_tick=0, hi_tick=None):
+def windows(sess: Session, every=15, lo_tick=0, hi_tick=None):
     """Regular target windows; positions are counted in the concatenated session."""
     out, offset = [], 0
     for i, g in enumerate(sess.segments):
@@ -78,7 +78,7 @@ def adapt_z(model, calib: Session, z0, device, steps=150, seconds=30):
     if not wins:
         return z0
     targets = [target_window(calib, i, s, 60) for i, s, _ in wins]
-    batch = collate(targets, [np.zeros((0, 45), np.float32)] * len(targets), device)
+    batch = collate(targets, [np.zeros((0, TRANSITION_DIM), np.float32)] * len(targets), device)
     z = z0.clone().requires_grad_(True)
     opt = torch.optim.Adam([z], lr=0.05)
     model.eval()
@@ -95,7 +95,7 @@ def fitted_physics(calib: Session, tests: list, device):
     """Baseline: ssl-sim's model with parameters and delay fitted to the same 120 s."""
     wins = windows(calib, every=10, lo_tick=STILL_TICKS)
     targets = [target_window(calib, i, s, 30) for i, s, _ in wins]
-    empty = [np.zeros((0, 45), np.float32)] * len(targets)
+    empty = [np.zeros((0, TRANSITION_DIM), np.float32)] * len(targets)
     batch = collate(targets, empty, device)
     robot = torch.zeros(len(targets), dtype=torch.long, device=device)
     best = None
@@ -115,7 +115,7 @@ def fitted_physics(calib: Session, tests: list, device):
     with torch.no_grad():
         for sess in tests:
             wins = windows(sess)
-            tb = collate([target_window(sess, i, s, HORIZON) for i, s, _ in wins], [np.zeros((0, 45), np.float32)] * len(wins), device)
+            tb = collate([target_window(sess, i, s, HORIZON) for i, s, _ in wins], [np.zeros((0, TRANSITION_DIM), np.float32)] * len(wins), device)
             r = torch.zeros(len(wins), dtype=torch.long, device=device)
             poses, _ = prior_rollout(model, r, tb["cmd"], tb["v_warm"], tb["pose0"], WARM, HORIZON)
             pos_all.append(torch.linalg.norm(poses[..., :2] - tb["truth_pose"][..., :2], dim=-1).cpu().numpy())
@@ -225,8 +225,8 @@ def main():
     lines += ["# Context-adaptive twin on held-out robots", "",
               f"Checkpoint step {ckpt['step']}. None of these robots was in training. Errors are against the "
               "noise-free truth on two test sessions separate from the calibration drive.", "",
-              "| robot | " + " | ".join(f"{c} s ctx" for c in CONTEXTS_S) + " | 30 s + TTA | fitted physics (120 s) | pos 2 s (30 s ctx) | heading 1 s (30 s ctx) |",
-              "|---|" + "---|" * (len(CONTEXTS_S) + 5)]
+              "| robot | " + " | ".join(f"{c} s ctx" for c in CONTEXTS_S) + " | 30 s + TTA | oracle z (true hardware) | fitted physics (120 s) | pos 2 s (30 s ctx) | heading 1 s (30 s ctx) |",
+              "|---|" + "---|" * (len(CONTEXTS_S) + 6)]
     for name in sorted(robots):
         sess = robots[name]
         calib, tests = sess["calibration"], [sess["test0"], sess["test1"]]
@@ -243,6 +243,10 @@ def main():
         with torch.no_grad():
             mu30, logvar30 = model.encode(torch.from_numpy(ctx30[None]).to(device), torch.ones(1, len(ctx30), dtype=torch.bool, device=device))
         r["z_std_30"] = float(torch.exp(0.5 * logvar30).mean())
+        with torch.no_grad():
+            z_oracle = model.teacher(torch.from_numpy(calib.privileged[None]).to(device))
+        pos = np.concatenate([errors(model, t, windows(t), [ctx30] * len(windows(t)), device, z=z_oracle)[0] for t in tests])
+        r["pos_1s_oracle"] = float(np.median(pos[:, 59]))
         z_tta = adapt_z(model, calib, mu30, device)
         pos = np.concatenate([errors(model, t, windows(t), [ctx30] * len(windows(t)), device, z=z_tta)[0] for t in tests])
         r["pos_1s_tta"] = float(np.median(pos[:, 59]))
@@ -267,7 +271,7 @@ def main():
         r["maneuvers"], r["closed_loop"] = maneuvers_and_loop(model, mu30, params, device)
         report["robots"][name] = r
         ctx_cells = " | ".join(f"{r['pos_1s_by_context'][c] * 100:.1f}" for c in CONTEXTS_S)
-        lines.append(f"| {name} | {ctx_cells} | {r['pos_1s_tta'] * 100:.1f} | {r['pos_1s_fitted_physics'] * 100:.1f} | "
+        lines.append(f"| {name} | {ctx_cells} | {r['pos_1s_tta'] * 100:.1f} | {r['pos_1s_oracle'] * 100:.1f} | {r['pos_1s_fitted_physics'] * 100:.1f} | "
                      f"{r['pos_2s_30'] * 100:.1f} | {r['heading_1s_30']:.2f}° |")
         print(lines[-1], flush=True)
 

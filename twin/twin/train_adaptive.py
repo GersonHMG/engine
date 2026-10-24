@@ -21,7 +21,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-from .adaptive import HISTORY, TRANSITION_DIM, AdaptiveTwin, rollout
+from .adaptive import FUTURE, HISTORY, TRANSITION_DIM, AdaptiveTwin, rollout, transition_features
 from .data import load_session, prepare, wrap
 
 WARM = 30
@@ -95,7 +95,7 @@ class Session:
             L = len(g["cmd"])
             cmd.append(g["cmd"])
             body.append(g["body"])
-            idx.append(np.arange(offset + HISTORY - 1, offset + L - 1))
+            idx.append(np.arange(offset + HISTORY - 1, offset + L - FUTURE))
             offset += L
         self.cmd = np.concatenate(cmd) if cmd else np.zeros((0, 3), np.float32)
         self.body = np.concatenate(body) if body else np.zeros((0, 3), np.float32)
@@ -115,16 +115,6 @@ class Session:
     def windows(self, horizon: int):
         lo = WARM + PREFIX
         return [(i, s) for i, g in enumerate(self.segments) for s in range(lo, len(g["cmd"]) - horizon - 1)]
-
-
-def transition_features(cmd, body, ks):
-    offs = np.arange(-(HISTORY - 1), 1)
-    windows = cmd[ks[:, None] + offs] / SCALE  # (N, HISTORY, 3)
-    v = body[ks]
-    nxt = body[ks + 1]
-    a = nxt[:, 2] * (1 / 60)
-    nxt_k = np.stack([np.cos(a) * nxt[:, 0] - np.sin(a) * nxt[:, 1], np.sin(a) * nxt[:, 0] + np.cos(a) * nxt[:, 1], nxt[:, 2]], 1)
-    return np.concatenate([windows.reshape(len(ks), -1), v / SCALE, (nxt_k - v) / (0.1 * SCALE)], 1).astype(np.float32)
 
 
 def target_window(sess: Session, seg: int, s: int, horizon: int) -> dict:
@@ -251,6 +241,29 @@ def context_length(rng):
 
 
 # --- training -------------------------------------------------------------
+#
+# Teacher–student (Rapid Motor Adaptation):
+#   teacher:  z = teacher(true hardware), dynamics trained with the rollout loss.
+#             Shows how good the twin is when it knows the robot exactly.
+#   student:  the context encoder learns to output the teacher's z from a
+#             recording of the robot (direct supervision, strong signal).
+#   finetune: optional, everything but the teacher with the rollout loss and
+#             the student's z, so the dynamics get used to the student's errors.
+
+
+def teacher_z(model, batch, noise=0.1):
+    z = model.teacher(batch["privileged"])
+    return z + noise * torch.randn_like(z) if model.training else z
+
+
+def load(model, path, device):
+    if path and path.exists():
+        model.load_state_dict(torch.load(path, map_location=device, weights_only=False)["state"])
+        print(f"loaded {path}", flush=True)
+
+
+def curriculum(n):
+    return [(10, n // 8), (30, n // 8), (60, n // 4), (120, n // 2)]
 
 
 def cmd_train(args):
@@ -260,47 +273,99 @@ def cmd_train(args):
     with open(args.prepared, "rb") as f:
         data = pickle.load(f)
     train, val = Population(data["train"]), Population(data["val"])
-    print(f"{len(train.robots)} training robots, {len(val.robots)} validation robots", flush=True)
-
+    print(f"{len(train.robots)} training robots, {len(val.robots)} validation robots, phase {args.phase}", flush=True)
     model = AdaptiveTwin().to(device)
-    print("parameters:", sum(p.numel() for p in model.parameters()), flush=True)
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
-    n = args.iters
-    schedule = [(10, n // 8), (30, n // 8), (60, n // 4), (120, n // 2)]
-    total = sum(k for _, k in schedule)
-    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: 0.5 * (1 + math.cos(math.pi * min(i, total) / total)))
-
-    vrng = np.random.default_rng(1234)  # fixed validation set: 30 s contexts, 2 s targets
-    val_batches = [val.sample(args.batch, 120, 1800, vrng, device) for _ in range(4)]
-
-    def validate():
-        model.eval()
-        with torch.no_grad():
-            losses = [rollout_loss(*run(model, b, 120)[:2], b).item() for b in val_batches]
-        model.train()
-        return float(np.mean(losses))
-
-    best, step, start = float("inf"), 0, time.time()
     args.out.mkdir(parents=True, exist_ok=True)
-    for horizon, iters in schedule:
-        for _ in range(iters):
-            batch = perturb(train.sample(args.batch, horizon, context_length(rng), rng, device), None)
-            loss, parts = total_loss(model, batch, horizon)
-            opt.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            sched.step()
-            step += 1
-            if step % args.val_every == 0 or step == total:
-                v = validate()
-                tag = ""
-                if v < best:
-                    best = v
-                    torch.save({"kind": "adaptive", "state": model.state_dict(), "step": step, "val": v}, args.out / "adaptive.pt")
-                    tag = " *"
-                print(f"step {step:5d} h={horizon:3d} loss {parts['rollout']:7.3f} kl {parts['kl']:6.2f} "
-                      f"priv {parts['privileged']:.3f} val(2 s, 30 s ctx) {v:7.3f}{tag} [{time.time() - start:5.0f} s]", flush=True)
+    vrng = np.random.default_rng(1234)
+    start = time.time()
+
+    if args.phase in ("teacher", "finetune"):
+        if args.phase == "finetune":
+            load(model, args.out / "adaptive.pt", device)
+            for p in model.teacher.parameters():
+                p.requires_grad_(False)
+            ctx_len = lambda: context_length(rng)
+            out_name = "adaptive_finetuned.pt"
+        else:
+            ctx_len = lambda: 0
+            out_name = "adaptive_teacher.pt"
+        params = [p for p in model.parameters() if p.requires_grad]
+        opt = torch.optim.AdamW(params, lr=args.lr, weight_decay=1e-4)
+        schedule = curriculum(args.iters) if args.phase == "teacher" else [(120, args.iters)]
+        total = sum(k for _, k in schedule)
+        sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: 0.5 * (1 + math.cos(math.pi * min(i, total) / total)))
+        val_batches = [val.sample(args.batch, 120, 1800 if args.phase == "finetune" else 0, vrng, device) for _ in range(4)]
+
+        def z_for(batch):
+            if args.phase == "teacher":
+                return teacher_z(model, batch)
+            mu, logvar = model.encode(batch["context"], batch["mask"])
+            return mu + torch.randn_like(mu) * torch.exp(0.5 * logvar) if model.training else mu
+
+        def validate():
+            model.eval()
+            with torch.no_grad():
+                out = [rollout_loss(*run(model, b, 120, z=z_for(b))[:2], b).item() for b in val_batches]
+            model.train()
+            return float(np.mean(out))
+
+        best, step = float("inf"), 0
+        for horizon, iters in schedule:
+            for _ in range(iters):
+                batch = perturb(train.sample(args.batch, horizon, ctx_len(), rng, device), None)
+                poses, bodies, *_ = run(model, batch, horizon, z=z_for(batch))
+                loss = rollout_loss(poses, bodies, batch)
+                opt.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(params, 1.0)
+                opt.step()
+                sched.step()
+                step += 1
+                if step % args.val_every == 0 or step == total:
+                    v = validate()
+                    tag = ""
+                    if v < best:
+                        best = v
+                        torch.save({"kind": "adaptive", "phase": args.phase, "state": model.state_dict(), "step": step, "val": v}, args.out / out_name)
+                        tag = " *"
+                    print(f"{args.phase} step {step:5d} h={horizon:3d} loss {loss.item():7.3f} val(2 s) {v:7.3f}{tag} [{time.time() - start:5.0f} s]", flush=True)
+        return
+
+    # Student: only the context encoder learns, from the teacher's z.
+    load(model, args.out / "adaptive_teacher.pt", device)
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for p in model.encoder.parameters():
+        p.requires_grad_(True)
+    opt = torch.optim.AdamW(model.encoder.parameters(), lr=args.lr, weight_decay=1e-4)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda i: 0.5 * (1 + math.cos(math.pi * min(i, args.iters) / args.iters)))
+    model.eval()  # teacher without noise
+    val_batches = [val.sample(args.batch, 1, 1800, vrng, device) for _ in range(4)]
+
+    def student_loss(batch):
+        mu, logvar = model.encode(batch["context"], batch["mask"])
+        with torch.no_grad():
+            target = model.teacher(batch["privileged"])
+        nll = 0.5 * ((target - mu) ** 2 * torch.exp(-logvar) + logvar).sum(-1).mean()
+        return nll, ((target - mu) ** 2).sum(-1).mean()
+
+    best = float("inf")
+    for step in range(1, args.iters + 1):
+        length = int(math.exp(rng.uniform(math.log(30), math.log(1800))))
+        nll, mse = student_loss(train.sample(args.batch, 1, length, rng, device))
+        opt.zero_grad()
+        nll.backward()
+        opt.step()
+        sched.step()
+        if step % args.val_every == 0 or step == args.iters:
+            with torch.no_grad():
+                v = float(np.mean([student_loss(b)[1].item() for b in val_batches]))
+            tag = ""
+            if v < best:
+                best = v
+                torch.save({"kind": "adaptive", "phase": "student", "state": model.state_dict(), "step": step, "val": v}, args.out / "adaptive.pt")
+                tag = " *"
+            print(f"student step {step:5d} nll {nll.item():7.3f} z mse {mse.item():.4f} val z mse (30 s) {v:.4f}{tag} [{time.time() - start:5.0f} s]", flush=True)
 
 
 def main():
@@ -318,6 +383,7 @@ def main():
     t.add_argument("--lr", type=float, default=2e-3)
     t.add_argument("--val-every", type=int, default=250)
     t.add_argument("--seed", type=int, default=0)
+    t.add_argument("--phase", choices=("teacher", "student", "finetune"), default="teacher")
     args = parser.parse_args()
     {"prepare": cmd_prepare, "train": cmd_train}[args.cmd](args)
 
