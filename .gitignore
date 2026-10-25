@@ -4,3 +4,6 @@ node_modules
 .vs
 # Skill-improvement sessions (scenarios, runs, trajectories, reports)
 sessions/
+
+# Robot-dynamics recordings (lua/tests/collect_dynamics.lua)
+logs/

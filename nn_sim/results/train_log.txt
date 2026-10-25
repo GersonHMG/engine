@@ -1,0 +1,189 @@
+B2 linear
+M1 seed 0
+  step    500 train 9.215e-03 val 1.050e-02
+  step   1000 train 4.036e-03 val 3.993e-03
+  step   1500 train 2.998e-03 val 3.037e-03
+  step   2000 train 2.152e-03 val 2.393e-03
+  step   2500 train 1.686e-03 val 1.861e-03
+  step   3000 train 1.581e-03 val 1.733e-03
+  step   3500 train 1.234e-03 val 1.356e-03
+  step   4000 train 9.285e-04 val 1.173e-03
+  step   4500 train 1.094e-03 val 1.044e-03
+  step   5000 train 8.687e-04 val 9.231e-04
+  step   5500 train 8.914e-04 val 8.307e-04
+  step   6000 train 6.772e-04 val 7.496e-04
+  step   6500 train 6.907e-04 val 6.728e-04
+  step   7000 train 6.401e-04 val 6.075e-04
+  step   7500 train 5.319e-04 val 5.728e-04
+  step   8000 train 5.144e-04 val 5.404e-04
+  step   8500 train 4.689e-04 val 5.113e-04
+  step   9000 train 4.646e-04 val 4.732e-04
+  step   9500 train 4.597e-04 val 4.745e-04
+  step  10000 train 3.863e-04 val 4.470e-04
+  step  10500 train 4.083e-04 val 4.370e-04
+  step  11000 train 4.499e-04 val 4.354e-04
+  step  11500 train 3.952e-04 val 4.244e-04
+  step  12000 train 3.377e-04 val 4.247e-04
+M1 seed 1
+  step    500 train 9.837e-03 val 1.019e-02
+  step   1000 train 4.041e-03 val 4.209e-03
+  step   1500 train 3.122e-03 val 3.245e-03
+  step   2000 train 2.456e-03 val 2.579e-03
+  step   2500 train 2.032e-03 val 2.094e-03
+  step   3000 train 1.627e-03 val 1.782e-03
+  step   3500 train 1.414e-03 val 1.615e-03
+  step   4000 train 1.243e-03 val 1.392e-03
+  step   4500 train 1.214e-03 val 1.238e-03
+  step   5000 train 1.070e-03 val 1.084e-03
+  step   5500 train 9.676e-04 val 1.010e-03
+  step   6000 train 8.389e-04 val 9.211e-04
+  step   6500 train 7.594e-04 val 9.097e-04
+  step   7000 train 6.969e-04 val 7.991e-04
+  step   7500 train 6.850e-04 val 7.478e-04
+  step   8000 train 5.513e-04 val 6.770e-04
+  step   8500 train 6.143e-04 val 6.513e-04
+  step   9000 train 5.296e-04 val 6.045e-04
+  step   9500 train 5.959e-04 val 5.854e-04
+  step  10000 train 5.163e-04 val 5.766e-04
+  step  10500 train 5.929e-04 val 5.590e-04
+  step  11000 train 4.951e-04 val 5.465e-04
+  step  11500 train 5.082e-04 val 5.404e-04
+  step  12000 train 4.757e-04 val 5.365e-04
+M1 seed 2
+  step    500 train 9.657e-03 val 9.603e-03
+  step   1000 train 4.157e-03 val 4.182e-03
+  step   1500 train 2.784e-03 val 3.095e-03
+  step   2000 train 2.158e-03 val 2.462e-03
+  step   2500 train 1.983e-03 val 2.024e-03
+  step   3000 train 1.651e-03 val 1.762e-03
+  step   3500 train 1.719e-03 val 1.531e-03
+  step   4000 train 1.221e-03 val 1.372e-03
+  step   4500 train 1.190e-03 val 1.158e-03
+  step   5000 train 1.199e-03 val 1.065e-03
+  step   5500 train 9.162e-04 val 9.910e-04
+  step   6000 train 7.766e-04 val 8.544e-04
+  step   6500 train 6.756e-04 val 7.923e-04
+  step   7000 train 6.825e-04 val 7.292e-04
+  step   7500 train 6.453e-04 val 6.751e-04
+  step   8000 train 5.640e-04 val 6.260e-04
+  step   8500 train 5.218e-04 val 5.918e-04
+  step   9000 train 4.716e-04 val 5.679e-04
+  step   9500 train 5.753e-04 val 5.500e-04
+  step  10000 train 5.126e-04 val 5.272e-04
+  step  10500 train 4.699e-04 val 5.165e-04
+  step  11000 train 4.555e-04 val 5.076e-04
+  step  11500 train 6.015e-04 val 5.005e-04
+  step  12000 train 4.598e-04 val 4.974e-04
+M1 seed 3
+  step    500 train 9.913e-03 val 1.009e-02
+  step   1000 train 3.817e-03 val 4.317e-03
+  step   1500 train 3.314e-03 val 3.229e-03
+  step   2000 train 1.998e-03 val 2.461e-03
+  step   2500 train 2.068e-03 val 2.035e-03
+  step   3000 train 1.455e-03 val 1.717e-03
+  step   3500 train 1.421e-03 val 1.506e-03
+  step   4000 train 1.177e-03 val 1.265e-03
+  step   4500 train 1.033e-03 val 1.081e-03
+  step   5000 train 8.731e-04 val 1.022e-03
+  step   5500 train 7.875e-04 val 8.731e-04
+  step   6000 train 6.803e-04 val 7.501e-04
+  step   6500 train 5.953e-04 val 6.642e-04
+  step   7000 train 5.574e-04 val 6.078e-04
+  step   7500 train 6.168e-04 val 5.800e-04
+  step   8000 train 4.656e-04 val 5.486e-04
+  step   8500 train 4.999e-04 val 5.079e-04
+  step   9000 train 4.155e-04 val 4.919e-04
+  step   9500 train 4.334e-04 val 4.712e-04
+  step  10000 train 5.106e-04 val 4.641e-04
+  step  10500 train 4.324e-04 val 4.560e-04
+  step  11000 train 3.773e-04 val 4.468e-04
+  step  11500 train 4.387e-04 val 4.433e-04
+  step  12000 train 3.656e-04 val 4.399e-04
+M1 seed 4
+  step    500 train 9.206e-03 val 9.778e-03
+  step   1000 train 4.392e-03 val 4.228e-03
+  step   1500 train 3.203e-03 val 3.016e-03
+  step   2000 train 2.406e-03 val 2.313e-03
+  step   2500 train 1.913e-03 val 1.846e-03
+  step   3000 train 1.435e-03 val 1.632e-03
+  step   3500 train 1.442e-03 val 1.409e-03
+  step   4000 train 1.365e-03 val 1.284e-03
+  step   4500 train 1.163e-03 val 1.126e-03
+  step   5000 train 1.012e-03 val 1.023e-03
+  step   5500 train 8.870e-04 val 9.188e-04
+  step   6000 train 7.009e-04 val 8.506e-04
+  step   6500 train 6.357e-04 val 8.099e-04
+  step   7000 train 6.759e-04 val 7.281e-04
+  step   7500 train 6.387e-04 val 6.962e-04
+  step   8000 train 5.090e-04 val 6.284e-04
+  step   8500 train 5.096e-04 val 6.101e-04
+  step   9000 train 5.116e-04 val 5.732e-04
+  step   9500 train 5.031e-04 val 5.522e-04
+  step  10000 train 4.755e-04 val 5.489e-04
+  step  10500 train 5.605e-04 val 5.252e-04
+  step  11000 train 4.564e-04 val 5.184e-04
+  step  11500 train 5.308e-04 val 5.140e-04
+  step  12000 train 4.205e-04 val 5.118e-04
+M1 data 1pct
+  step    500 train 7.394e-03 val 1.708e-02
+  step   1000 train 2.210e-03 val 1.025e-02
+  step   1500 train 1.256e-03 val 8.925e-03
+  step   2000 train 1.199e-03 val 8.987e-03
+  step   2500 train 9.261e-04 val 8.833e-03
+  step   3000 train 8.446e-04 val 8.740e-03
+  step   3500 train 6.384e-04 val 8.897e-03
+  step   4000 train 5.502e-04 val 8.746e-03
+  step   4500 train 4.934e-04 val 8.638e-03
+  step   5000 train 4.373e-04 val 8.695e-03
+  step   5500 train 3.983e-04 val 8.529e-03
+  step   6000 train 3.679e-04 val 8.490e-03
+  step   6500 train 3.434e-04 val 8.435e-03
+  step   7000 train 3.367e-04 val 8.405e-03
+  step   7500 train 2.803e-04 val 8.315e-03
+  step   8000 train 2.544e-04 val 8.431e-03
+  step   8500 train 2.513e-04 val 8.441e-03
+  step   9000 train 2.421e-04 val 8.397e-03
+  step   9500 train 2.118e-04 val 8.392e-03
+  step  10000 train 2.406e-04 val 8.335e-03
+  step  10500 train 2.141e-04 val 8.358e-03
+  step  11000 train 2.090e-04 val 8.344e-03
+  step  11500 train 2.048e-04 val 8.369e-03
+  step  12000 train 2.124e-04 val 8.333e-03
+M1 data 10pct
+  step    500 train 9.674e-03 val 1.090e-02
+  step   1000 train 3.454e-03 val 4.919e-03
+  step   1500 train 2.503e-03 val 3.854e-03
+  step   2000 train 1.868e-03 val 3.350e-03
+  step   2500 train 1.727e-03 val 2.871e-03
+  step   3000 train 1.367e-03 val 2.530e-03
+  step   3500 train 1.038e-03 val 2.225e-03
+  step   4000 train 1.108e-03 val 2.136e-03
+  step   4500 train 1.007e-03 val 1.914e-03
+  step   5000 train 1.052e-03 val 1.890e-03
+  step   5500 train 7.815e-04 val 1.754e-03
+  step   6000 train 6.305e-04 val 1.633e-03
+  step   6500 train 6.711e-04 val 1.554e-03
+  step   7000 train 5.782e-04 val 1.505e-03
+  step   7500 train 5.912e-04 val 1.416e-03
+  step   8000 train 4.449e-04 val 1.359e-03
+  step   8500 train 4.332e-04 val 1.328e-03
+  step   9000 train 4.330e-04 val 1.308e-03
+  step   9500 train 3.865e-04 val 1.274e-03
+  step  10000 train 4.524e-04 val 1.228e-03
+  step  10500 train 4.031e-04 val 1.234e-03
+  step  11000 train 4.311e-04 val 1.219e-03
+  step  11500 train 3.593e-04 val 1.209e-03
+  step  12000 train 3.839e-04 val 1.208e-03
+M2 (rollout fine-tune of M1 seed 0)
+  step    250 rollout 4.393e+03 one-step 6.682e-02 val-rollout 5.125e+03
+  step    500 rollout 3.591e+03 one-step 1.066e-01 val-rollout 5.134e+03
+  step    750 rollout 5.528e+03 one-step 9.999e-02 val-rollout 5.144e+03
+  step   1000 rollout 3.650e+03 one-step 1.061e-01 val-rollout 5.119e+03
+  step   1250 rollout 4.085e+03 one-step 1.017e-01 val-rollout 5.138e+03
+  step   1500 rollout 3.566e+03 one-step 1.114e-01 val-rollout 5.104e+03
+  step   1750 rollout 4.052e+03 one-step 1.133e-01 val-rollout 5.112e+03
+  step   2000 rollout 4.025e+03 one-step 1.066e-01 val-rollout 5.098e+03
+  step   2250 rollout 3.508e+03 one-step 1.075e-01 val-rollout 5.108e+03
+  step   2500 rollout 4.096e+03 one-step 1.090e-01 val-rollout 5.105e+03
+  step   2750 rollout 4.469e+03 one-step 1.133e-01 val-rollout 5.098e+03
+  step   3000 rollout 5.982e+03 one-step 1.097e-01 val-rollout 5.084e+03

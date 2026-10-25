@@ -79,6 +79,10 @@ function get_yellow_team_state() end
 ---@return string
 function get_ref_message() end
 
+--- Real (wall-clock) seconds since the engine started; monotonic, sub-millisecond.
+---@return number
+function wall_time() end
+
 ---@param x number
 ---@param y number
 ---@param draw_x_or_color? boolean|number[]|{r:number,g:number,b:number}

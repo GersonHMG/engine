@@ -1,0 +1,13 @@
+M2 (rollout fine-tune of M1 seed 0)
+  step    250 rollout 1.742e+00 one-step 5.036e-04 val-rollout 1.933e+00
+  step    500 rollout 2.063e+00 one-step 6.374e-04 val-rollout 1.571e+00
+  step    750 rollout 9.288e-01 one-step 5.843e-04 val-rollout 2.020e+00
+  step   1000 rollout 8.737e-01 one-step 5.395e-04 val-rollout 1.331e+00
+  step   1250 rollout 8.373e-01 one-step 5.113e-04 val-rollout 8.626e-01
+  step   1500 rollout 7.295e-01 one-step 5.869e-04 val-rollout 4.966e-01
+  step   1750 rollout 3.694e-01 one-step 5.087e-04 val-rollout 6.245e-01
+  step   2000 rollout 2.592e-01 one-step 4.947e-04 val-rollout 4.037e-01
+  step   2250 rollout 4.651e-01 one-step 5.479e-04 val-rollout 6.615e-01
+  step   2500 rollout 1.542e-01 one-step 5.009e-04 val-rollout 2.764e-01
+  step   2750 rollout 1.660e-01 one-step 5.036e-04 val-rollout 2.421e-01
+  step   3000 rollout 1.305e-01 one-step 4.847e-04 val-rollout 2.216e-01

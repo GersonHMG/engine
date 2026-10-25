@@ -2920,6 +2920,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ssl-sim-datagen"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "ssl-sim",
+]
+
+[[package]]
 name = "ssl-sim-gui"
 version = "0.1.0"
 dependencies = [

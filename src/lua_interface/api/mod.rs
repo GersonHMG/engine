@@ -1,3 +1,4 @@
+mod clock;
 mod control;
 mod draw_gui;
 mod grsim;
@@ -20,6 +21,7 @@ pub(super) fn register_api_functions(
     draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
     run_control: Option<Arc<RunControl>>,
 ) {
+    clock::register_clock_functions(lua);
     draw_gui::register_draw_gui_functions(lua, draw_commands);
     state::register_robot_state_functions(lua, Arc::clone(&world), game_state);
     control::register_control_functions(lua, Arc::clone(&radio), world);

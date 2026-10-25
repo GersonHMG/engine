@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+scipy
+torch
+onnx
+onnxruntime
+nbclient
+ipykernel
