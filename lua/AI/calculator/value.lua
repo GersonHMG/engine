@@ -38,8 +38,16 @@ M.KEEPER_LAG = 0.4        -- s, the keeper follows where the ball was this long 
 M.KEEPER_ACCEL = 6.0      -- m/s^2 (simulator.toml max_accel)
 M.KEEPER_GAP_SCALE = 0.04 -- m, spread of P_keeper = σ(gap / scale) around a touch (gap 0)
 M.MIN_PASS_DIST = 1.0     -- m, a mate closer than this is not worth passing to
-M.BLOCK_DIST = 0.5        -- m, a blocked shot ends up about this far from where it was kicked
-M.BLOCK_TIME = 0.5        -- s, until a blocked shot is played again
+M.BLOCK_DIST = 0.3        -- m, a blocked shot ends up about this far from where it was kicked (3v3 guard: 0.3 m, run 00)
+M.BLOCK_TIME = 0.6        -- s, until a blocked shot is played again (kicks into the guard came ~1 s apart)
+M.GUARD_AREA_MARGIN = profile.robot.radius + 0.03  -- m, a guard keeps its body this far out of the area (the rule)
+M.PUSH_STEP = 0.5         -- m, how far one push carries the ball
+M.PUSH_SPEED = 1.0        -- m/s, push speed (skills/push_ball keeps the ball on the face up to 1.5)
+M.PUSH_ANGLES = { 0.0, math.pi / 6, -math.pi / 6, math.pi / 3, -math.pi / 3 }  -- rad, off the line to the goal center
+M.PUSH_LINE_UP = 0.1      -- s, grid only: line-up of a push after a push (the robot is behind the ball)
+M.FOLLOW_DIST = 0.6       -- m, the field enemy nearest the ball within this follows it (backs off when pushed)
+M.PUSH_APPROACH = 0.04    -- m, gap between robot and ball at the push's approach point (skills/push_ball)
+M.PUSH_ROOM = 0.05        -- m, the pushing robot stops this much further out of an area than area_guard asks
 M.RECEIVER_AIM_STEP = 0.15  -- m between aims tried for a receiver's shot (cheaper, many spots)
 
 local function dist(a, b)
@@ -132,6 +140,9 @@ end
 --- Margin, s, of a ball kicked from `from` at `t0` along to `to` against `robots` that
 --- start moving at `react`: min over the path of (robot arrival − ball arrival). Sampled
 --- every PATH_STEP, so a robot standing between two samples is not missed.
+--- A robot whose body already covers the path is no race: −∞ (blocked). Timing noise is
+--- about who gets there first; a robot standing on the line is there (the 3v3 ball guard,
+--- 0.35 m in front of the ball, was raced at 39% clear and stopped every shot).
 --- @return number
 function M.path_margin(from, to, t0, robots, react)
 	local length = dist(from, to)
@@ -142,6 +153,7 @@ function M.path_margin(from, to, t0, robots, react)
 		local p = { x = from.x + (to.x - from.x) * k, y = from.y + (to.y - from.y) * k }
 		local t_ball = t0 + profile.ball_travel_time(length * k)
 		for _, r in ipairs(robots) do
+			if dist(r, p) <= profile.touch_distance() then return -math.huge end
 			worst = math.min(worst, react + body_time(r, p) - t_ball)
 		end
 	end
@@ -343,8 +355,14 @@ function M.model_enemies(ball)
 	local guard = profile.opponent.guard_distance
 	if guard and profile.opponent.guards_ball then
 		local d = math.max(dist(ball, M.GOAL), 1e-3)
+		local spot = { x = ball.x + (M.GOAL.x - ball.x) * guard / d, y = ball.y + (M.GOAL.y - ball.y) * guard / d }
+		-- A field robot may not enter the defense area: the guard stops at its front edge.
+		local front = M.GOAL.x - area_guard.AREA_DEPTH - M.GUARD_AREA_MARGIN
+		if spot.x > front and math.abs(spot.y) < area_guard.AREA_HALF_Y + M.GUARD_AREA_MARGIN then
+			spot.x = front
+		end
 		enemies[#enemies + 1] = {
-			x = ball.x + (M.GOAL.x - ball.x) * guard / d, y = ball.y + (M.GOAL.y - ball.y) * guard / d,
+			x = spot.x, y = spot.y,
 			orientation = math.atan(ball.y - M.GOAL.y, ball.x - M.GOAL.x), vel_x = 0, vel_y = 0,
 		}
 	end
@@ -374,19 +392,21 @@ local function cell_center(i, j)
 	return { x = -M.FIELD_HALF_X + (i - 0.5) * M.CELL, y = -M.FIELD_HALF_Y + (j - 0.5) * M.CELL }
 end
 
---- Builds V by value iteration on the empty field (only the model keeper):
----     V(c) = max( shot(c), max_dir γ^{LINE_UP + flight} · [q·V(p) + (1 − q)·V_LOST(p)] )
---- with p = landing(c, dir) and q = GRID_KEEP standing in for the enemies the grid leaves out.
+--- Builds V by value iteration on the empty field (only the model keeper and guard):
+---     V(c) = max( shot(c), max_dir γ^{LINE_UP + flight} · [q·V(p) + (1 − q)·V_LOST(p)],
+---                 max_push γ^{PUSH_LINE_UP + STEP/PUSH_SPEED} · [k·V(c') + (1 − k)·V_LOST(c')] )
+--- with p = landing(c, dir), q = GRID_KEEP standing in for the enemies the grid leaves out,
+--- c' a push target (push_targets) and k = 1 − challenges_ball.
 --- Cells inside a defense area are 0 (no field robot may play the ball there).
 local function build()
 	building = true
 	local nx = math.floor(2 * M.FIELD_HALF_X / M.CELL + 0.5)
 	local ny = math.floor(2 * M.FIELD_HALF_Y / M.CELL + 0.5)
-	local v, shot, moves = {}, {}, {}
+	local v, shot, moves, pushes = {}, {}, {}, {}
 	local roll = profile.roll_distance()
 	local t_move = M.LINE_UP + profile.ball_travel_time(0.95 * roll)
 	for i = 1, nx do
-		v[i], shot[i], moves[i] = {}, {}, {}
+		v[i], shot[i], moves[i], pushes[i] = {}, {}, {}, {}
 		for j = 1, ny do
 			local c = cell_center(i, j)
 			local blocked = area_guard.touched(c, profile.ball.radius) ~= nil
@@ -398,7 +418,13 @@ local function build()
 			end
 			shot[i][j], v[i][j] = s, s
 			moves[i][j] = {}
+			pushes[i][j] = {}
 			if not blocked then
+				for _, q in ipairs(M.push_targets(c, M.model_enemies(c))) do
+					local qi = math.max(1, math.min(nx, math.floor((q.x + M.FIELD_HALF_X) / M.CELL) + 1))
+					local qj = math.max(1, math.min(ny, math.floor((q.y + M.FIELD_HALF_Y) / M.CELL) + 1))
+					pushes[i][j][#pushes[i][j] + 1] = { qi, qj }
+				end
 				for k = 0, M.DIRECTIONS - 1 do
 					local p = M.landing(c, 2 * math.pi * k / M.DIRECTIONS)
 					if p then
@@ -411,6 +437,8 @@ local function build()
 		end
 	end
 	local discount = M.discount(t_move)
+	local push_discount = M.discount(M.PUSH_LINE_UP + M.PUSH_STEP / M.PUSH_SPEED)
+	local push_keep = 1.0 - (profile.opponent.challenges_ball or 1.0)
 	for _ = 1, M.SWEEPS do
 		local change = 0.0
 		for i = 1, nx do
@@ -419,6 +447,10 @@ local function build()
 				for _, m in ipairs(moves[i][j]) do
 					local lost = -M.RHO * v[nx + 1 - m[1]][ny + 1 - m[2]]
 					best = math.max(best, discount * (M.GRID_KEEP * v[m[1]][m[2]] + (1 - M.GRID_KEEP) * lost))
+				end
+				for _, m in ipairs(pushes[i][j]) do
+					local lost = -M.RHO * v[nx + 1 - m[1]][ny + 1 - m[2]]
+					best = math.max(best, push_discount * (push_keep * v[m[1]][m[2]] + (1 - push_keep) * lost))
 				end
 				change = math.max(change, math.abs(best - v[i][j]))
 				v[i][j] = best
@@ -503,6 +535,108 @@ function M.best_kick_into_space(robot, ball, allies, enemies)
 				best = option
 			end
 		end
+	end
+	return best
+end
+
+-- ---------------------------------------------------------------------------
+-- push (section 3.3, the dribble)
+-- ---------------------------------------------------------------------------
+
+--- Whether an enemy body stands on the push from `ball` to `q`. The field enemy nearest
+--- the ball is taken as its follower: it backs off to its guard spot in front of q (kept
+--- out of the defense area like model_enemies' guard), so it only blocks when that spot
+--- touches the ball at q. The others block where they stand.
+local function push_blocked(ball, q, enemies)
+	local keeper, field = M.split_keeper(enemies)
+	local follower, best = nil, M.FOLLOW_DIST
+	for _, e in ipairs(field) do
+		local d = dist(e, ball)
+		if d < best then follower, best = e, d end
+	end
+	local reach = profile.touch_distance()
+	for _, e in ipairs(enemies) do
+		if e == follower then
+			local model = M.model_enemies(q)
+			local spot = model[2]
+			if spot and dist(spot, q) <= reach then return true end
+		else
+			local steps = math.max(1, math.ceil(dist(ball, q) / M.PATH_STEP))
+			for i = 1, steps do
+				local k = i / steps
+				local p = { x = ball.x + (q.x - ball.x) * k, y = ball.y + (q.y - ball.y) * k }
+				if dist(e, p) <= reach then return true end
+			end
+		end
+	end
+	return false
+end
+
+--- Where pushes from `ball` can take it: PUSH_STEP along each of PUSH_ANGLES off the line
+--- to the goal center, keeping the pushing robot (behind the ball) out of the defense areas
+--- with room to stop, the ball inside the field, and no enemy body on the way.
+--- @param ball { x: number, y: number }
+--- @param enemies RobotState[]
+--- @return { x: number, y: number }[]
+function M.push_targets(ball, enemies)
+	local out = {}
+	local base = math.atan(M.GOAL.y - ball.y, M.GOAL.x - ball.x)
+	local c = profile.contact_distance()
+	for _, a in ipairs(M.PUSH_ANGLES) do
+		local ux, uy = math.cos(base + a), math.sin(base + a)
+		local q = { x = ball.x + ux * M.PUSH_STEP, y = ball.y + uy * M.PUSH_STEP }
+		local robot_end = { x = q.x - ux * c, y = q.y - uy * c }
+		local robot_start = { x = ball.x - ux * c, y = ball.y - uy * c }
+		-- The approach spot behind the ball: the path planner (move_to) cannot reach a point
+		-- outside the field lines.
+		local back = profile.touch_distance() + M.PUSH_APPROACH
+		local approach = { x = ball.x - ux * back, y = ball.y - uy * back }
+		local margin = area_guard.MARGIN + M.PUSH_ROOM
+		if math.abs(q.x) <= M.FIELD_HALF_X - M.FIELD_MARGIN and math.abs(q.y) <= M.FIELD_HALF_Y - M.FIELD_MARGIN
+			and math.abs(approach.x) < M.FIELD_HALF_X and math.abs(approach.y) < M.FIELD_HALF_Y
+			and not area_guard.touched(robot_start, margin) and not area_guard.touched(robot_end, margin)
+			and not area_guard.segment_crosses(robot_start, robot_end, 1, margin)
+			and not area_guard.segment_crosses(robot_start, robot_end, -1, margin)
+			and not push_blocked(ball, q, enemies) then
+			out[#out + 1] = q
+		end
+	end
+	return out
+end
+
+--- Whether a ball pushed from `ball` to `q` may roll on freely once the push ends (it rolls
+--- PUSH_SPEED² / (2·roll_decel) further): it stays in the field and out of the defense areas.
+--- Otherwise the push has to brake so the ball stops at q (skills/push_ball `brake`).
+--- @return boolean
+function M.push_rolls_on(ball, q)
+	local d = math.max(dist(ball, q), 1e-6)
+	local roll = M.PUSH_SPEED ^ 2 / (2 * profile.ball.roll_decel)
+	local stop = { x = q.x + (q.x - ball.x) / d * roll, y = q.y + (q.y - ball.y) / d * roll }
+	local r = profile.ball.radius
+	return math.abs(stop.x) <= M.FIELD_HALF_X - M.FIELD_MARGIN and math.abs(stop.y) <= M.FIELD_HALF_Y - M.FIELD_MARGIN
+		and not area_guard.touched(stop, r)
+		and not area_guard.segment_crosses(q, stop, 1, r) and not area_guard.segment_crosses(q, stop, -1, r)
+end
+
+--- Scores pushing the ball from `ball` to `q` (section 3.3):
+---     S = γ^t·[P_keep·V(q) + (1 − P_keep)·V_LOST(q)],  t = t_line_up + |q − b| / PUSH_SPEED
+--- P_keep = P_release over the whole push: an enemy that reaches the ball before the push
+--- ends takes it as often as the opponent challenges.
+--- @return table  -- { target, score, p_keep, t }
+function M.push_to(robot, ball, q, enemies)
+	local t = tempo.line_up_time(robot, ball, q) + dist(ball, q) / M.PUSH_SPEED
+	local p_keep = M.p_release(ball, enemies, t)
+	local score = M.discount(t) * (p_keep * M.V(q) + (1 - p_keep) * M.V_LOST(q))
+	return { target = q, score = score, p_keep = p_keep, t = t }
+end
+
+--- The best push from `ball`, or nil when no push target is free.
+--- @return table|nil  -- see push_to
+function M.best_push(robot, ball, enemies)
+	local best = nil
+	for _, q in ipairs(M.push_targets(ball, enemies)) do
+		local option = M.push_to(robot, ball, q, enemies)
+		if not best or option.score > best.score then best = option end
 	end
 	return best
 end
