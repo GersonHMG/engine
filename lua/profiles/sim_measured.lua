@@ -18,7 +18,8 @@ return {
         roll_decel = 1.000,        -- m/s^2
     },
     kick = {
-        speed = 3.240,             -- m/s
+        speed = 3.48,              -- m/s, launch speed in play (3v3 clears, median of 49; p10-p90 3.40-3.52): the
+                                   -- robot still moves ~0.55 m/s at the kick. calibrate_profile measured 3.240.
         reach = 0.010,              -- copied (not measured)
         one_touch_angle = 1.0,      -- rad, largest angle between the heading and an incoming ball
                                     -- that can still be kicked on the first touch (geometric estimate)

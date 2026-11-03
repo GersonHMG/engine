@@ -50,6 +50,8 @@ M.PUSH_APPROACH = 0.04    -- m, gap between robot and ball at the push's approac
 M.ROLL_ROOM = 0.25        -- m, a pushed ball rolling on must stop this far out of an area (the kick that takes over
                           -- stops pushing mid-way; run 03: 3 cm of room let balls roll in)
 M.PUSH_ROOM = 0.05        -- m, the pushing robot stops this much further out of an area than area_guard asks
+M.SLOW_BALL_MIN = 0.3     -- m/s at the goal line: slower and the keeper always gets it
+M.SLOW_BALL_RANGE = 0.8   -- m/s above SLOW_BALL_MIN until the speed no longer helps the keeper
 M.RECEIVER_AIM_STEP = 0.15  -- m between aims tried for a receiver's shot (cheaper, many spots)
 
 local function dist(a, b)
@@ -235,6 +237,17 @@ function M.travelled(t)
 	return slide + v1 * tr - 0.5 * profile.ball.roll_decel * tr * tr
 end
 
+--- Speed, m/s, of a kicked ball (profile kick speed) once it has rolled `d` m; 0 if it stops first.
+--- @param d number
+--- @return number
+function M.speed_after(d)
+	local v0 = profile.kick.speed
+	local v1 = v0 * 5 / 7
+	local slide = (v0 * v0 - v1 * v1) / (2 * profile.ball.slide_decel)
+	if d <= slide then return math.sqrt(math.max(0.0, v0 * v0 - 2 * profile.ball.slide_decel * d)) end
+	return math.sqrt(math.max(0.0, v1 * v1 - 2 * profile.ball.roll_decel * (d - slide)))
+end
+
 --- Whether a field robot can kick the ball towards `target` without entering a defense
 --- area: the spot it kicks from (behind the ball) keeps its body out (utils/area_guard).
 --- @param ball { x: number, y: number }
@@ -290,6 +303,10 @@ function M.shot_at(robot, ball, aim, keeper, field)
 	if keeper then
 		local gap = M.keeper_gap(ball, aim, keeper, t_kick)
 		p_keeper = gap == -math.huge and 0.0 or 1.0 / (1.0 + math.exp(-gap / M.KEEPER_GAP_SCALE))
+		-- A slow ball gets reached anyway (the tracking model misses it): shot_map, realistic
+		-- approach (OFFSET = 1.0), kick speed 3.48: 3.5-4 m 68% scored vs P 0.88, > 4 m 17% vs 0.74.
+		local v = M.speed_after(dist(ball, aim))
+		p_keeper = p_keeper * math.max(0.0, math.min(1.0, (v - M.SLOW_BALL_MIN) / M.SLOW_BALL_RANGE))
 	end
 
 	local p = clamp(p_rel) * clamp(p_target) * clamp(p_clear) * clamp(p_keeper)
