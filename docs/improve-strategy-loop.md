@@ -188,31 +188,39 @@ unless they are worth keeping.
 10. **Timing.** Wrap `value.*` functions with `os.clock()` in a probe. Stay under about
     7 ms per tick, or runs get slow.
 
-## 6. State at the end of the last session (commit `669e86a`)
+## 6. State at the end of the last session (session 2026-11-03, branch `ccr-d766ec81-ne6tee`)
 
 | Mode | Tuning | Holdout | Fouls | Main losses |
 |---|---|---|---|---|
-| 2v2 | 85% | 89% | 0 | saved 3–7, wide 2–3 |
-| 3v3 | 57% | 55% | 0 | timeout 18–21, wide 13–16 |
+| 2v2 | 94% | 94% | 0 | saved 1–3, wide 0–3 |
+| 3v3 | 77% | 80% | 0 | saved 4–10, out 3–7, wide 3–7 |
 
-- **Best 3v3 so far:** run 05 (commit `1032a5e`), 64% / 69%, before passes, supporter
-  spots and loose balls existed. It scored mainly by shooting into the yellow ball guard:
-  the deflection opens the next shot.
-- **`pass` is not offered** (`roles/attacker.lua`). Measured, it lost goals: passes to
-  moving receivers, ping-pong passing, timeouts. The action is still scored
-  (`value.pass_to`) and fixed (committed target point).
+- **What moved 3v3 from 57% to 77–80%:** `push_ball` (drive through the ball at 1 m/s: the
+  simulator keeps it on the kicker face), so the attacker carries the ball up to where the
+  area stops the ball guard instead of shooting into the guard about 5 times per episode.
+  The model changes it needed: a robot body already on a path blocks it (`value.path_margin`
+  returns −∞, no timing noise), the grid has push moves, the blocked shot is calibrated
+  (0.3 m, 0.6 s), a push brakes when the ball rolling on would reach an area, and
+  `kick_to_goal` re-aims once the ball moved more than 0.1 m since its aim was committed.
+- **area_guard** also counts a robot that will be within `CROWD_DIST` in the next 0.2 s (the
+  3v3 guard drives into ours at 2.8 m/s next to the area).
+- **Tried and reverted:** kick_to_clear skipping directions into a standing robot (deflections
+  off the guard are often a usable loose ball: 3v3 −5 / −13); `push_ball` backing off before
+  turning to a new direction (removes a flick, but leaves more balls resting against the
+  pinned guard: −4 / −1).
+- **`pass` is still not offered** (`roles/attacker.lua`).
 - **Ideas for the next session, most promising first:**
-  1. **Bisect 3v3 between `1032a5e` and `669e86a`** on 200 episodes to find what costs
-     ~10 points. Suspects: the `loose` outcome values, the grid's ball guard, the
-     advance-kick landing rules, the supporter spot search.
-  2. **Shot vs the ball guard (`wide` 13–16).** The guard stands on the ball → goal line,
-     so a direct shot always hits it. Try a short sideways move of the ball (push with
-     `move_ball`) so the guard lags, then a quick shot. Score it as a new action in the
-     same unit.
-  3. **3v3 timeouts (18–21).** Trace a few (tool 5) before guessing.
-  4. **Passing that pays.** A receiver that stands still once it is the committed
-     receiver, a one-touch shot from `receive_pass` toward the side away from the guard,
-     and a residual R for `pass` (doc section 4) calibrated from logged outcomes.
+  1. **Deadlock at the pinned guard.** With the ball resting against the guard where the area
+     stops it (ball x ≈ 3.2–3.5, guard x = 3.38), the attacker alternates kick_to_goal and
+     kick_to_clear and kicks nothing for 10 s. Trace `kick_to_point.debug` there first. A
+     short sideways push (±90°) that frees the ball, scored like any push, is the likely fix.
+     Balls at x ≈ 3.44–3.5 in front of the area cannot be kicked at all inside
+     `area_guard.MARGIN`.
+  2. **Shots from the area corner** (x ≥ 3.6, |y| ≥ 1) score below their prediction
+     (65% vs 0.75 before the re-aim). Measure them with the guard near (shot_map variant).
+  3. **The push flick:** turning to a new push direction with the ball on the face flicks it
+     at 1.5 m/s. Keep the current direction unless the new one is clearly better.
+  4. **Passing that pays** (as before).
 - **Yellow breaks the area rule** (`yellow_area_ticks` > 0: `skills/mark` and the 3v3
   guard brush the edge). Ask the user before changing them, since that changes the
   benchmark.

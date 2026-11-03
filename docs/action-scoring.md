@@ -243,7 +243,7 @@ TD(0) after each decision: `V(s) ← V(s) + α (γ^{Δt} V(s') − V(s))`, `α �
 | kick_to_goal | `can_kick · e^{−λd} · open_angle · clearance · alignment` | 3.1: 4 stages, keeper separate, time from `line_up_time` |
 | pass | `can_kick · 0.9 · max_j lane · P_score(j) · alignment` | 3.2: release, lane, control; `V(p_j)` instead of `P_score` |
 | kick_to_clear | `can_kick · lane · e^{−λ d(r, own goal)}` | 3.4: loose ball race, `V`/`V_LOST` of the landing point |
-| dribble_to_clear | `has_ball · e^{−λ d(r, own goal)}` (unused) | 3.3: one direction of `dribble` |
+| dribble_to_clear | `has_ball · e^{−λ d(r, own goal)}` (unused) | 3.3: one direction of `dribble` (`push_ball` implements 3.3) |
 | go_to_ball | `1 − can_kick` | 3.5 |
 | receive_pass | `1` while receiving | 3.6 |
 | position_for_pass | `0.5` (target chosen by `F(p)`) | 3.7 |
@@ -292,6 +292,9 @@ starts) and `lua/tests/shot_map.lua` (one shot per spot against the keeper skill
 | V grid | value iteration on the empty field | plus GRID_KEEP = 0.8 per kick into space, the model keeper, and a model guard when `opponent.guards_ball` | an empty field makes V flat (≈0.4 everywhere) and overrates passes against a ball guard |
 | kicks into space | landing in the field | landing outside the areas and not rolling through the enemy's | a ball in the enemy area is the keeper's |
 | execution | — | `kick_to_point` heading tolerance 0.1 → 0.015 rad | the ball leaves along the heading: 0.1 rad missed shots by 0.45 m (median) |
+| P_clear, P_lane | race against every field enemy | an enemy body already on the path blocks it (−∞), no timing noise | the 3v3 ball guard, 0.35 m in front of the ball on the shot line, was raced at 39% clear and stopped every shot |
+| blocked shot | V_LOST | `loose` 0.3 m past the ball, 0.6 s later | measured: shots into the guard moved the ball ~0.3 m per ~1 s |
+| dribble (3.3) | `move_ball`, 8 directions | `push_ball`: 0.5 m pushes at 1 m/s, 0 / ±30° / ±60° off the goal line, also in the V grid; brakes when the ball rolling on (0.5 m) would reach an area | no dribbler, but a robot driving straight keeps a resting ball on its face up to 1.5 m/s |
 
 Rule: only a goalkeeper may enter a defense area, and only its own (`utils/area_guard`
 keeps every move target, straight path and braking point of our robots out of them).
