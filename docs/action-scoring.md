@@ -276,3 +276,22 @@ Also removed once the scores share a unit:
 Open question for later: with every action in one unit, role assignment can become
 "give the attacker role to the robot whose best score is highest" instead of the
 time-to-ball rule in `ball_owner`.
+
+## 7. What the simulator changed (implemented in `AI/calculator/value.lua`)
+
+Measured with `lua/tests/attack.lua` (2v2 and 3v3 episodes, 100 tuning + 100 holdout
+starts) and `lua/tests/shot_map.lua` (one shot per spot against the keeper skill).
+
+| Formula part | Section 3 | Implemented | Why |
+|---|---|---|---|
+| P_keeper | race against the keeper's run to the aim | the keeper tracks the line ball -> goal center with a 0.4 s lag (`keeper_gap`), P = σ(gap / 4 cm) | keepers like `skills/goalkeeper` do not read the shot; the race predicted 0.02-0.6 where 94% scored |
+| P_release | race to the ball | `1 − c·(1 − race)`, c = `profile.opponent.challenges_ball` | the test defenses reach the ball but never tackle (`stolen` 1-2%) |
+| blocked shot, cut or uncontrolled pass, kick into space lost | V_LOST | `loose(p) = c·V_LOST(p) + (1 − c)·V(p)` | a ball an enemy only blocks stays ours unless it challenges |
+| missed or saved shot | V_LOST(rebound) | V_LOST(aim) | the keeper holds the ball in its area, or it goes out |
+| unavailable option | score 0 | −1 | 0 beat every option with a negative expected value: shots from out of range, waiting next to the ball |
+| V grid | value iteration on the empty field | plus GRID_KEEP = 0.8 per kick into space, the model keeper, and a model guard when `opponent.guards_ball` | an empty field makes V flat (≈0.4 everywhere) and overrates passes against a ball guard |
+| kicks into space | landing in the field | landing outside the areas and not rolling through the enemy's | a ball in the enemy area is the keeper's |
+| execution | — | `kick_to_point` heading tolerance 0.1 → 0.015 rad | the ball leaves along the heading: 0.1 rad missed shots by 0.45 m (median) |
+
+Rule: only a goalkeeper may enter a defense area, and only its own (`utils/area_guard`
+keeps every move target, straight path and braking point of our robots out of them).

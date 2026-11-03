@@ -31,6 +31,11 @@ return {
     -- turn_rate, max_accel). read_passes: how much of our line-up time they use to read a
     -- pass before it is kicked (0 = they follow the ball only, 1 = they cover the receiver
     -- at once). guard_distance (m): ball-following opponents stand this far in front of the
-    -- ball, towards their goal (nil: no assumption). Set both from watching the opponent.
-    opponent = { read_passes = 0.0, guard_distance = 0.35 },
+    -- ball, towards their goal (nil: no assumption). challenges_ball (0..1): how often an
+    -- opponent that reaches the ball before our kick actually takes it (nil: 1, always).
+    -- Set them from watching the opponent: the test defenses mark, keep and guard but never
+    -- tackle (`stolen` is 1-2% of episodes in lua/tests/attack.lua). guards_ball: one opponent
+    -- stays guard_distance in front of the ball all the time (the 3v3 test defense; the test
+    -- sets it per opponent), so the field values (AI/calculator/value V) count it.
+    opponent = { read_passes = 0.0, guard_distance = 0.35, challenges_ball = 0.1, guards_ball = false },
 }

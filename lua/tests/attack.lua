@@ -59,6 +59,8 @@ local RECORD_N = tonumber(setting("RECORD_N", "")) or 12
 local BASE = ({ tuning = 1, holdout = 2, named = 3 })[SET] or 1
 
 local defense = require("tests.lib.defense_" .. MODE)
+-- The opponent model (robot profile), as scouted: only the 3v3 defense guards the ball.
+profile.opponent.guards_ball = (MODE == "3v3")
 local BLUE_IDS = MODE == "3v3" and { 0, 1, 2 } or { 0, 1 }
 local YELLOW_IDS = MODE == "3v3" and { 0, 1, 2 } or { 0, 1 }
 

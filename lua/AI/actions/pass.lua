@@ -1,23 +1,20 @@
 -- Pass.lua
+--
+-- Passes to a teammate. Scored in the shared unit of docs/action-scoring.md (section 3.2)
+-- by AI/calculator/value.pass_to: the pass has to be kicked before an enemy takes the
+-- ball, get through the lane and be controlled; then the receiver holds the ball where it
+-- stands, worth max(V(p), its best shot from there). Teammates inside a defense area (our
+-- goalkeeper) are not passed to. The receiver is committed when the option starts.
 local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
-local lane = require("AI.calculator.lane")
+local value = require("AI.calculator.value")
+local area_guard = require("utils.area_guard")
+local profile = require("utils.robot_profile")
 
 local Pass = setmetatable({}, { __index = KickAction })
 Pass.__index = Pass
 
-local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center
-local GAMMA = 0.9                         -- discount: a pass is one more step before the shot
-local MIN_PASS_DIST = 1.0                 -- a mate closer than this is not worth passing to
-
---- Value of passing to `mate`: the ball has to get there, then the mate shoots.
----     V(j) = Λ(b, r_j, E) · P_s(r_j)
-local function pass_value(ball, mate, opponents)
-	if world.distance(ball, mate) < MIN_PASS_DIST then
-		return 0.0
-	end
-	return lane.clear(ball, mate, opponents) * world.probability_of_score(mate, GOAL_TARGET)
-end
+local UNAVAILABLE = -1.0  -- score with nobody to pass to: below any real outcome
 
 --- @param team integer
 --- @return Pass
@@ -29,36 +26,43 @@ function Pass.new(team)
 	return self
 end
 
---- S = k · γ · max_j V(j), over the teammates in `state.teammates`.
+--- S = max over teammates of value.pass_to.
 function Pass:evaluate(state)
 	self.candidate_id = nil
 	if not state.can_kick then
 		return 0.0
 	end
-
+	local ball = state.ball or world.ball()
 	local opponents = state.opponents or world.active_enemies()
-	local best = 0.0
+	local best = nil
 	for _, mate in ipairs(state.teammates or {}) do
-		local v = pass_value(state.ball, mate, opponents) * KickAction.alignment(state.robot, state.ball, mate)
-		if v > best then
-			best, self.candidate_id = v, mate.id
+		if not area_guard.touched(mate, profile.robot.radius) then
+			local option = value.pass_to(state.robot, ball, mate, opponents)
+			if option and (not best or option.score > best.score) then
+				best = option
+			end
 		end
 	end
-
-	return GAMMA * best
+	if not best then
+		return UNAVAILABLE
+	end
+	self.candidate_id = best.receiver
+	return best.score
 end
 
 function Pass:start(state)
 	KickAction.start(self, state)
 	self.receiver_id = self.candidate_id
+	local mate = self.receiver_id and world.ally(self.receiver_id)
+	self.point = mate and { x = mate.x, y = mate.y } or nil
 end
 
---- Kicks at the committed receiver's current position. The receiver faces
+--- Kicks at the point where the receiver stood when the pass started: a target that moves
+--- with the receiver can never be lined up within the kick's tolerance. The receiver faces
 --- the ball and moves onto its path once it is in flight (see ReceivePass).
 function Pass:run(state)
-	local mate = self.receiver_id and world.ally(self.receiver_id)
-	if not mate then return end
-	KickAction.kick_towards(state, { x = mate.x, y = mate.y })
+	if not self.point then return end
+	KickAction.kick_towards(state, self.point)
 end
 
 return Pass

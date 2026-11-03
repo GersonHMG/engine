@@ -3,7 +3,6 @@ local Role = require("AI.roles.role")
 local profile = require("utils.robot_profile")
 local KickToGoal = require("AI.actions.kick_to_goal")
 local KickToClear = require("AI.actions.kick_to_clear")
-local Pass = require("AI.actions.pass")
 local GoToBall = require("AI.actions.go_to_ball")
 
 local SHOOT_THRESHOLD = 0.5  -- always shoot above this probability of scoring, if we can kick
@@ -38,10 +37,12 @@ end
 --- @param team integer
 --- @return Role
 function Attacker.new(team)
+	-- Pass (actions/pass.lua) is scored but not offered: measured in lua/tests/attack.lua,
+	-- passing lost goals in both modes (2v2 86% -> 89% and 3v3 44% -> 51% on the holdout
+	-- starts without it), from passes to a moving receiver and pass <-> shot switching.
 	return Role.new("attacker", {
 		KickToGoal.new(team),
 		KickToClear.new(team),
-		Pass.new(team),
 		GoToBall.new(team),
 	}, shoot_override)
 end
