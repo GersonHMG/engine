@@ -25,6 +25,8 @@ M.BRAKE_DECEL = 4.0     -- m/s^2, braking assumed when predicting where a moving
 M.BRAKE_ZONE = 0.5      -- m beyond MARGIN where a robot's stopping point is checked
 M.CROWD_DIST = 0.25     -- m, another robot this close (center to center) can push ours
 M.CROWD_MARGIN = 0.10   -- m, extra room kept from the areas while another robot is that close
+M.CROWD_LOOKAHEAD = 0.2 -- s, a robot that will be that close this soon (current velocities) counts too:
+                        -- the 3v3 ball guard drove into ours at 2.8 m/s and pushed it in (run 05)
 M.OUTSIDE = 1.0         -- m, how far behind the goal line an area extends (covers the goal)
 
 --- The areas, as rectangles grown by `margin`. side = 1: the +x area, -1: the -x one.
@@ -148,6 +150,19 @@ function M.safe_target(from, target, forbidden, margin)
 	return target
 end
 
+--- Whether robots `a` and `b` are within `d` of each other now or at any time in the next
+--- `t` s, moving at their current velocities.
+--- @return boolean
+function M.closing_within(a, b, d, t)
+	local rx, ry = b.x - a.x, b.y - a.y
+	local vx, vy = (b.vel_x or 0) - (a.vel_x or 0), (b.vel_y or 0) - (a.vel_y or 0)
+	local v2 = vx * vx + vy * vy
+	local k = 0.0
+	if v2 > 1e-9 then k = math.max(0.0, math.min(t, -(rx * vx + ry * vy) / v2)) end
+	local cx, cy = rx + vx * k, ry + vy * k
+	return cx * cx + cy * cy < d * d
+end
+
 local installed = false
 
 --- Every active robot on the field except robot `id` of team `team`.
@@ -180,7 +195,7 @@ function M.install(team, is_goalkeeper)
 					-- Another robot touching ours can push it in: keep more room then.
 					local margin = M.MARGIN
 					for _, other in ipairs(crowd(id, t)) do
-						if (other.x - robot.x) ^ 2 + (other.y - robot.y) ^ 2 < M.CROWD_DIST ^ 2 then
+						if M.closing_within(robot, other, M.CROWD_DIST, M.CROWD_LOOKAHEAD) then
 							margin = M.MARGIN + M.CROWD_MARGIN
 							break
 						end

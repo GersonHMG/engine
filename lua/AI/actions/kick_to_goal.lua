@@ -16,6 +16,10 @@ local KickToGoal = setmetatable({}, { __index = KickAction })
 KickToGoal.__index = KickToGoal
 
 local UNAVAILABLE = -1.0  -- score when no aim can be reached: below any real outcome
+-- m: once the ball has moved this far since the aim was committed, the aim is stale and is
+-- committed again (a ball still rolling after a push: 0.1-0.3 m moved -> the committed aim's
+-- P at the kick was 0.50 against 0.69 for the best aim then; run 04 aim probe).
+local REAIM_DIST = 0.1
 
 --- @param team integer
 --- @return KickToGoal
@@ -24,6 +28,7 @@ function KickToGoal.new(team)
 	self.team = team
 	self.candidate = nil  -- best aim this tick, from evaluate()
 	self.aim = nil        -- aim committed when the option started
+	self.aim_ball = nil   -- where the ball was when the aim was committed
 	return self
 end
 
@@ -45,9 +50,16 @@ end
 function KickToGoal:start(state)
 	KickAction.start(self, state)
 	self.aim = self.candidate
+	local ball = state.ball or world.ball()
+	self.aim_ball = { x = ball.x, y = ball.y }
 end
 
 function KickToGoal:run(state)
+	local ball = state.ball or world.ball()
+	if self.candidate and self.aim_ball and world.distance(ball, self.aim_ball) > REAIM_DIST then
+		self.aim = self.candidate
+		self.aim_ball = { x = ball.x, y = ball.y }
+	end
 	local aim = self.aim or self.candidate or value.GOAL
 	KickAction.kick_towards(state, aim)
 end
