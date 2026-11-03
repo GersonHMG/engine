@@ -33,6 +33,10 @@ local ROLE_COLORS = {                     -- role label colors
 --- @type table<integer, { attacker: Role, supporter: Role, goalkeeper: Role, defender: Role, active: string|nil }>
 local slots = {}
 
+--- Read-only bookkeeping for tests and debug: robot id -> { role, action, score } chosen
+--- this tick.
+M.chosen = {}
+
 local function slot_for(id)
 	if not slots[id] then
 		slots[id] = {
@@ -114,6 +118,14 @@ local function draw_scores(robot, role, scored, best_index)
 	end
 end
 
+--- Forgets every robot's roles and running options, and the remembered owner, keeper
+--- and supporters: the next tick starts fresh (a new episode in a test).
+function M.reset()
+	slots = {}
+	M.chosen = {}
+	role_assigner.reset()
+end
+
 --- Entry point: run one tick of the experiment.
 --- Called from the root entry script (see lua/run_ai.lua).
 function M.process()
@@ -134,6 +146,7 @@ function M.process()
 		local state = build_state(robot, robots)
 		local scored, best_index = role:choose(state)
 		draw_scores(robot, role, scored, best_index)
+		M.chosen[robot.id] = { role = role.name, action = scored[best_index].action.name, score = scored[best_index].score }
 
 		scored[best_index].action:run(state)
 	end
