@@ -4,6 +4,7 @@ local profile = require("utils.robot_profile")
 local KickToGoal = require("AI.actions.kick_to_goal")
 local KickToClear = require("AI.actions.kick_to_clear")
 local GoToBall = require("AI.actions.go_to_ball")
+local PushBall = require("AI.actions.push_ball")
 
 local SHOOT_THRESHOLD = 0.5  -- always shoot above this probability of scoring, if we can kick
 local GOAL = { x = 4.5, y = 0.0 }  -- enemy goal center
@@ -43,6 +44,7 @@ function Attacker.new(team)
 	return Role.new("attacker", {
 		KickToGoal.new(team),
 		KickToClear.new(team),
+		PushBall.new(team),
 		GoToBall.new(team),
 	}, shoot_override)
 end
