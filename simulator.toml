@@ -24,6 +24,7 @@ front_restitution = 0.2
 kick_reach = 0.01
 max_accel = 6.0
 max_alpha = 40.0
+kick_x_speed = 5.0
 max_kick_speed = 6.5
 max_omega = 10.0
 max_speed = 3.5

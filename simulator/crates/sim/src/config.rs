@@ -39,6 +39,7 @@ impl SimConfig {
             ("robot.max_omega", robot.max_omega, non_negative(robot.max_omega), ">= 0"),
             ("robot.max_alpha", robot.max_alpha, non_negative(robot.max_alpha), ">= 0"),
             ("robot.max_kick_speed", robot.max_kick_speed, non_negative(robot.max_kick_speed), ">= 0"),
+            ("robot.kick_x_speed", robot.kick_x_speed, non_negative(robot.kick_x_speed), ">= 0"),
             ("robot.kick_reach", robot.kick_reach, non_negative(robot.kick_reach), ">= 0"),
             ("robot.body_restitution", robot.body_restitution, fraction(robot.body_restitution), "in [0, 1]"),
             ("robot.front_restitution", robot.front_restitution, fraction(robot.front_restitution), "in [0, 1]"),
@@ -123,6 +124,9 @@ pub struct RobotConfig {
     pub max_alpha: f64,
     /// m/s, SSL rule limit.
     pub max_kick_speed: f64,
+    /// Speed of the flat kick the engine commands for `kickx`, m/s (the kick
+    /// itself is still capped by `max_kick_speed`).
+    pub kick_x_speed: f64,
     /// How far in front of the face the ball may be and still get kicked, m.
     pub kick_reach: f64,
     /// Ball bounce off the round body.
@@ -148,6 +152,7 @@ impl Default for RobotConfig {
             max_omega: 10.0,
             max_alpha: 40.0,
             max_kick_speed: 6.5,
+            kick_x_speed: 3.0,
             kick_reach: 0.01,
             body_restitution: 0.5,
             front_restitution: 0.2,

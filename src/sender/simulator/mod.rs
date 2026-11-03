@@ -16,9 +16,6 @@ use ssl_sim::{Ball, Event, RobotId, SimConfig, SimState, Simulator, Team, Vec2};
 use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 
-/// Kick speed for `kick_x`, the same the grSim link sends.
-const KICK_SPEED: f64 = 3.0;
-
 /// A robot placement: position, heading (rad).
 type Pose = (Vec2, f64);
 
@@ -50,8 +47,10 @@ impl SimLink {
     /// a command stop. Commands are in the robot frame, as for grSim.
     pub fn apply_commands(&mut self, commands: &HashMap<(i32, i32), RobotCommand>) {
         let ids: Vec<RobotId> = self.sim.state().robots().iter().map(|r| r.id).collect();
+        // `kickx` kicks at the configured flat-kick speed (simulator.toml, robot.kick_x_speed).
+        let kick_speed = self.sim.config().robot.kick_x_speed;
         for id in ids {
-            let command = commands.get(&engine_id(id)).map(to_sim_command).unwrap_or_default();
+            let command = commands.get(&engine_id(id)).map(|c| to_sim_command(c, kick_speed)).unwrap_or_default();
             // The id comes from the simulator itself, so it exists.
             let _ = self.sim.set_command(id, command);
         }
@@ -159,12 +158,12 @@ pub(crate) fn engine_id(id: RobotId) -> (i32, i32) {
     (id.id as i32, team)
 }
 
-fn to_sim_command(command: &RobotCommand) -> ssl_sim::RobotCommand {
+fn to_sim_command(command: &RobotCommand, kick_speed: f64) -> ssl_sim::RobotCommand {
     ssl_sim::RobotCommand {
         vt: command.motion.vx.unwrap_or(0.0),
         vn: command.motion.vy.unwrap_or(0.0),
         omega: command.motion.angular.unwrap_or(0.0),
-        kick_speed: if command.kicker.kick_x { KICK_SPEED } else { 0.0 },
+        kick_speed: if command.kicker.kick_x { kick_speed } else { 0.0 },
     }
 }
 
