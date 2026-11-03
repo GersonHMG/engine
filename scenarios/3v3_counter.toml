@@ -1,0 +1,48 @@
+# Field setup for the engine's simulator: where every robot and the ball are.
+# Load it with `sim scenario load 3v3_counter` in the Lua console. Named start of lua/tests/attack.lua.
+
+[ball]
+x = -0.5
+y = -0.5
+
+[[robots]]
+team = "blue"
+id = 0
+x = -1.1
+y = -0.6
+theta = 0.17
+
+[[robots]]
+team = "blue"
+id = 1
+x = 0.8
+y = 1.2
+theta = -2.22
+
+[[robots]]
+team = "blue"
+id = 2
+x = -4.3
+y = 0.0
+theta = 0.0
+
+[[robots]]
+team = "yellow"
+id = 0
+x = 0.53
+y = 0.84
+theta = -2.22
+
+[[robots]]
+team = "yellow"
+id = 1
+x = 4.35
+y = -0.02
+theta = 3.14
+
+[[robots]]
+team = "yellow"
+id = 2
+x = -0.15
+y = -0.47
+theta = -3.04
