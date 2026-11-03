@@ -8,8 +8,8 @@ local profile = require("utils.robot_profile")
 
 local APPROACH_CLEARANCE = 0.0385   -- m, gap between robot and ball at the approach point, behind the ball
 local TOUCH_OFFSET = 0.045          -- m, ball to the move_direct target while touching
-local LINE_TOLERANCE = 0.10         -- m, lateral distance to the kick line to start touching
-local FACING_TOLERANCE = 0.1        -- rad, heading error to the kick direction to start touching
+local LINE_TOLERANCE = 0.02         -- m, lateral distance to the kick line to start touching (tight: the ball leaves along the heading)
+local FACING_TOLERANCE = 0.015      -- rad, heading error to the kick direction to start touching (0.1 rad missed shots by 0.45 m median)
 local TICK = 1 / 60                 -- s, control period
 local MIN_LENGTH = 0.001            -- m, guard for divisions by a length
 

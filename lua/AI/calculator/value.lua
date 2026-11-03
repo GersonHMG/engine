@@ -4,8 +4,8 @@
 ---
 --- Success probabilities are products of stages; most stages are races between the ball
 --- (or our robot) and the fastest enemy, turned into probabilities by `race`.
---- So far this module has the shot (section 3.1). The V grid is not built yet, so every
---- failure outcome is worth V_LOST = 0 (ρ = 0 in the doc).
+--- It has the shot (section 3.1), the state values V / V_LOST on a grid (section 2) and
+--- the kick into space (section 3.4).
 ---
 --- Pure module: every input is passed in.
 
@@ -23,6 +23,20 @@ M.AIM_STEP = 0.05         -- m between the aim points tried along the goal mouth
 M.KEEPER_RADIUS = 1.5     -- m, the enemy nearest the goal center within this is the keeper
 M.PHI_SCALE = 1.702       -- logistic approximation of the normal CDF: Φ(x) ≈ σ(1.702 x)
 M.PATH_STEP = 0.05        -- m between the points of a shot's path raced against an enemy
+M.RHO = 0.5               -- V_LOST(c) = -RHO * V(mirror c): how much conceding weighs
+M.CELL = 0.25             -- m, grid cell size
+M.FIELD_HALF_X, M.FIELD_HALF_Y = 4.5, 3.0  -- m
+M.FIELD_MARGIN = 0.25     -- m, a kicked ball must stop at least this far inside the field
+M.DIRECTIONS = 32         -- kick directions tried for a kick into space
+M.LINE_UP = 0.6           -- s, line-up time assumed in the grid (no robots there)
+M.KEEPER_LINE = 0.15      -- m, the modelled keeper stands this far in front of the goal line
+M.SWEEPS = 60             -- max value-iteration sweeps
+M.GRID_KEEP = 0.8         -- grid only: chance a kick into space is ours again (typical defense)
+M.KEEPER_DT = 0.02        -- s, time step of the keeper simulation
+M.KEEPER_SPEED = 1.8      -- m/s, top speed of the tracking keeper (profile cruise_speed, measured)
+M.KEEPER_LAG = 0.4        -- s, the keeper follows where the ball was this long ago (controller start-up)
+M.KEEPER_ACCEL = 6.0      -- m/s^2 (simulator.toml max_accel)
+M.KEEPER_GAP_SCALE = 0.04 -- m, spread of P_keeper = σ(gap / scale) around a touch (gap 0)
 
 local function dist(a, b)
 	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
@@ -119,6 +133,71 @@ function M.path_margin(from, to, t0, robots, react)
 	return worst
 end
 
+--- Gap, m, of a shot against a keeper that tracks the ball (skills/goalkeeper and
+--- keepers like it): it does not read the shot, it keeps moving to the point where the
+--- line ball -> goal center crosses its line, at most KEEPER_SPEED / KEEPER_ACCEL. The
+--- ball rolls from `ball` to `aim`. Simulated every KEEPER_DT: the smallest gap between
+--- the keeper's body and the ball, negative when it touches the ball before the ball
+--- crosses the goal line.
+--- @param ball { x: number, y: number }
+--- @param aim { x: number, y: number }
+--- @param keeper RobotState
+--- @param t0 number  -- s until the kick
+--- @return number
+function M.keeper_gap(ball, aim, keeper, t0)
+	local length = dist(ball, aim)
+	if length < 1e-6 then return -math.huge end
+	local ux, uy = (aim.x - ball.x) / length, (aim.y - ball.y) / length
+	local reach = profile.touch_distance()
+	-- The keeper tracks the resting ball during the line-up: it starts there.
+	local k = M.model_keeper(ball)
+	local kx, ky, vx, vy = k.x, k.y, 0.0, 0.0
+	local gap = math.huge
+	local t = 0.0
+	local total = profile.ball_travel_time(length)
+	if total == math.huge then return -math.huge end
+	while t <= total + 1e-9 do
+		-- Ball position after t s of flight.
+		local s = M.travelled(t)
+		local bx, by = ball.x + ux * s, ball.y + uy * s
+		gap = math.min(gap, dist({ x = kx, y = ky }, { x = bx, y = by }) - reach)
+		if gap < 0 then break end
+		-- Keeper: accelerate towards its tracking spot for the ball KEEPER_LAG s ago.
+		local s_lag = M.travelled(math.max(0.0, t - M.KEEPER_LAG))
+		local spot = M.model_keeper({ x = ball.x + ux * s_lag, y = ball.y + uy * s_lag })
+		local dx, dy = spot.x - kx, spot.y - ky
+		local d = math.sqrt(dx * dx + dy * dy)
+		local want_x, want_y = 0.0, 0.0
+		if d > 1e-6 then
+			local v = math.min(M.KEEPER_SPEED, math.sqrt(2 * M.KEEPER_ACCEL * d))
+			want_x, want_y = dx / d * v, dy / d * v
+		end
+		local ax, ay = want_x - vx, want_y - vy
+		local a = math.sqrt(ax * ax + ay * ay)
+		local max_dv = M.KEEPER_ACCEL * M.KEEPER_DT
+		if a > max_dv then ax, ay = ax / a * max_dv, ay / a * max_dv end
+		vx, vy = vx + ax, vy + ay
+		kx, ky = kx + vx * M.KEEPER_DT, ky + vy * M.KEEPER_DT
+		t = t + M.KEEPER_DT
+	end
+	return gap
+end
+
+--- Distance, m, a kicked ball has rolled after `t` s (kick speed of the profile).
+--- @param t number
+--- @return number
+function M.travelled(t)
+	local v0 = profile.kick.speed
+	local v1 = v0 * 5 / 7
+	local t_slide = (v0 - v1) / profile.ball.slide_decel
+	if t <= t_slide then
+		return v0 * t - 0.5 * profile.ball.slide_decel * t * t
+	end
+	local slide = v0 * t_slide - 0.5 * profile.ball.slide_decel * t_slide * t_slide
+	local tr = math.min(t - t_slide, v1 / profile.ball.roll_decel)
+	return slide + v1 * tr - 0.5 * profile.ball.roll_decel * tr * tr
+end
+
 --- Whether a field robot can kick the ball towards `target` without entering a defense
 --- area: the spot it kicks from (behind the ball) keeps its body out (utils/area_guard).
 --- @param ball { x: number, y: number }
@@ -160,11 +239,11 @@ function M.shot_at(robot, ball, aim, keeper, field)
 		local later = tempo.enemies_at(field, ball, react)
 		p_clear = M.race(M.path_margin(ball, aim, t_kick, later, react))
 	end
-	-- 4. beats the keeper: it tracks the ball while we line up and moves for the shot
-	--    once it is kicked.
+	-- 4. beats the keeper: it tracks the ball (keeper_gap).
 	local p_keeper = 1.0
 	if keeper then
-		p_keeper = M.race(M.path_margin(ball, aim, t_kick, { keeper }, t_kick))
+		local gap = M.keeper_gap(ball, aim, keeper, t_kick)
+		p_keeper = gap == -math.huge and 0.0 or 1.0 / (1.0 + math.exp(-gap / M.KEEPER_GAP_SCALE))
 	end
 
 	local p = clamp(p_rel) * clamp(p_target) * clamp(p_clear) * clamp(p_keeper)
@@ -191,6 +270,164 @@ function M.best_shot(robot, ball, enemies)
 		local shot = M.shot_at(robot, ball, aim, keeper, field)
 		if shot and (not best or shot.score > best.score) then
 			best = shot
+		end
+	end
+	return best
+end
+
+-- ---------------------------------------------------------------------------
+-- state values (section 2)
+-- ---------------------------------------------------------------------------
+
+--- The keeper of the grid model: on the line ball -> goal center, KEEPER_LINE in front of
+--- the goal line, between the posts. It is how keepers usually play (skills/goalkeeper).
+--- @param ball { x: number, y: number }
+--- @return RobotState
+function M.model_keeper(ball)
+	local line_x = M.GOAL.x - M.KEEPER_LINE
+	local dx = ball.x - M.GOAL.x
+	local y = M.GOAL.y
+	if math.abs(dx) > 1e-3 then
+		y = M.GOAL.y + (ball.y - M.GOAL.y) * (line_x - M.GOAL.x) / dx
+	end
+	y = math.max(-M.GOAL_HALF_WIDTH, math.min(M.GOAL_HALF_WIDTH, y))
+	return { x = line_x, y = y, orientation = math.atan(ball.y - y, ball.x - line_x), vel_x = 0, vel_y = 0 }
+end
+
+--- Where a kick from `ball` in direction `angle` stops (a kick's roll), or nil when it
+--- would leave the field or stop in a defense area.
+--- @return { x: number, y: number }|nil
+function M.landing(ball, angle)
+	local r = profile.roll_distance()
+	local p = { x = ball.x + r * math.cos(angle), y = ball.y + r * math.sin(angle) }
+	if math.abs(p.x) > M.FIELD_HALF_X - M.FIELD_MARGIN or math.abs(p.y) > M.FIELD_HALF_Y - M.FIELD_MARGIN then
+		return nil
+	end
+	if area_guard.touched(p, profile.ball.radius) then
+		return nil
+	end
+	return p
+end
+
+local grid = nil  -- { nx, ny, v[i][j] }, built on first use
+
+local function cell_center(i, j)
+	return { x = -M.FIELD_HALF_X + (i - 0.5) * M.CELL, y = -M.FIELD_HALF_Y + (j - 0.5) * M.CELL }
+end
+
+--- Builds V by value iteration on the empty field (only the model keeper):
+---     V(c) = max( shot(c), max_dir γ^{LINE_UP + flight} · [q·V(p) + (1 − q)·V_LOST(p)] )
+--- with p = landing(c, dir) and q = GRID_KEEP standing in for the enemies the grid leaves out.
+--- Cells inside a defense area are 0 (no field robot may play the ball there).
+local function build()
+	local nx = math.floor(2 * M.FIELD_HALF_X / M.CELL + 0.5)
+	local ny = math.floor(2 * M.FIELD_HALF_Y / M.CELL + 0.5)
+	local v, shot, moves = {}, {}, {}
+	local roll = profile.roll_distance()
+	local t_move = M.LINE_UP + profile.ball_travel_time(0.95 * roll)
+	for i = 1, nx do
+		v[i], shot[i], moves[i] = {}, {}, {}
+		for j = 1, ny do
+			local c = cell_center(i, j)
+			local blocked = area_guard.touched(c, profile.ball.radius) ~= nil
+			local s = 0.0
+			if not blocked then
+				local robot = { x = c.x - 0.15, y = c.y, orientation = 0.0 }
+				local best = M.best_shot(robot, c, { M.model_keeper(c) })
+				s = best and best.score or 0.0
+			end
+			shot[i][j], v[i][j] = s, s
+			moves[i][j] = {}
+			if not blocked then
+				for k = 0, M.DIRECTIONS - 1 do
+					local p = M.landing(c, 2 * math.pi * k / M.DIRECTIONS)
+					if p then
+						local pi_ = math.max(1, math.min(nx, math.floor((p.x + M.FIELD_HALF_X) / M.CELL) + 1))
+						local pj = math.max(1, math.min(ny, math.floor((p.y + M.FIELD_HALF_Y) / M.CELL) + 1))
+						moves[i][j][#moves[i][j] + 1] = { pi_, pj }
+					end
+				end
+			end
+		end
+	end
+	local discount = M.discount(t_move)
+	for _ = 1, M.SWEEPS do
+		local change = 0.0
+		for i = 1, nx do
+			for j = 1, ny do
+				local best = shot[i][j]
+				for _, m in ipairs(moves[i][j]) do
+					local lost = -M.RHO * v[nx + 1 - m[1]][ny + 1 - m[2]]
+					best = math.max(best, discount * (M.GRID_KEEP * v[m[1]][m[2]] + (1 - M.GRID_KEEP) * lost))
+				end
+				change = math.max(change, math.abs(best - v[i][j]))
+				v[i][j] = best
+			end
+		end
+		if change < 1e-4 then break end
+	end
+	grid = { nx = nx, ny = ny, v = v }
+end
+
+--- V(p): the probability that we score from holding the ball at `p` (grid lookup,
+--- bilinear between cell centers).
+--- @param p { x: number, y: number }
+--- @return number
+function M.V(p)
+	if not grid then build() end
+	local fx = (p.x + M.FIELD_HALF_X) / M.CELL + 0.5
+	local fy = (p.y + M.FIELD_HALF_Y) / M.CELL + 0.5
+	local i = math.max(1, math.min(grid.nx - 1, math.floor(fx)))
+	local j = math.max(1, math.min(grid.ny - 1, math.floor(fy)))
+	local ax = math.max(0.0, math.min(1.0, fx - i))
+	local ay = math.max(0.0, math.min(1.0, fy - j))
+	local v = grid.v
+	return (1 - ax) * (1 - ay) * v[i][j] + ax * (1 - ay) * v[i + 1][j]
+		+ (1 - ax) * ay * v[i][j + 1] + ax * ay * v[i + 1][j + 1]
+end
+
+--- V_LOST(p) = −ρ · V(−p): the enemy holding the ball at `p` is our V seen from their side.
+--- @param p { x: number, y: number }
+--- @return number
+function M.V_LOST(p)
+	return -M.RHO * M.V({ x = -p.x, y = -p.y })
+end
+
+-- ---------------------------------------------------------------------------
+-- kick into space (section 3.4)
+-- ---------------------------------------------------------------------------
+
+--- Scores kicking the ball from `ball` into space at `p` (where the kick stops):
+---     S = P_rel·γ^t·[P_win·V(p) + (1 − P_win)·V_LOST(p)] + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
+--- P_win = race(tempo.loose_ball_margin): we reach the rolling ball before they do.
+--- @param robot RobotState  -- the kicker
+--- @param ball { x: number, y: number }
+--- @param p { x: number, y: number }
+--- @param allies RobotState[]  -- the kicker's teammates
+--- @param enemies RobotState[]
+--- @return table  -- { target, score, p_rel, p_win, t }
+function M.kick_into_space(robot, ball, p, allies, enemies)
+	local t_kick = tempo.line_up_time(robot, ball, p)
+	local p_rel = M.race(tempo.enemy_time(ball, enemies) - t_kick)
+	local p_win = M.race(tempo.loose_ball_margin(robot, ball, p, allies, enemies))
+	local t = t_kick + profile.ball_travel_time(0.95 * dist(ball, p))
+	local score = p_rel * M.discount(t) * (p_win * M.V(p) + (1 - p_win) * M.V_LOST(p))
+		+ (1 - p_rel) * M.discount(t_kick) * M.V_LOST(ball)
+	return { target = p, score = score, p_rel = p_rel, p_win = p_win, t = t }
+end
+
+--- The best kick into space from `ball`, over DIRECTIONS directions, or nil when every
+--- direction leaves the field, ends in a defense area or cannot be kicked.
+--- @return table|nil  -- see kick_into_space
+function M.best_kick_into_space(robot, ball, allies, enemies)
+	local best = nil
+	for k = 0, M.DIRECTIONS - 1 do
+		local p = M.landing(ball, 2 * math.pi * k / M.DIRECTIONS)
+		if p and M.kickable(ball, p) then
+			local option = M.kick_into_space(robot, ball, p, allies, enemies)
+			if not best or option.score > best.score then
+				best = option
+			end
 		end
 	end
 	return best
