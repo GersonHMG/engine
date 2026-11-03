@@ -68,6 +68,13 @@ local function pick_keeper(robots)
 	return best and best.id
 end
 
+--- Forgets the remembered goalkeeper and supporters (start of a new episode).
+function M.reset()
+	keeper_id, supporter_ids = nil, {}
+	M.roles, M.mark_targets, M.guard_index = {}, {}, {}
+	ball_owner.reset()
+end
+
 --- Assigns the roles for this tick.
 --- @param robots RobotState[]  -- our active robots
 function M.assign(robots)

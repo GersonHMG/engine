@@ -112,6 +112,12 @@ function M.update(robots)
 	M.owner = best
 end
 
+--- Forgets the remembered owner (start of a new episode).
+function M.reset()
+	owner_id = nil
+	M.owner, M.receiver = nil, nil
+end
+
 --- @param robot RobotState
 --- @return boolean
 function M.is_owner(robot)
