@@ -188,12 +188,23 @@ unless they are worth keeping.
 10. **Timing.** Wrap `value.*` functions with `os.clock()` in a probe. Stay under about
     7 ms per tick, or runs get slow.
 
-## 6. State at the end of the last session (session 2026-11-03, branch `ccr-d766ec81-ne6tee`)
+## 6. State at the end of the last session (session 2026-11-03, branch `ccr-d766ec81-ne6tee`, runs 00-13)
 
 | Mode | Tuning | Holdout | Fouls | Main losses |
 |---|---|---|---|---|
-| 2v2 | 94% | 94% | 0 | saved 1–3, wide 0–3 |
-| 3v3 | 77% | 80% | 0 | saved 4–10, out 3–7, wide 3–7 |
+| 2v2 | 94% | 93% | 0 | saved 2–3, stolen 2, wide 1–2 |
+| 3v3 | 82% | 80% | 0 | timeout 5–11, saved 6, stolen 0–4 |
+
+- **No bounce strategies (user rule).** The attack must not shoot the ball into an opponent
+  and play the rebound. `value.body_on_path`: shots and kicks into space whose path a robot
+  body already covers are not offered. Check it with
+  `sessions/.../probe/bounce.lua`-style counting (kicks whose ball next touches a yellow field
+  robot): 3v3 39–44 per 100 episodes before, 8–11 after (robots moving into a kick).
+- **Kick speed** in `profiles/sim_measured.lua` is the launch speed in play (3.48 m/s: the
+  robot still moves ~0.55 m/s at the kick), and `P_keeper` has a slow-ball factor (shots
+  arriving under ~1 m/s get saved). **Kick spots** must fit the margin `area_guard` will apply
+  there (`value.guard_margin`: crowded next to the pinned guard), or the attacker circles the
+  ball for ever.
 
 - **What moved 3v3 from 57% to 77–80%:** `push_ball` (drive through the ball at 1 m/s: the
   simulator keeps it on the kicker face), so the attacker carries the ball up to where the
@@ -210,11 +221,9 @@ unless they are worth keeping.
   pinned guard: −4 / −1).
 - **`pass` is still not offered** (`roles/attacker.lua`).
 - **Ideas for the next session, most promising first:**
-  1. **Deadlock at the pinned guard.** With the ball resting against the guard where the area
-     stops it (ball x ≈ 3.2–3.5, guard x = 3.38), the attacker alternates kick_to_goal and
-     kick_to_clear and kicks nothing for 10 s. Trace `kick_to_point.debug` there first. A
-     short sideways push (±90°) that frees the ball, scored like any push, is the likely fix.
-     Balls at x ≈ 3.44–3.5 in front of the area cannot be kicked at all inside
+  1. **3v3 holdout timeouts (11).** Part of the pinned-guard deadlock is fixed (unreachable
+     kick spots, run 13); trace the rest with a score/kick_to_point trace before changing
+     anything. Balls at x ≈ 3.44–3.5 in front of the area cannot be kicked at all inside
      `area_guard.MARGIN`.
   2. **Shots from the area corner** (x ≥ 3.6, |y| ≥ 1) score below their prediction
      (65% vs 0.75 before the re-aim). Measure them with the guard near (shot_map variant).

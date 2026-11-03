@@ -293,6 +293,9 @@ starts) and `lua/tests/shot_map.lua` (one shot per spot against the keeper skill
 | kicks into space | landing in the field | landing outside the areas and not rolling through the enemy's | a ball in the enemy area is the keeper's |
 | execution | — | `kick_to_point` heading tolerance 0.1 → 0.015 rad | the ball leaves along the heading: 0.1 rad missed shots by 0.45 m (median) |
 | P_clear, P_lane | race against every field enemy | an enemy body already on the path blocks it (−∞), no timing noise | the 3v3 ball guard, 0.35 m in front of the ball on the shot line, was raced at 39% clear and stopped every shot |
+| kicks into a body | blocked outcome (`loose`) | not offered: no shot aim or clear direction whose path a robot already covers | no strategy may rely on bouncing the ball off an opponent (user rule) |
+| P_keeper, long shots | race | × clamp((v_arrival − 0.3) / 0.8, 0, 1) | balls arriving under ~1 m/s get saved: 3.5-4 m 68%, > 4 m 17% vs P 0.88 / 0.74 (shot_map) |
+| kick spot | outside the area by MARGIN | outside by the margin area_guard will keep there (more with a robot close) | a spot that fits only the smaller margin is never reached |
 | blocked shot | V_LOST | `loose` 0.3 m past the ball, 0.6 s later | measured: shots into the guard moved the ball ~0.3 m per ~1 s |
 | dribble (3.3) | `move_ball`, 8 directions | `push_ball`: 0.5 m pushes at 1 m/s, 0 / ±30° / ±60° off the goal line, also in the V grid; brakes when the ball rolling on (0.5 m) would reach an area | no dribbler, but a robot driving straight keeps a resting ball on its face up to 1.5 m/s |
 
