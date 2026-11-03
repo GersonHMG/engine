@@ -4,7 +4,10 @@
 --   yellow 2 guards the ball: it stands GUARD_DISTANCE in front of the ball, on the line
 --            ball -> goal, so a straight shot or a forward kick has to go around it.
 -- Blue's field robots are the two farther from blue's own goal (the third is its keeper).
+-- The yellow field robot nearest the ball (marker or guard) kicks the ball out of the field
+-- whenever it gets the chance (tests/lib/clear_ball).
 local mark = require("skills.mark")
+local clear_ball = require("tests.lib.clear_ball")
 local goalkeeper = require("skills.goalkeeper")
 local profile = require("utils.robot_profile")
 
@@ -67,15 +70,31 @@ end
 
 --- Runs one tick of the yellow defense.
 function M.process()
+    local ball = get_ball_state()
+    -- The field defender nearest the ball clears it when it can.
+    local clearer = nil
+    local best = math.huge
+    for _, id in ipairs({ M.MARKER_ID, M.GUARD_ID }) do
+        local r = get_robot_state(id, M.YELLOW)
+        if r and r.active and clear_ball.chance(r, M.GOAL) then
+            local d = dist(r, ball)
+            if d < best then clearer, best = id, d end
+        end
+    end
     local target = M.free_attacker()
-    if target then
+    if clearer == M.MARKER_ID then
+        clear_ball.process(M.MARKER_ID, M.YELLOW, M.GOAL)
+    elseif target then
         mark.process(M.MARKER_ID, M.YELLOW, target)
     end
     goalkeeper.process(M.KEEPER_ID, M.YELLOW, M.GOAL)
-    local ball = get_ball_state()
-    local spot = M.guard_spot(ball)
-    move_to(M.GUARD_ID, M.YELLOW, spot)
-    face_to(M.GUARD_ID, M.YELLOW, { x = ball.x, y = ball.y })
+    if clearer == M.GUARD_ID then
+        clear_ball.process(M.GUARD_ID, M.YELLOW, M.GOAL)
+    else
+        local spot = M.guard_spot(ball)
+        move_to(M.GUARD_ID, M.YELLOW, spot)
+        face_to(M.GUARD_ID, M.YELLOW, { x = ball.x, y = ball.y })
+    end
 end
 
 return M
