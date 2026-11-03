@@ -22,7 +22,7 @@ return {
         reach = 0.010,              -- copied (not measured)
         one_touch_angle = 1.0,      -- rad, largest angle between the heading and an incoming ball
                                     -- that can still be kicked on the first touch (geometric estimate)
-        angle_error = 0.08,         -- rad, typical direction error of a kick (kick_to_point benchmark, mean)
+        angle_error = 0.02,         -- rad, typical direction error of a kick (kick_to_point benchmark, mean; 0.015 rad facing tolerance)
     },
     -- How far off the AI's time estimates can be, s: the width of the "who gets there first"
     -- probabilities. Larger for robots whose timing varies more (real robots, vision delay).
