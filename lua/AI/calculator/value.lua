@@ -249,15 +249,32 @@ function M.speed_after(d)
 end
 
 --- Whether a field robot can kick the ball towards `target` without entering a defense
---- area: the spot it kicks from (behind the ball) keeps its body out (utils/area_guard).
+--- area: the spot it kicks from (behind the ball) keeps its body out (utils/area_guard), with
+--- the margin area_guard keeps when one of `robots` (optional) is close to that spot.
 --- @param ball { x: number, y: number }
 --- @param target { x: number, y: number }
 --- @return boolean
-function M.kickable(ball, target)
+function M.kickable(ball, target, robots)
 	local d = math.max(dist(ball, target), 1e-6)
 	local c = profile.contact_distance()
 	local spot = { x = ball.x - c * (target.x - ball.x) / d, y = ball.y - c * (target.y - ball.y) / d }
-	return area_guard.touched(spot, area_guard.MARGIN) == nil
+	return area_guard.touched(spot, M.guard_margin(spot, robots)) == nil
+end
+
+--- The margin utils/area_guard will keep a robot standing at `spot` from the areas: more
+--- while another robot is (or will soon be) close enough to push it. A kick or push whose spot
+--- only fits the smaller margin can never be reached (run 12: the attacker circled the ball
+--- for 10 s next to the pinned 3v3 guard, for a clear it was not allowed to line up).
+--- @param spot { x: number, y: number }
+--- @param robots? RobotState[]
+--- @return number
+function M.guard_margin(spot, robots)
+	for _, r in ipairs(robots or {}) do
+		if area_guard.closing_within(spot, r, area_guard.CROWD_DIST, area_guard.CROWD_LOOKAHEAD) then
+			return area_guard.MARGIN + area_guard.CROWD_MARGIN
+		end
+	end
+	return area_guard.MARGIN
 end
 
 --- Scores one shot at `aim` (section 3.1):
@@ -274,11 +291,11 @@ end
 --- @return table|nil  -- { aim, score, p, t, p_rel, p_target, p_clear, p_keeper }, nil when the ball cannot get there
 function M.shot_at(robot, ball, aim, keeper, field)
 	local flight = profile.ball_travel_time(dist(ball, aim))
-	if flight == math.huge or not M.kickable(ball, aim) then
-		return nil
-	end
 	local enemies = { table.unpack(field) }
 	enemies[#enemies + 1] = keeper
+	if flight == math.huge or not M.kickable(ball, aim, enemies) then
+		return nil
+	end
 	local t_kick = tempo.line_up_time(robot, ball, aim)
 
 	-- 1. released: the kick leaves before an enemy reaches the ball.
@@ -563,7 +580,7 @@ function M.best_kick_into_space(robot, ball, allies, enemies)
 	local best = nil
 	for k = 0, M.DIRECTIONS - 1 do
 		local p = M.landing(ball, 2 * math.pi * k / M.DIRECTIONS)
-		if p and M.kickable(ball, p) and not M.body_on_path(ball, p, enemies) then
+		if p and M.kickable(ball, p, enemies) and not M.body_on_path(ball, p, enemies) then
 			local option = M.kick_into_space(robot, ball, p, allies, enemies)
 			if not best or option.score > best.score then
 				best = option
@@ -628,7 +645,8 @@ function M.push_targets(ball, enemies)
 		local margin = area_guard.MARGIN + M.PUSH_ROOM
 		if math.abs(q.x) <= M.FIELD_HALF_X - M.FIELD_MARGIN and math.abs(q.y) <= M.FIELD_HALF_Y - M.FIELD_MARGIN
 			and math.abs(approach.x) < M.FIELD_HALF_X and math.abs(approach.y) < M.FIELD_HALF_Y
-			and not area_guard.touched(robot_start, margin) and not area_guard.touched(robot_end, margin)
+			and not area_guard.touched(robot_start, math.max(margin, M.guard_margin(robot_start, enemies)))
+			and not area_guard.touched(robot_end, margin)
 			and not area_guard.segment_crosses(robot_start, robot_end, 1, margin)
 			and not area_guard.segment_crosses(robot_start, robot_end, -1, margin)
 			and not push_blocked(ball, q, enemies) then
@@ -719,7 +737,7 @@ end
 function M.pass_to(passer, ball, mate, enemies, t_ready)
 	local p = { x = mate.x, y = mate.y }
 	local d = dist(ball, p)
-	if d < M.MIN_PASS_DIST or not M.kickable(ball, p) then return nil end
+	if d < M.MIN_PASS_DIST or not M.kickable(ball, p, enemies) then return nil end
 	local flight = profile.ball_travel_time(d)
 	if flight == math.huge then return nil end
 
