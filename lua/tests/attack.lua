@@ -2,7 +2,8 @@
 --
 -- Objective: win rate = episodes with a goal / episodes.
 --   win   the ball crosses x > 4.5 with |y| < GOAL_HALF_WIDTH within EPISODE_TIME
---   loss  timeout; ball out of the field (`wide` after a shot); a yellow robot controls
+--   loss  timeout; ball out of the field (`wide` after a shot, `cleared` after a yellow kick:
+--         the defenders kick the ball out when they get the chance); a yellow robot controls
 --         the ball (closest robot, within CONTROL_DIST, ball slower than CONTROL_SPEED for
 --         CONTROL_TIME: `saved` by the keeper, else `stolen`); or `foul`: a blue robot
 --         that is not blue's goalkeeper touches a defense area with its body, or blue's
@@ -361,7 +362,11 @@ local function outcome(ball, rs)
         return "foul", f
     end
     if math.abs(ball.x) > FIELD_HALF_X or math.abs(ball.y) > FIELD_HALF_Y then
-        local shot = #kicks > 0 and kicks[#kicks].action == "kick_to_goal"
+        local last = kicks[#kicks]
+        if last and last.team == 1 then
+            return "cleared"  -- a defender kicked it out (tests/lib/clear_ball)
+        end
+        local shot = last ~= nil and last.action == "kick_to_goal"
         return (shot and ball.x > 0) and "wide" or "out"
     end
     -- Yellow control: the closest robot is yellow, touching the slow ball, long enough.

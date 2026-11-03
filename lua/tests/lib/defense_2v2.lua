@@ -2,7 +2,9 @@
 -- both play exactly the same opponent.
 --   yellow 0 marks the blue robot farther from the ball (cuts passes to it),
 --   yellow 1 keeps the goal blue attacks (x = +4.5).
+-- Yellow 0 kicks the ball out of the field whenever it gets the chance (tests/lib/clear_ball).
 local mark = require("skills.mark")
+local clear_ball = require("tests.lib.clear_ball")
 local goalkeeper = require("skills.goalkeeper")
 
 local M = {}
@@ -30,8 +32,11 @@ end
 
 --- Runs one tick of the yellow defense.
 function M.process()
+    local marker = get_robot_state(M.MARKER_ID, M.YELLOW)
     local target = M.free_attacker()
-    if target then
+    if marker and marker.active and clear_ball.chance(marker, M.GOAL) then
+        clear_ball.process(M.MARKER_ID, M.YELLOW, M.GOAL)
+    elseif target then
         mark.process(M.MARKER_ID, M.YELLOW, target)
     end
     goalkeeper.process(M.KEEPER_ID, M.YELLOW, M.GOAL)
