@@ -162,6 +162,14 @@ function M.path_margin(from, to, t0, robots, react)
 	return worst
 end
 
+--- Whether a robot body in `robots` already covers the path of a ball from `from` to `to`
+--- (within touch distance of a point of it). Kicks into such a robot only bounce off it;
+--- shots and kicks into space are not offered along such a path.
+--- @return boolean
+function M.body_on_path(from, to, robots)
+	return M.path_margin(from, to, 0.0, robots, 0.0) == -math.huge
+end
+
 --- Gap, m, of a shot against a keeper that tracks the ball (skills/goalkeeper and
 --- keepers like it): it does not read the shot, it keeps moving to the point where the
 --- line ball -> goal center crosses its line, at most KEEPER_SPEED / KEEPER_ACCEL. The
@@ -243,7 +251,8 @@ end
 ---     S = P_rel·[P_clear·γ^t·(P_on + (1 − P_on)·V_LOST(aim)) + (1 − P_clear)·γ^{t'}·loose(b')]
 ---         + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
 --- P_on = P_target·P_keeper. Missed or saved: the ball is theirs (the keeper holds it, or it
---- goes out). Blocked by a field robot: a loose ball just past the ball (b', loose).
+--- goes out). Blocked by a field robot that runs into the line: a loose ball just past the
+--- ball (b', loose). nil for an aim a field robot already stands on (body_on_path).
 --- @param robot RobotState  -- the shooter
 --- @param ball { x: number, y: number }
 --- @param aim { x: number, y: number }
@@ -268,7 +277,12 @@ function M.shot_at(robot, ball, aim, keeper, field)
 	local react = tempo.reaction(t_kick)
 	local p_clear = 1.0
 	if #field > 0 then
+		-- No shot into a robot that stands on the line, now or by the kick: a ball bounced
+		-- off a defender is not a plan (M.body_on_path).
 		local later = tempo.enemies_at(field, ball, react)
+		if M.body_on_path(ball, aim, field) or M.body_on_path(ball, aim, later) then
+			return nil
+		end
 		p_clear = M.race(M.path_margin(ball, aim, t_kick, later, react))
 	end
 	-- 4. beats the keeper: it tracks the ball (keeper_gap).
@@ -525,13 +539,14 @@ function M.kick_into_space(robot, ball, p, allies, enemies)
 end
 
 --- The best kick into space from `ball`, over DIRECTIONS directions, or nil when every
---- direction leaves the field, ends in a defense area or cannot be kicked.
+--- direction leaves the field, ends in a defense area, cannot be kicked, or runs into a robot
+--- standing on its path (body_on_path).
 --- @return table|nil  -- see kick_into_space
 function M.best_kick_into_space(robot, ball, allies, enemies)
 	local best = nil
 	for k = 0, M.DIRECTIONS - 1 do
 		local p = M.landing(ball, 2 * math.pi * k / M.DIRECTIONS)
-		if p and M.kickable(ball, p) then
+		if p and M.kickable(ball, p) and not M.body_on_path(ball, p, enemies) then
 			local option = M.kick_into_space(robot, ball, p, allies, enemies)
 			if not best or option.score > best.score then
 				best = option
