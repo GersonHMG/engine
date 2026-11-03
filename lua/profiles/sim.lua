@@ -21,7 +21,7 @@ return {
         roll_decel = 1.0,          -- m/s^2, once rolling (from 5/7 of the kick speed down)
     },
     kick = {
-        speed = 3.0,               -- m/s, flat kick (kickx)
+        speed = 5.0,               -- m/s, flat kick (kickx: simulator.toml robot.kick_x_speed)
         reach = 0.01,              -- m, how far in front of the kicker face a kick still fires
         one_touch_angle = 1.0,      -- rad, largest angle between the heading and an incoming ball
                                     -- that can still be kicked on the first touch (geometric estimate)
