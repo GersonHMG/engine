@@ -47,6 +47,8 @@ M.PUSH_ANGLES = { 0.0, math.pi / 6, -math.pi / 6, math.pi / 3, -math.pi / 3 }  -
 M.PUSH_LINE_UP = 0.1      -- s, grid only: line-up of a push after a push (the robot is behind the ball)
 M.FOLLOW_DIST = 0.6       -- m, the field enemy nearest the ball within this follows it (backs off when pushed)
 M.PUSH_APPROACH = 0.04    -- m, gap between robot and ball at the push's approach point (skills/push_ball)
+M.ROLL_ROOM = 0.25        -- m, a pushed ball rolling on must stop this far out of an area (the kick that takes over
+                          -- stops pushing mid-way; run 03: 3 cm of room let balls roll in)
 M.PUSH_ROOM = 0.05        -- m, the pushing robot stops this much further out of an area than area_guard asks
 M.RECEIVER_AIM_STEP = 0.15  -- m between aims tried for a receiver's shot (cheaper, many spots)
 
@@ -612,7 +614,7 @@ function M.push_rolls_on(ball, q)
 	local d = math.max(dist(ball, q), 1e-6)
 	local roll = M.PUSH_SPEED ^ 2 / (2 * profile.ball.roll_decel)
 	local stop = { x = q.x + (q.x - ball.x) / d * roll, y = q.y + (q.y - ball.y) / d * roll }
-	local r = profile.ball.radius
+	local r = profile.ball.radius + M.ROLL_ROOM
 	return math.abs(stop.x) <= M.FIELD_HALF_X - M.FIELD_MARGIN and math.abs(stop.y) <= M.FIELD_HALF_Y - M.FIELD_MARGIN
 		and not area_guard.touched(stop, r)
 		and not area_guard.segment_crosses(q, stop, 1, r) and not area_guard.segment_crosses(q, stop, -1, r)
