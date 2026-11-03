@@ -97,6 +97,12 @@ local function crosses(a, b, r)
 	return t0 < t1
 end
 
+--- Whether segment a -> b crosses defense area `side` grown by `margin`.
+--- @return boolean
+function M.segment_crosses(a, b, side, margin)
+	return crosses(a, b, M.area(side, margin))
+end
+
 --- The target to drive to instead of `target`, so the robot at `from` stays out of the
 --- areas in `forbidden` (a list of sides).
 --- @param from { x: number, y: number }

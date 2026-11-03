@@ -6,14 +6,16 @@
 --     S = γ^{t_kick + flight} · P_rel · P_target · P_clear · P_keeper
 --
 -- maximized over aim points along the goal mouth (AI/calculator/value.best_shot), so it
--- shoots past the keeper instead of at the goal center, and is 0 when the goal is beyond
--- a kick's roll. The aim is committed when the option starts.
+-- shoots past the keeper instead of at the goal center. Unavailable (UNAVAILABLE) when the
+-- goal is beyond a kick's roll. The aim is committed when the option starts.
 local KickAction = require("AI.actions.kick_action")
 local world = require("AI.calculator.world")
 local value = require("AI.calculator.value")
 
 local KickToGoal = setmetatable({}, { __index = KickAction })
 KickToGoal.__index = KickToGoal
+
+local UNAVAILABLE = -1.0  -- score when no aim can be reached: below any real outcome
 
 --- @param team integer
 --- @return KickToGoal
@@ -34,7 +36,7 @@ function KickToGoal:evaluate(state)
 	local opponents = state.opponents or world.active_enemies()
 	local shot = value.best_shot(state.robot, ball, opponents)
 	if not shot then
-		return 0.0
+		return UNAVAILABLE
 	end
 	self.candidate = shot.aim
 	return shot.score

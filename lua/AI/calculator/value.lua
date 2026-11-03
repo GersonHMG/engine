@@ -22,7 +22,7 @@ M.GOAL_HALF_WIDTH = tempo.GOAL_HALF_WIDTH
 M.AIM_STEP = 0.05         -- m between the aim points tried along the goal mouth
 M.KEEPER_RADIUS = 1.5     -- m, the enemy nearest the goal center within this is the keeper
 M.PHI_SCALE = 1.702       -- logistic approximation of the normal CDF: Φ(x) ≈ σ(1.702 x)
-M.PATH_STEP = 0.05        -- m between the points of a shot's path raced against an enemy
+M.PATH_STEP = 0.08        -- m between the points of a shot's path raced against an enemy
 M.RHO = 0.5               -- V_LOST(c) = -RHO * V(mirror c): how much conceding weighs
 M.CELL = 0.25             -- m, grid cell size
 M.FIELD_HALF_X, M.FIELD_HALF_Y = 4.5, 3.0  -- m
@@ -32,11 +32,15 @@ M.LINE_UP = 0.6           -- s, line-up time assumed in the grid (no robots ther
 M.KEEPER_LINE = 0.15      -- m, the modelled keeper stands this far in front of the goal line
 M.SWEEPS = 60             -- max value-iteration sweeps
 M.GRID_KEEP = 0.8         -- grid only: chance a kick into space is ours again (typical defense)
-M.KEEPER_DT = 0.02        -- s, time step of the keeper simulation
+M.KEEPER_DT = 0.03        -- s, time step of the keeper simulation
 M.KEEPER_SPEED = 1.8      -- m/s, top speed of the tracking keeper (profile cruise_speed, measured)
 M.KEEPER_LAG = 0.4        -- s, the keeper follows where the ball was this long ago (controller start-up)
 M.KEEPER_ACCEL = 6.0      -- m/s^2 (simulator.toml max_accel)
 M.KEEPER_GAP_SCALE = 0.04 -- m, spread of P_keeper = σ(gap / scale) around a touch (gap 0)
+M.MIN_PASS_DIST = 1.0     -- m, a mate closer than this is not worth passing to
+M.BLOCK_DIST = 0.5        -- m, a blocked shot ends up about this far from where it was kicked
+M.BLOCK_TIME = 0.5        -- s, until a blocked shot is played again
+M.RECEIVER_AIM_STEP = 0.15  -- m between aims tried for a receiver's shot (cheaper, many spots)
 
 local function dist(a, b)
 	return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2)
@@ -63,6 +67,17 @@ function M.race(margin)
 	if margin == math.huge then return 1.0 end
 	if margin == -math.huge then return 0.0 end
 	return profile.first_chance(margin)
+end
+
+--- P(the kick leaves before an enemy takes the ball): an enemy that reaches the ball first
+--- takes it only as often as the opponent challenges (profile.opponent.challenges_ball).
+--- @param ball { x: number, y: number }
+--- @param enemies RobotState[]
+--- @param t_kick number  -- s until our kick
+--- @return number
+function M.p_release(ball, enemies, t_kick)
+	local challenge = profile.opponent.challenges_ball or 1.0
+	return 1.0 - challenge * (1.0 - M.race(tempo.enemy_time(ball, enemies) - t_kick))
 end
 
 --- γ^t.
@@ -211,7 +226,10 @@ function M.kickable(ball, target)
 end
 
 --- Scores one shot at `aim` (section 3.1):
----     P = P_rel · P_target · P_clear · P_keeper,   score = γ^{t_kick + flight} · P
+---     S = P_rel·[P_clear·γ^t·(P_on + (1 − P_on)·V_LOST(aim)) + (1 − P_clear)·γ^{t'}·loose(b')]
+---         + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
+--- P_on = P_target·P_keeper. Missed or saved: the ball is theirs (the keeper holds it, or it
+--- goes out). Blocked by a field robot: a loose ball just past the ball (b', loose).
 --- @param robot RobotState  -- the shooter
 --- @param ball { x: number, y: number }
 --- @param aim { x: number, y: number }
@@ -228,7 +246,7 @@ function M.shot_at(robot, ball, aim, keeper, field)
 	local t_kick = tempo.line_up_time(robot, ball, aim)
 
 	-- 1. released: the kick leaves before an enemy reaches the ball.
-	local p_rel = M.race(tempo.enemy_time(ball, enemies) - t_kick)
+	local p_rel = M.p_release(ball, enemies, t_kick)
 	-- 2. on target.
 	local p_target = M.p_on_target(ball, aim)
 	-- 3. not blocked by a field enemy: they start reading the shot at `react`, from where
@@ -248,8 +266,20 @@ function M.shot_at(robot, ball, aim, keeper, field)
 
 	local p = clamp(p_rel) * clamp(p_target) * clamp(p_clear) * clamp(p_keeper)
 	local t = t_kick + flight
+	-- Failures, as for every other kick: missed, blocked or saved -> the ball is theirs near
+	-- the aim; taken before the kick -> theirs where it is.
+	local p_on = clamp(p_target) * clamp(p_keeper)  -- past the keeper and between the posts
+	local d = math.max(dist(ball, aim), 1e-6)
+	local blocked_at = {  -- a blocked shot stays near the ball: just past it, towards the aim
+		x = ball.x + (aim.x - ball.x) * M.BLOCK_DIST / d,
+		y = ball.y + (aim.y - ball.y) * M.BLOCK_DIST / d,
+	}
+	local score = clamp(p_rel) * (
+			clamp(p_clear) * M.discount(t) * (p_on + (1 - p_on) * M.V_LOST(aim))
+			+ (1 - clamp(p_clear)) * M.discount(t_kick + M.BLOCK_TIME) * M.loose(blocked_at))
+		+ (1 - clamp(p_rel)) * M.discount(t_kick) * M.V_LOST(ball)
 	return {
-		aim = aim, score = M.discount(t) * p, p = p, t = t,
+		aim = aim, score = score, p = p, t = t,
 		p_rel = p_rel, p_target = p_target, p_clear = p_clear, p_keeper = p_keeper,
 	}
 end
@@ -259,18 +289,28 @@ end
 --- @param robot RobotState
 --- @param ball { x: number, y: number }
 --- @param enemies RobotState[]
+--- @param aim_step? number  -- m between aims tried (default AIM_STEP)
 --- @return table|nil  -- see shot_at
-function M.best_shot(robot, ball, enemies)
+function M.best_shot(robot, ball, enemies, aim_step)
+	aim_step = aim_step or M.AIM_STEP
 	local keeper, field = M.split_keeper(enemies)
 	local inner = M.GOAL_HALF_WIDTH - profile.ball.radius
-	local steps = math.floor(inner / M.AIM_STEP + 1e-9)
-	local best = nil
-	for i = -steps, steps do
-		local aim = { x = M.GOAL.x, y = M.GOAL.y + i * M.AIM_STEP }
+	-- Coarse to fine: every second aim first, then the two next to the best one.
+	local steps = math.floor(inner / aim_step + 1e-9)
+	local best, best_i = nil, nil
+	local function try(i)
+		if i < -steps or i > steps then return end
+		local aim = { x = M.GOAL.x, y = M.GOAL.y + i * aim_step }
 		local shot = M.shot_at(robot, ball, aim, keeper, field)
 		if shot and (not best or shot.score > best.score) then
-			best = shot
+			best, best_i = shot, i
 		end
+	end
+	for i = -steps, steps, 2 do try(i) end
+	if best_i then
+		local center = best_i
+		try(center - 1)
+		try(center + 1)
 	end
 	return best
 end
@@ -294,8 +334,25 @@ function M.model_keeper(ball)
 	return { x = line_x, y = y, orientation = math.atan(ball.y - y, ball.x - line_x), vel_x = 0, vel_y = 0 }
 end
 
+--- The enemies of the grid model for a ball at `ball`: the model keeper and, when the
+--- opponent guards the ball (profile.opponent.guards_ball), a guard guard_distance in front
+--- of the ball towards the goal.
+--- @return RobotState[]
+function M.model_enemies(ball)
+	local enemies = { M.model_keeper(ball) }
+	local guard = profile.opponent.guard_distance
+	if guard and profile.opponent.guards_ball then
+		local d = math.max(dist(ball, M.GOAL), 1e-3)
+		enemies[#enemies + 1] = {
+			x = ball.x + (M.GOAL.x - ball.x) * guard / d, y = ball.y + (M.GOAL.y - ball.y) * guard / d,
+			orientation = math.atan(ball.y - M.GOAL.y, ball.x - M.GOAL.x), vel_x = 0, vel_y = 0,
+		}
+	end
+	return enemies
+end
+
 --- Where a kick from `ball` in direction `angle` stops (a kick's roll), or nil when it
---- would leave the field or stop in a defense area.
+--- would leave the field, stop in a defense area or roll through the enemy's.
 --- @return { x: number, y: number }|nil
 function M.landing(ball, angle)
 	local r = profile.roll_distance()
@@ -303,13 +360,15 @@ function M.landing(ball, angle)
 	if math.abs(p.x) > M.FIELD_HALF_X - M.FIELD_MARGIN or math.abs(p.y) > M.FIELD_HALF_Y - M.FIELD_MARGIN then
 		return nil
 	end
-	if area_guard.touched(p, profile.ball.radius) then
+	-- A ball rolling through the enemy area is the keeper's.
+	if area_guard.touched(p, profile.ball.radius) or area_guard.segment_crosses(ball, p, 1, profile.ball.radius) then
 		return nil
 	end
 	return p
 end
 
 local grid = nil  -- { nx, ny, v[i][j] }, built on first use
+local building = false  -- true while the grid is built (V_LOST is not known yet)
 
 local function cell_center(i, j)
 	return { x = -M.FIELD_HALF_X + (i - 0.5) * M.CELL, y = -M.FIELD_HALF_Y + (j - 0.5) * M.CELL }
@@ -320,6 +379,7 @@ end
 --- with p = landing(c, dir) and q = GRID_KEEP standing in for the enemies the grid leaves out.
 --- Cells inside a defense area are 0 (no field robot may play the ball there).
 local function build()
+	building = true
 	local nx = math.floor(2 * M.FIELD_HALF_X / M.CELL + 0.5)
 	local ny = math.floor(2 * M.FIELD_HALF_Y / M.CELL + 0.5)
 	local v, shot, moves = {}, {}, {}
@@ -333,7 +393,7 @@ local function build()
 			local s = 0.0
 			if not blocked then
 				local robot = { x = c.x - 0.15, y = c.y, orientation = 0.0 }
-				local best = M.best_shot(robot, c, { M.model_keeper(c) })
+				local best = M.best_shot(robot, c, M.model_enemies(c))
 				s = best and best.score or 0.0
 			end
 			shot[i][j], v[i][j] = s, s
@@ -367,6 +427,7 @@ local function build()
 		if change < 1e-4 then break end
 	end
 	grid = { nx = nx, ny = ny, v = v }
+	building = false
 end
 
 --- V(p): the probability that we score from holding the ball at `p` (grid lookup,
@@ -390,7 +451,20 @@ end
 --- @param p { x: number, y: number }
 --- @return number
 function M.V_LOST(p)
+	if building then return 0.0 end  -- the grid's own shots: success only
 	return -M.RHO * M.V({ x = -p.x, y = -p.y })
+end
+
+--- Value of a loose ball at `p` that an enemy got to first (a blocked shot, a cut pass):
+--- it only takes it as often as the opponent challenges (profile.opponent.challenges_ball);
+--- otherwise the ball stays ours there.
+---     loose(p) = c·V_LOST(p) + (1 − c)·V(p)
+--- @param p { x: number, y: number }
+--- @return number
+function M.loose(p)
+	if building then return 0.0 end
+	local c = profile.opponent.challenges_ball or 1.0
+	return c * M.V_LOST(p) + (1 - c) * M.V(p)
 end
 
 -- ---------------------------------------------------------------------------
@@ -398,7 +472,7 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Scores kicking the ball from `ball` into space at `p` (where the kick stops):
----     S = P_rel·γ^t·[P_win·V(p) + (1 − P_win)·V_LOST(p)] + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
+---     S = P_rel·γ^t·[P_win·V(p) + (1 − P_win)·loose(p)] + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
 --- P_win = race(tempo.loose_ball_margin): we reach the rolling ball before they do.
 --- @param robot RobotState  -- the kicker
 --- @param ball { x: number, y: number }
@@ -408,10 +482,10 @@ end
 --- @return table  -- { target, score, p_rel, p_win, t }
 function M.kick_into_space(robot, ball, p, allies, enemies)
 	local t_kick = tempo.line_up_time(robot, ball, p)
-	local p_rel = M.race(tempo.enemy_time(ball, enemies) - t_kick)
+	local p_rel = M.p_release(ball, enemies, t_kick)
 	local p_win = M.race(tempo.loose_ball_margin(robot, ball, p, allies, enemies))
 	local t = t_kick + profile.ball_travel_time(0.95 * dist(ball, p))
-	local score = p_rel * M.discount(t) * (p_win * M.V(p) + (1 - p_win) * M.V_LOST(p))
+	local score = p_rel * M.discount(t) * (p_win * M.V(p) + (1 - p_win) * M.loose(p))
 		+ (1 - p_rel) * M.discount(t_kick) * M.V_LOST(ball)
 	return { target = p, score = score, p_rel = p_rel, p_win = p_win, t = t }
 end
@@ -431,6 +505,79 @@ function M.best_kick_into_space(robot, ball, allies, enemies)
 		end
 	end
 	return best
+end
+
+-- ---------------------------------------------------------------------------
+-- pass (section 3.2)
+-- ---------------------------------------------------------------------------
+
+--- The enemies when a pass to `p` has been received `t` s from now: the field enemy
+--- nearest the ball follows it to its guard spot in front of p (as far as it gets in t);
+--- the keeper and the other enemies stay.
+--- @param enemies RobotState[]
+--- @param ball { x: number, y: number }
+--- @param p { x: number, y: number }
+--- @param t number
+--- @return RobotState[]
+function M.enemies_when_received(enemies, ball, p, t)
+	local keeper, field = M.split_keeper(enemies)
+	local follower, best = nil, math.huge
+	for _, e in ipairs(field) do
+		local d = dist(e, ball)
+		if d < best then follower, best = e, d end
+	end
+	local out = {}
+	for _, e in ipairs(enemies) do
+		if e == follower then
+			out[#out + 1] = tempo.enemies_at({ e }, p, t)[1]
+		else
+			out[#out + 1] = e
+		end
+	end
+	return out
+end
+
+--- Scores a pass from `ball` to the teammate `mate` where it stands:
+---     S = P_rel·[P_lane·P_ctl·γ^{t_r}·W + P_lane·(1 − P_ctl)·γ^{t_a}·loose(p)
+---              + (1 − P_lane)·γ^{t_m}·loose(mid)] + (1 − P_rel)·γ^{t_kick}·V_LOST(b)
+--- W = max(V(p), the mate's best shot from p): what holding the ball there is worth.
+--- nil when the mate is too close, out of a kick's roll, or the kick cannot be taken.
+--- @param passer RobotState
+--- @param ball { x: number, y: number }
+--- @param mate RobotState
+--- @param enemies RobotState[]
+--- @param t_ready? number  -- s until the mate stands there (default 0: it is there)
+--- @return table|nil  -- { receiver, score, p_rel, p_lane, p_ctl, w }
+function M.pass_to(passer, ball, mate, enemies, t_ready)
+	local p = { x = mate.x, y = mate.y }
+	local d = dist(ball, p)
+	if d < M.MIN_PASS_DIST or not M.kickable(ball, p) then return nil end
+	local flight = profile.ball_travel_time(d)
+	if flight == math.huge then return nil end
+
+	local t_kick = math.max(tempo.line_up_time(passer, ball, p), t_ready or 0.0)
+	local p_rel = M.p_release(ball, enemies, t_kick)
+	local react = tempo.reaction(t_kick)
+	local later = tempo.enemies_at(enemies, ball, react)
+	local p_lane = M.race(M.path_margin(ball, p, t_kick, later, react))
+	local t_arrive = t_kick + flight
+	local t_recv = tempo.receive_time(p, ball, M.GOAL)
+	local p_ctl = M.race(react + tempo.enemy_time(p, later) - t_arrive - t_recv)
+
+	-- The mate after receiving: at p, facing the ball. The enemy following the ball (the
+	-- one nearest it) heads for its guard spot in front of p meanwhile (tempo.enemies_at:
+	-- profile.opponent.guard_distance); the keeper and the others stay where they are.
+	local receiver = { x = p.x, y = p.y, orientation = math.atan(ball.y - p.y, ball.x - p.x) }
+	local at_shot = M.enemies_when_received(enemies, ball, p, t_arrive + t_recv)
+	local shot = M.best_shot(receiver, p, at_shot, M.RECEIVER_AIM_STEP)
+	local w = math.max(M.V(p), shot and shot.score or 0.0)
+	local mid = { x = (ball.x + p.x) / 2, y = (ball.y + p.y) / 2 }
+
+	local score = p_rel * (p_lane * p_ctl * M.discount(t_arrive + t_recv) * w
+			+ p_lane * (1 - p_ctl) * M.discount(t_arrive) * M.loose(p)
+			+ (1 - p_lane) * M.discount(t_kick + flight / 2) * M.loose(mid))
+		+ (1 - p_rel) * M.discount(t_kick) * M.V_LOST(ball)
+	return { receiver = mate.id, score = score, p_rel = p_rel, p_lane = p_lane, p_ctl = p_ctl, w = w }
 end
 
 return M
