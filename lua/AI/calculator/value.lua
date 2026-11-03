@@ -11,6 +11,7 @@
 
 local profile = require("utils.robot_profile")
 local tempo = require("AI.calculator.tempo")
+local area_guard = require("utils.area_guard")
 
 local M = {}
 
@@ -118,6 +119,18 @@ function M.path_margin(from, to, t0, robots, react)
 	return worst
 end
 
+--- Whether a field robot can kick the ball towards `target` without entering a defense
+--- area: the spot it kicks from (behind the ball) keeps its body out (utils/area_guard).
+--- @param ball { x: number, y: number }
+--- @param target { x: number, y: number }
+--- @return boolean
+function M.kickable(ball, target)
+	local d = math.max(dist(ball, target), 1e-6)
+	local c = profile.contact_distance()
+	local spot = { x = ball.x - c * (target.x - ball.x) / d, y = ball.y - c * (target.y - ball.y) / d }
+	return area_guard.touched(spot, area_guard.MARGIN) == nil
+end
+
 --- Scores one shot at `aim` (section 3.1):
 ---     P = P_rel · P_target · P_clear · P_keeper,   score = γ^{t_kick + flight} · P
 --- @param robot RobotState  -- the shooter
@@ -128,7 +141,7 @@ end
 --- @return table|nil  -- { aim, score, p, t, p_rel, p_target, p_clear, p_keeper }, nil when the ball cannot get there
 function M.shot_at(robot, ball, aim, keeper, field)
 	local flight = profile.ball_travel_time(dist(ball, aim))
-	if flight == math.huge then
+	if flight == math.huge or not M.kickable(ball, aim) then
 		return nil
 	end
 	local enemies = { table.unpack(field) }

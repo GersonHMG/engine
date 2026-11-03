@@ -15,6 +15,7 @@ local Attacker = require("AI.roles.attacker")
 local Supporter = require("AI.roles.supporter")
 local Goalkeeper = require("AI.roles.goalkeeper")
 local Defender = require("AI.roles.defender")
+local area_guard = require("utils.area_guard")
 
 local M = {}
 
@@ -129,6 +130,9 @@ end
 --- Entry point: run one tick of the experiment.
 --- Called from the root entry script (see lua/run_ai.lua).
 function M.process()
+	-- Only a goalkeeper may enter a defense area (its own): every move command of our
+	-- robots is kept out of the areas (utils/area_guard).
+	area_guard.install(TEAM, function(id) return role_assigner.roles[id] == "goalkeeper" end)
 	world.update(TEAM) -- once per tick: one read of the engine
 
 	local robots = team_robots()

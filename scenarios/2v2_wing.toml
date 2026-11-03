@@ -1,0 +1,34 @@
+# Field setup for the engine's simulator: where every robot and the ball are.
+# Load it with `sim scenario load 2v2_wing` in the Lua console. Named start of lua/tests/attack.lua.
+
+[ball]
+x = 3.0
+y = 2.6
+
+[[robots]]
+team = "blue"
+id = 0
+x = 2.4
+y = 2.3
+theta = 0.46
+
+[[robots]]
+team = "blue"
+id = 1
+x = 1.5
+y = -0.5
+theta = 1.12
+
+[[robots]]
+team = "yellow"
+id = 0
+x = 1.70
+y = -0.09
+theta = 1.12
+
+[[robots]]
+team = "yellow"
+id = 1
+x = 4.35
+y = 0.26
+theta = 2.09
