@@ -12,6 +12,7 @@ local GOAL_TARGET = { x = 4.5, y = 0.0 }  -- enemy goal center
 -- Fraction of the kicker face's acceptance angle (robot profile) the receiver may turn
 -- from the ball towards the goal: the ball must still hit the face.
 local TURN_MARGIN = 0.8
+local ARM_TOLERANCE = 0.15  -- rad, heading error to the aim under which the one-touch kicker is armed
 
 local function wrap(angle)
 	while angle > math.pi do angle = angle - 2 * math.pi end
@@ -51,7 +52,11 @@ local function one_touch(robot, ball, path_point)
 	draw_line({ path_point, aim }, { r = 1.0, g = 0.0, b = 1.0 })
 	move_direct(robot.id, robot.team, spot)
 	face_to(robot.id, robot.team, aim)
-	kickx(robot.id, robot.team)
+	-- Arm the kicker only once it faces the aim: an armed kicker fires on contact whatever
+	-- the heading, and a robot still turning kicked the pass backwards.
+	if math.abs(wrap(robot.orientation - heading)) <= ARM_TOLERANCE then
+		kickx(robot.id, robot.team)
+	end
 	return true
 end
 

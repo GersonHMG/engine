@@ -38,5 +38,8 @@ return {
     -- tackle (`stolen` is 1-2% of episodes in lua/tests/attack.lua). guards_ball: one opponent
     -- stays guard_distance in front of the ball all the time (the 3v3 test defense; the test
     -- sets it per opponent), so the field values (AI/calculator/value V) count it.
-    opponent = { read_passes = 0.0, guard_distance = 0.35, challenges_ball = 0.1, guards_ball = false },
+    opponent = { read_passes = 0.0, guard_distance = 0.35, challenges_ball = 0.1, guards_ball = false,
+        -- mark_distance (m): the defender nearest our receiver keeps this far in front of it, on the
+        -- line to the ball, wherever it goes (skills/mark in both test defenses), so it cuts passes.
+        mark_distance = 0.45 },
 }

@@ -13,6 +13,7 @@ local value = require("AI.calculator.value")
 local ball_owner = require("AI.calculator.ball_owner")
 local area_guard = require("utils.area_guard")
 local profile = require("utils.robot_profile")
+local Pass = require("AI.actions.pass")
 
 local PositionForPass = setmetatable({}, { __index = Action })
 PositionForPass.__index = PositionForPass
@@ -64,12 +65,21 @@ local function spot_value(p, robot, from, ball, enemies)
 	-- happens to point now (it turns between options, and the spot would follow it).
 	local facing = { x = from.x, y = from.y, vel_x = from.vel_x, vel_y = from.vel_y,
 		orientation = math.atan(p.y - ball.y, p.x - ball.x) }
+	-- No marker stage here: the marker follows the supporter to any spot; the pass beats it
+	-- with a lead run (actions/pass.lua).
 	local option = value.pass_to(facing, ball, mate, enemies, t_ready)
 	return option and option.score or nil
 end
 
 function PositionForPass:run(state)
 	local robot, ball = state.robot, state.ball
+	-- A pass to us is being lined up: run to its point (actions/pass.lua).
+	local planned = Pass.plan_for(robot.id)
+	if planned then
+		move_to(robot.id, robot.team, planned)
+		face_to(robot.id, robot.team, { x = ball.x, y = ball.y })
+		return
+	end
 	local enemies = state.opponents or world.active_enemies()
 	local from = passer(state)
 

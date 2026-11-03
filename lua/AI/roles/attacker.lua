@@ -4,7 +4,7 @@ local profile = require("utils.robot_profile")
 local KickToGoal = require("AI.actions.kick_to_goal")
 local KickToClear = require("AI.actions.kick_to_clear")
 local GoToBall = require("AI.actions.go_to_ball")
-local PushBall = require("AI.actions.push_ball")
+local Pass = require("AI.actions.pass")
 
 local SHOOT_THRESHOLD = 0.5  -- always shoot above this probability of scoring, if we can kick
 local GOAL = { x = 4.5, y = 0.0 }  -- enemy goal center
@@ -38,13 +38,13 @@ end
 --- @param team integer
 --- @return Role
 function Attacker.new(team)
-	-- Pass (actions/pass.lua) is scored but not offered: measured in lua/tests/attack.lua,
-	-- passing lost goals in both modes (2v2 86% -> 89% and 3v3 44% -> 51% on the holdout
-	-- starts without it), from passes to a moving receiver and pass <-> shot switching.
+	-- The ball moves by passes (and kicks into space) until a shot is worth it. No pushing:
+	-- the simulator keeps a pushed ball on the kicker face, a real robot without a good
+	-- dribbler does not.
 	return Role.new("attacker", {
 		KickToGoal.new(team),
+		Pass.new(team),
 		KickToClear.new(team),
-		PushBall.new(team),
 		GoToBall.new(team),
 	}, shoot_override)
 end
