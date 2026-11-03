@@ -213,6 +213,7 @@ local episode, start, t0
 local control_since, dead_since, kicks
 local results, counts = {}, {}
 local recorded, frames, tick = {}, nil, 0
+local yellow_touches = 0  -- ticks a yellow non-keeper touched a defense area (count_yellow)
 
 local function begin(index)
     episode = index
@@ -290,8 +291,9 @@ local function summary()
     table.sort(names)
     local hist = {}
     for _, k in ipairs(names) do hist[#hist + 1] = k .. "=" .. counts[k] end
-    print(string.format("SUMMARY mode=%s set=%s win=%d/%d (%.1f%%, 95%% CI %.1f-%.1f%%) %s",
-        MODE, SET, wins, n, 100 * p, 100 * (centre - half), 100 * (centre + half), table.concat(hist, " ")))
+    print(string.format("SUMMARY mode=%s set=%s win=%d/%d (%.1f%%, 95%% CI %.1f-%.1f%%) %s  yellow_area_ticks=%d",
+        MODE, SET, wins, n, 100 * p, 100 * (centre - half), 100 * (centre + half), table.concat(hist, " "),
+        yellow_touches))
     if RECORD then
         local f = assert(io.open(RECORD, "w"))
         f:write(json({ mode = MODE, set = SET, win = wins, n = n, robots = ROBOTS, episodes = recorded }))
@@ -321,6 +323,16 @@ local function record_frame(ball, rs)
         f[#f + 1] = c and c.action or ""
     end
     frames[#frames + 1] = f
+end
+
+--- Yellow robots other than the keeper touching a defense area this tick (the rule holds
+--- for both teams; yellow is not ours to fix, so it is only counted).
+local function count_yellow(rs)
+    for i, r in ipairs(ROBOTS) do
+        if r.team == 1 and r.id ~= defense.KEEPER_ID and area_touched(rs[i], profile.robot.radius) then
+            yellow_touches = yellow_touches + 1
+        end
+    end
 end
 
 --- A blue robot breaking the defense-area rule this tick, as "id:area", or nil.
@@ -410,6 +422,7 @@ function process()
     local ball = get_ball_state()
     local rs = robot_states()
     record_frame(ball, rs)
+    count_yellow(rs)
     local result, detail = outcome(ball, rs)
     if result and not detail then
         detail = string.format("ball (%.2f, %.2f)", ball.x, ball.y)
