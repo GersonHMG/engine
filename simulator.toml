@@ -11,7 +11,7 @@ max_substep = 0.001
 [ball]
 radius = 0.0215
 roll_decel = 1.0
-slide_decel = 3.0
+slide_decel = 10.0
 wall_restitution = 0.6
 
 [field]
@@ -22,10 +22,10 @@ body_restitution = 0.5
 front_distance = 0.073
 front_restitution = 0.2
 kick_reach = 0.01
-max_accel = 6.0
-max_alpha = 40.0
 kick_x_speed = 5.0
+max_accel = 2.0
+max_alpha = 40.0
 max_kick_speed = 6.5
 max_omega = 10.0
-max_speed = 3.5
+max_speed = 3.0
 radius = 0.09

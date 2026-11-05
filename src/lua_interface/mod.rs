@@ -236,6 +236,11 @@ impl LuaInterface {
         self.script_state()
     }
 
+    /// Memory the Lua state uses, bytes.
+    pub fn used_memory(&self) -> usize {
+        self.lua.used_memory()
+    }
+
     pub fn script_state(&self) -> ScriptExecState {
         if self.has_failed {
             ScriptExecState::Failed

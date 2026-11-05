@@ -45,6 +45,8 @@ use panels::kalman::{KalmanPanel, KalmanMessage};
 use panels::recording::{RecordingPanel, RecordingMessage, RecordingStatus};
 use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
+use panels::pipeline::{self, Link, Stage, Status};
+use panels::sim_params::SimParamsPanel;
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -61,6 +63,7 @@ pub struct EngineApp {
     recording_panel: RecordingPanel,
     control_panel: ControlPanel,
     charts_panel: ChartsPanel,
+    sim_params_panel: SimParamsPanel,
 
     // Data
     field_data: FieldData,
@@ -76,6 +79,8 @@ pub struct EngineApp {
     lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
     lua_log_rx: Arc<Mutex<mpsc::Receiver<String>>>,
     simulator_rx: Arc<Mutex<mpsc::Receiver<SimulatorSettings>>>,
+    sim_config_rx: Arc<Mutex<mpsc::Receiver<Option<ssl_sim::SimConfig>>>>,
+    perf_rx: Arc<Mutex<mpsc::Receiver<crate::perf::PerfStats>>>,
     command_tx: mpsc::Sender<EngineCommand>,
 
     // Keyboard state for manual control
@@ -140,6 +145,7 @@ impl EngineApp {
             recording_panel: RecordingPanel::default(),
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
+            sim_params_panel: SimParamsPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -150,6 +156,8 @@ impl EngineApp {
             lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
             lua_log_rx: Arc::new(Mutex::new(channels.lua_log_rx)),
             simulator_rx: Arc::new(Mutex::new(channels.simulator_rx)),
+            sim_config_rx: Arc::new(Mutex::new(channels.sim_config_rx)),
+            perf_rx: Arc::new(Mutex::new(channels.perf_rx)),
             command_tx: channels.command_tx,
             key_chars: std::collections::HashSet::new(),
             kick_key_was_down: false,
@@ -178,8 +186,8 @@ impl EngineApp {
             "Sysmic Engine".to_string()
         } else if let Some(panel) = self.window_to_panel.get(&window_id) {
             match panel {
-                SidebarPanel::Connections => "Vision & Radio".to_string(),
-                SidebarPanel::Kalman => "Kalman Filter".to_string(),
+                SidebarPanel::Pipeline => "Data Pipeline".to_string(),
+                SidebarPanel::SimParams => "Simulator Parameters".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
@@ -205,7 +213,8 @@ impl EngineApp {
 
         let size = match panel {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
-            SidebarPanel::Connections => iced::Size::new(300.0, 470.0),
+            SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
+            SidebarPanel::SimParams => iced::Size::new(400.0, 660.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -494,6 +503,11 @@ impl EngineApp {
                 let _ = self
                     .command_tx
                     .try_send(EngineCommand::ConsoleCommand(format!("sim scenario load {name}")));
+                // Start the loaded script over, so it plays the new scenario from its beginning.
+                if !self.toolbar.script_path.is_empty() {
+                    let path = self.toolbar.script_path.clone();
+                    let _ = self.command_tx.try_send(EngineCommand::LoadScript { path });
+                }
             }
             Message::Toolbar(ToolbarMessage::AddRobot(team)) => {
                 if let Some(id) = self.free_robot_id(team) {
@@ -649,6 +663,13 @@ impl EngineApp {
                 }
             }
 
+            // --- Simulator parameters ---
+            Message::SimParams(msg) => {
+                for line in self.sim_params_panel.update(msg) {
+                    let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(line));
+                }
+            }
+
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -766,6 +787,18 @@ impl EngineApp {
                 if let Ok(mut rx) = self.simulator_rx.try_lock() {
                     while let Ok(settings) = rx.try_recv() {
                         self.toolbar.simulator = settings;
+                    }
+                }
+
+                if let Ok(mut rx) = self.perf_rx.try_lock() {
+                    while let Ok(stats) = rx.try_recv() {
+                        self.bottom_panel.perf = Some(stats);
+                    }
+                }
+
+                if let Ok(mut rx) = self.sim_config_rx.try_lock() {
+                    while let Ok(config) = rx.try_recv() {
+                        self.sim_params_panel.set_config(config);
                     }
                 }
 
@@ -1160,13 +1193,8 @@ impl EngineApp {
 
     fn view_panel(&self, panel: SidebarPanel) -> Element<'_, Message> {
         let content: Element<'_, Message> = match panel {
-            SidebarPanel::Connections => column![
-                self.vision_panel.view().map(Message::Vision),
-                self.radio_panel.view().map(Message::Radio),
-            ]
-            .spacing(8)
-            .into(),
-            SidebarPanel::Kalman => self.kalman_panel.view().map(Message::Kalman),
+            SidebarPanel::Pipeline => return self.view_pipeline(),
+            SidebarPanel::SimParams => self.sim_params_panel.view().map(Message::SimParams),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
@@ -1178,6 +1206,71 @@ impl EngineApp {
             .height(Length::Fill)
             .padding(4)
             .into()
+    }
+
+    /// Vision → Kalman → Radio, each stage with its status and settings.
+    fn view_pipeline(&self) -> Element<'_, Message> {
+        let sim = self.toolbar.simulator.enabled;
+        let receiving = self.vision_panel.connected;
+        let script_running = self.toolbar.script_status == toolbar::ScriptStatus::Running;
+
+        let vision_status = if sim {
+            Status::new(theme::ACCENT, "From simulator", receiving)
+        } else if receiving {
+            Status::new(theme::GREEN, format!("Live · {} PPS", self.vision_panel.pps), true)
+        } else {
+            Status::new(theme::RED_FG, "No signal", false)
+        };
+        let kalman_status = if sim {
+            Status::new(theme::MUTED, "Bypassed", false)
+        } else if self.kalman_panel.enabled {
+            Status::new(theme::GREEN, if receiving { "Filtering" } else { "Waiting for vision" }, receiving)
+        } else {
+            Status::new(theme::ORANGE, "Off · raw vision", false)
+        };
+        let radio_status = if sim {
+            Status::new(theme::ACCENT, "To simulator", script_running)
+        } else if self.radio_panel.use_radio {
+            Status::new(theme::GREEN, "Serial", script_running)
+        } else {
+            Status::new(theme::TEXT_2, "grSim", script_running)
+        };
+
+        let stages = [
+            Stage {
+                glyph: theme::Icon::Camera,
+                title: "Vision",
+                role: "SSL-Vision · UDP",
+                status: vision_status,
+                note: sim.then_some("SIM is on: frames come from the built-in simulator. These settings apply when it is off."),
+                body: self.vision_panel.body().map(Message::Vision),
+                action: ("Reconnect", Message::Vision(VisionMessage::Reconnect)),
+            },
+            Stage {
+                glyph: theme::Icon::Filter,
+                title: "Kalman",
+                role: "EKF · pose + velocity",
+                status: kalman_status,
+                note: sim.then_some("The simulator gives exact positions, so the filter only runs on real vision."),
+                body: self.kalman_panel.body().map(Message::Kalman),
+                action: ("Apply filter", Message::Kalman(KalmanMessage::Update)),
+            },
+            Stage {
+                glyph: theme::Icon::Radio,
+                title: "Radio",
+                role: "Robot commands",
+                status: radio_status,
+                note: sim.then_some("SIM is on: commands drive the simulated robots. These settings apply when it is off."),
+                body: self.radio_panel.body().map(Message::Radio),
+                action: ("Apply radio", Message::Radio(RadioMessage::Update)),
+            },
+        ];
+        let flow = if sim { theme::ACCENT } else { theme::GREEN };
+        let links = [
+            Link { label: "detections", live: receiving, color: flow },
+            Link { label: "world → AI", live: script_running && receiving, color: flow },
+        ];
+        pipeline::diagram(stages, links)
     }
 
     /// Robots on the field of one team (0 = blue, 1 = yellow).

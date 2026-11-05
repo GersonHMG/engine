@@ -6,9 +6,10 @@ use iced::{Alignment, Element, Length};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SidebarPanel {
-    /// Vision and radio connection settings.
-    Connections,
-    Kalman,
+    /// Vision → Kalman → Radio settings, drawn as a diagram.
+    Pipeline,
+    /// Robot and ball parameters of the built-in simulator.
+    SimParams,
     Recording,
     Control,
     Charts,
@@ -60,8 +61,8 @@ impl Sidebar {
         };
 
         let content = column![
-            panel(Icon::Radio, "Vision & radio", SidebarPanel::Connections),
-            panel(Icon::Filter, "Kalman filter", SidebarPanel::Kalman),
+            panel(Icon::Pipeline, "Vision → Kalman → Radio", SidebarPanel::Pipeline),
+            panel(Icon::Sliders, "Simulator parameters", SidebarPanel::SimParams),
             panel(Icon::Record, "Recording", SidebarPanel::Recording),
             panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),
             panel(Icon::Chart, "Charts", SidebarPanel::Charts),

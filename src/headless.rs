@@ -13,6 +13,7 @@ use tracing::error;
 use crate::config::{load_field_config_from_exe, load_simulator_config};
 use crate::game_controller::GameState;
 use crate::lua_interface::{LuaInterface, RunControl, ScriptExecState};
+use crate::perf::RunStats;
 use crate::sender::radio::Radio;
 use crate::sender::simulator::SimLink;
 use crate::world::World;
@@ -57,8 +58,11 @@ pub fn run(script: &str, max_time: f64, tick: Duration) -> i32 {
     lua.resume_script();
 
     let mut ticks: u64 = 0;
+    let mut perf = RunStats::default();
     let code = loop {
+        let tick_start = Instant::now();
         let state = lua.call_process();
+        let lua_time = tick_start.elapsed();
         lua.take_draw_commands();
         print_script_output(&mut log_rx);
         if state == ScriptExecState::Failed {
@@ -72,6 +76,7 @@ pub fn run(script: &str, max_time: f64, tick: Duration) -> i32 {
             radio.send_commands(&mut world);
             radio.step_simulator(&mut world, tick.as_secs_f64());
         }
+        perf.record(tick_start.elapsed(), lua_time);
         ticks += 1;
 
         if let Some(ok) = control.outcome() {
@@ -88,6 +93,7 @@ pub fn run(script: &str, max_time: f64, tick: Duration) -> i32 {
         ticks as f64 * tick.as_secs_f64(),
         started.elapsed().as_secs_f64(),
     );
+    eprintln!("{}", perf.summary());
     code
 }
 

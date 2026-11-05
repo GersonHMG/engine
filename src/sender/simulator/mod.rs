@@ -43,6 +43,11 @@ impl SimLink {
         link
     }
 
+    /// The physical parameters the simulator runs with.
+    pub fn config(&self) -> &SimConfig {
+        self.sim.config()
+    }
+
     /// Hands this frame's commands to the simulated robots; robots without
     /// a command stop. Commands are in the robot frame, as for grSim.
     pub fn apply_commands(&mut self, commands: &HashMap<(i32, i32), RobotCommand>) {

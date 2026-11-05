@@ -57,6 +57,8 @@ pub struct Snapshot {
     pub script: ScriptSnapshot,
     pub ball: BallSnapshot,
     pub robots: Vec<RobotSnapshot>,
+    /// How fast the engine loop ran over the last second (None in its first second).
+    pub perf: Option<crate::perf::PerfStats>,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,6 +104,7 @@ impl Snapshot {
         sim_time: Option<f64>,
         script: ScriptExecState,
         script_path: &str,
+        perf: Option<crate::perf::PerfStats>,
     ) -> Self {
         let ball = world.get_ball_state();
         let robots = world
@@ -127,6 +130,7 @@ impl Snapshot {
             script: ScriptSnapshot { status: script_status(script), path: script_path.to_string() },
             ball: BallSnapshot { x: ball.position.x, y: ball.position.y, vx: ball.velocity.x, vy: ball.velocity.y },
             robots,
+            perf,
         }
     }
 }

@@ -17,6 +17,7 @@ mod gui;
 mod config;
 mod headless;
 mod mcp;
+mod perf;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
@@ -100,6 +101,12 @@ fn switch_simulator(
     info!("Simulator {}", if enabled { "on" } else { "off, vision receiver restarted" });
 }
 
+/// Tells the GUI the simulator's current parameters (None while it is off).
+fn send_sim_config(radio: &Mutex<Radio>, tx: &tokio::sync::mpsc::Sender<Option<ssl_sim::SimConfig>>) {
+    let config = radio.lock().unwrap_or_else(|e| e.into_inner()).simulator_mut().map(|sim| sim.config().clone());
+    let _ = tx.try_send(config);
+}
+
 /// Runs a Lua console line (`sim ...`) and returns its output.
 fn run_console(line: &str, radio: &Mutex<Radio>, world: &RwLock<World>) -> Vec<String> {
     let mut radio = radio.lock().unwrap_or_else(|e| e.into_inner());
@@ -114,10 +121,11 @@ fn mcp_snapshot(
     simulator: SimulatorSettings,
     script: ScriptExecState,
     script_path: &str,
+    perf: Option<perf::PerfStats>,
 ) -> mcp::Snapshot {
     let sim_time = radio.lock().unwrap_or_else(|e| e.into_inner()).simulator_mut().map(|sim| sim.time());
     let world = world.read().unwrap_or_else(|e| e.into_inner());
-    mcp::Snapshot::new(&world, simulator, sim_time, script, script_path)
+    mcp::Snapshot::new(&world, simulator, sim_time, script, script_path, perf)
 }
 
 /// Real time to spend per tick, or `None` to run flat out. Only a running
@@ -241,6 +249,8 @@ fn main() -> iced::Result {
     let (lua_log_tx, lua_log_rx) = tokio::sync::mpsc::channel::<String>(512);
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<EngineCommand>(256);
     let (simulator_gui_tx, simulator_rx) = tokio::sync::mpsc::channel::<SimulatorSettings>(16);
+    let (sim_config_gui_tx, sim_config_rx) = tokio::sync::mpsc::channel::<Option<ssl_sim::SimConfig>>(16);
+    let (perf_gui_tx, perf_rx) = tokio::sync::mpsc::channel::<perf::PerfStats>(16);
     let (mcp_tx, mcp_rx) = tokio::sync::mpsc::channel::<mcp::Request>(64);
 
     let gui_channels = GuiChannels {
@@ -249,6 +259,8 @@ fn main() -> iced::Result {
         lua_status_rx,
         lua_log_rx,
         simulator_rx,
+        sim_config_rx,
+        perf_rx,
         command_tx: command_tx.clone(),
     };
 
@@ -272,6 +284,8 @@ fn main() -> iced::Result {
                 lua_status_tx_clone,
                 lua_log_tx_clone,
                 simulator_gui_tx,
+                sim_config_gui_tx,
+                perf_gui_tx,
                 engine_command_tx,
                 rx,
                 mcp_rx,
@@ -312,6 +326,10 @@ async fn run_engine(
     lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
     lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
     simulator_gui_tx: tokio::sync::mpsc::Sender<SimulatorSettings>,
+    // The simulator's parameters, sent whenever they may have changed (None = simulator off).
+    sim_config_gui_tx: tokio::sync::mpsc::Sender<Option<ssl_sim::SimConfig>>,
+    // How fast the loop runs, once a second.
+    perf_gui_tx: tokio::sync::mpsc::Sender<perf::PerfStats>,
     // The engine's own sender, for queueing MCP commands behind the GUI's.
     command_tx: tokio::sync::mpsc::Sender<EngineCommand>,
     mut command_rx: tokio::sync::mpsc::Receiver<EngineCommand>,
@@ -374,6 +392,8 @@ async fn run_engine(
         vision_state.lock().unwrap().start(&world, &vision_gui_tx);
     }
 
+    send_sim_config(&radio, &sim_config_gui_tx);
+
     // Spawn Game Controller receiver task
     let game_state_for_ref = Arc::clone(&game_state);
     let _ref_handle = tokio::spawn(async move {
@@ -400,6 +420,9 @@ async fn run_engine(
     // Main update loop: one tick per TICK of real time; with the simulator
     // the speed setting scales it.
     info!("Engine started. Simulator: {}.", if simulator.enabled { "on" } else { "off" });
+
+    let mut loop_stats = perf::LoopStats::default();
+    let mut last_perf: Option<perf::PerfStats> = None;
 
     loop {
         let frame_start = Instant::now();
@@ -469,11 +492,13 @@ async fn run_engine(
                     for out in std::iter::once(format!("> {line}")).chain(reply) {
                         let _ = console_tx.try_send(out);
                     }
+                    send_sim_config(&radio, &sim_config_gui_tx);
                 }
                 EngineCommand::SetSimulator(settings) => {
                     switch_simulator(settings.enabled, field_config, &radio, &world, &vision_state, &vision_gui_tx);
                     simulator = settings;
                     let _ = simulator_gui_tx.try_send(settings);
+                    send_sim_config(&radio, &sim_config_gui_tx);
                 }
                 EngineCommand::UpdateRadioConfig { use_radio, port_name, baud_rate } => {
                     let mut r = radio.lock().unwrap();
@@ -565,7 +590,7 @@ async fn run_engine(
             match request {
                 mcp::Request::State(reply) | mcp::Request::Command(_, reply) => {
                     let path = last_script_path.lock().unwrap().clone();
-                    let _ = reply.send(mcp_snapshot(&world, &radio, simulator, last_script_state, &path));
+                    let _ = reply.send(mcp_snapshot(&world, &radio, simulator, last_script_state, &path, last_perf));
                 }
                 mcp::Request::Console(line, reply) => {
                     let output = run_console(&line, &radio, &world);
@@ -587,11 +612,13 @@ async fn run_engine(
         }
 
         // Call Lua process()
-        let (draw_cmds, script_state, ran_process) = {
+        let (draw_cmds, script_state, ran_process, lua_time, lua_mem) = {
             let mut lua = lua_iface.lock().unwrap();
             let ran_process = lua.script_state() == ScriptExecState::Running;
+            let lua_start = Instant::now();
             let state = lua.call_process();
-            (lua.take_draw_commands(), state, ran_process)
+            let lua_time = lua_start.elapsed();
+            (lua.take_draw_commands(), state, ran_process, lua_time, lua.used_memory())
         };
 
         if script_state != last_script_state {
@@ -672,10 +699,18 @@ async fn run_engine(
             }
         }
 
+        // Loop timing: everything this tick did, before sleeping.
+        let tick_time = frame_start.elapsed();
+        loop_stats.record(tick_time, ran_process.then_some(lua_time));
+        if let Some(stats) = loop_stats.take_if_due(Instant::now(), lua_mem) {
+            last_perf = Some(stats);
+            let _ = perf_gui_tx.try_send(stats);
+        }
+
         // Sleep for remaining frame time, or just yield when running flat out
         match frame_duration(simulator, sim_paused) {
             Some(frame_duration) => {
-                let elapsed = frame_start.elapsed();
+                let elapsed = tick_time;
                 if elapsed < frame_duration {
                     tokio::time::sleep(frame_duration - elapsed).await;
                 }

@@ -109,3 +109,11 @@ grsim = {
 	teleport_robot = function(id, team, x, y, dir) end,
 	teleport_ball = function(x, y) end,
 }
+
+---@class PerfApi
+---@field now fun(): number  -- high-resolution clock, ms; subtract two readings to time a part of the script
+
+---@type PerfApi
+perf = {
+	now = function() return 0 end,
+}

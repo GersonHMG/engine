@@ -1,8 +1,8 @@
 // gui/panels/radio.rs — Radio configuration panel
 
-use iced::widget::{button, column, container, row, text, text_input, toggler};
-use iced::{Element, Length};
-use crate::gui::theme;
+use iced::widget::column;
+use iced::Element;
+use super::pipeline::{field, input, switch};
 
 #[derive(Debug, Clone)]
 pub enum RadioMessage {
@@ -30,55 +30,14 @@ impl Default for RadioPanel {
 }
 
 impl RadioPanel {
-    pub fn view(&self) -> Element<RadioMessage> {
-        let content = column![
-            text("Radio Configuration").size(16),
-            row![
-                text("Port").width(Length::Fixed(80.0)),
-                text_input("/dev/ttyUSB0", &self.port_name).style(theme::input)
-                    .on_input(RadioMessage::PortNameChanged)
-                    .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Baud Rate").width(Length::Fixed(80.0)),
-                text_input("115200", &self.baud_rate).style(theme::input)
-                    .on_input(RadioMessage::BaudRateChanged)
-                    .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Use Radio").width(Length::Fixed(80.0)),
-                toggler(self.use_radio)
-                    .on_toggle(RadioMessage::UseRadioToggled),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            button(text("Update Radio").center().width(Length::Fill))
-                .on_press(RadioMessage::Update)
-                .width(Length::Fill),
+    /// Settings shown on the Radio card of the pipeline window.
+    pub fn body(&self) -> Element<'_, RadioMessage> {
+        column![
+            switch("Serial radio (off = grSim)", self.use_radio, RadioMessage::UseRadioToggled),
+            field("SERIAL PORT", input("/dev/ttyUSB0", &self.port_name, RadioMessage::PortNameChanged)),
+            field("BAUD RATE", input("115200", &self.baud_rate, RadioMessage::BaudRateChanged)),
         ]
-        .spacing(8)
-        .padding(12);
-
-        container(content)
-            .width(Length::Fixed(280.0))
-            .style(panel_style)
-            .into()
-    }
-}
-
-fn panel_style(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(iced::Background::Color(theme::PANEL)),
-        text_color: Some(theme::TEXT),
-        border: iced::Border {
-            color: theme::DIVIDER,
-            width: 1.0,
-            radius: 6.0.into(),
-        },
-        ..Default::default()
+        .spacing(10)
+        .into()
     }
 }
