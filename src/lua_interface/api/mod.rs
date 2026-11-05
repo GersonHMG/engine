@@ -27,4 +27,18 @@ pub(super) fn register_api_functions(
         sim::register_sim_functions(lua, Arc::clone(&radio), control);
     }
     grsim::register_grsim_functions(lua, radio);
+    register_perf_functions(lua);
+}
+
+/// `perf.now()`: a high-resolution clock in ms, to time parts of a script:
+///
+///     local t = perf.now()
+///     ...
+///     print(("scoring took %.2f ms"):format(perf.now() - t))
+fn register_perf_functions(lua: &Lua) {
+    let start = std::time::Instant::now();
+    let perf = lua.create_table().unwrap();
+    let now = lua.create_function(move |_, ()| Ok(start.elapsed().as_secs_f64() * 1000.0)).unwrap();
+    perf.set("now", now).unwrap();
+    lua.globals().set("perf", perf).unwrap();
 }
