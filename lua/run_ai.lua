@@ -11,7 +11,7 @@
 -- then reload this file; they start from where they are.
 
 local ai = require("AI.main")
-local defense = require("tests.lib.defense_2v2")
+local defense = require("tests.lib.defense_3v3")
 
 function process()
     ai.process()
