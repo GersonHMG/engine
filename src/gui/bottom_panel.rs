@@ -6,6 +6,7 @@ use iced::{mouse, Alignment, Element, Length, Point, Rectangle, Renderer, Theme}
 
 use super::theme::{self, bar, btn, divider, group, tooltip_box, Btn};
 use crate::gui::panels::control::Team;
+use crate::perf::{PerfStats, BUDGET_MS};
 
 const PPS_HISTORY: usize = 60;
 /// Highest robot id the selector offers.
@@ -31,6 +32,8 @@ pub struct BottomPanel {
     pub control_team: Team,
     pub pps: u32,
     pub pps_history: Vec<u32>,
+    /// How fast the engine loop ran over the last second.
+    pub perf: Option<PerfStats>,
 }
 
 /// Simulator summary shown while the simulator is on: speed label and
@@ -50,6 +53,7 @@ impl BottomPanel {
             control_team: Team::Blue,
             pps: 0,
             pps_history: vec![0; PPS_HISTORY],
+            perf: None,
         }
     }
 
@@ -155,6 +159,10 @@ impl BottomPanel {
                 .push(divider());
         }
 
+        if let Some(perf) = &self.perf {
+            content = content.push(perf_readout(perf)).push(divider());
+        }
+
         content = content
             .push(Canvas::new(PpsSparkline { data: &self.pps_history }).width(60).height(16))
             .push(
@@ -174,6 +182,54 @@ impl BottomPanel {
             .style(bar(theme::BAR))
             .into()
     }
+}
+
+/// `Lua 3.2 ms · tick 4.1 ms 25% · 60 Hz`, colored by how much of the tick
+/// budget is used; the tooltip has the worst tick, overruns and Lua memory.
+fn perf_readout(perf: &PerfStats) -> Element<'_, BottomPanelMessage> {
+    let color = if perf.budget_pct >= 90.0 || perf.tick_max_ms > 2.0 * BUDGET_MS {
+        theme::RED_FG
+    } else if perf.budget_pct >= 50.0 || perf.overruns > 0 {
+        theme::ORANGE
+    } else {
+        theme::GREEN
+    };
+    let lua = perf.lua_avg_ms.map_or("–".to_string(), |ms| format!("{ms:.1} ms"));
+    let label = |s: &'static str| text(s).size(11).color(theme::MUTED);
+    let value = |s: String, c| text(s).size(12).font(theme::MONO_BOLD).color(c);
+
+    let readout = row![
+        label("Lua"),
+        value(lua, theme::TEXT),
+        label("tick"),
+        value(format!("{:.1} ms", perf.tick_avg_ms), theme::TEXT),
+        value(format!("{:.0}%", perf.budget_pct), color),
+        label("·"),
+        value(format!("{:.0}", perf.loop_hz), theme::TEXT),
+        label("Hz"),
+    ]
+    .spacing(4)
+    .align_y(Alignment::Center);
+
+    let detail = format!(
+        "Last second of the engine loop (budget {BUDGET_MS:.1} ms per tick)
+         Lua process(): avg {} · max {}
+         Whole tick: avg {:.2} ms · max {:.2} ms
+         Ticks over budget: {}
+         Lua memory: {:.1} MB",
+        perf.lua_avg_ms.map_or("–".to_string(), |ms| format!("{ms:.2} ms")),
+        perf.lua_max_ms.map_or("–".to_string(), |ms| format!("{ms:.2} ms")),
+        perf.tick_avg_ms,
+        perf.tick_max_ms,
+        perf.overruns,
+        perf.lua_mem_mb,
+    );
+    tooltip(
+        readout,
+        container(text(detail).size(12).font(theme::MONO)).padding([6, 10]).style(tooltip_box),
+        tooltip::Position::Top,
+    )
+    .into()
 }
 
 /// Sparkline of the last PPS samples.

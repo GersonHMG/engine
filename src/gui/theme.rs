@@ -92,15 +92,18 @@ pub fn app_theme() -> Theme {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Icon {
+    Camera,
     Chart,
     Filter,
     Folder,
     Gamepad,
+    Pipeline,
     Play,
     Radio,
     Record,
     Reload,
     Replay,
+    Sliders,
     Stop,
     Terminal,
 }
@@ -110,15 +113,18 @@ pub enum Icon {
 pub fn icon<'a>(icon: Icon, size: f32, tint: Option<Color>) -> svg::Svg<'a> {
     static HANDLES: LazyLock<Vec<svg::Handle>> = LazyLock::new(|| {
         [
-            include_bytes!("../../icons/ui/chart.svg").as_slice(),
+            include_bytes!("../../icons/ui/camera.svg").as_slice(),
+            include_bytes!("../../icons/ui/chart.svg"),
             include_bytes!("../../icons/ui/filter.svg"),
             include_bytes!("../../icons/ui/folder.svg"),
             include_bytes!("../../icons/ui/gamepad.svg"),
+            include_bytes!("../../icons/ui/pipeline.svg"),
             include_bytes!("../../icons/ui/play.svg"),
             include_bytes!("../../icons/ui/radio.svg"),
             include_bytes!("../../icons/ui/record.svg"),
             include_bytes!("../../icons/ui/reload.svg"),
             include_bytes!("../../icons/ui/replay.svg"),
+            include_bytes!("../../icons/ui/sliders.svg"),
             include_bytes!("../../icons/ui/stop.svg"),
             include_bytes!("../../icons/ui/terminal.svg"),
         ]

@@ -9,6 +9,7 @@ use super::panels::charts::ChartsMessage;
 use super::panels::control::ControlMessage;
 use super::panels::kalman::KalmanMessage;
 use super::panels::radio::RadioMessage;
+use super::panels::sim_params::SimParamsMessage;
 use super::panels::recording::RecordingMessage;
 use super::panels::vision::VisionMessage;
 use super::sidebar::SidebarMessage;
@@ -102,6 +103,10 @@ pub struct GuiChannels {
     pub lua_log_rx: mpsc::Receiver<String>,
     /// Simulator settings changed by the engine (e.g. by an MCP agent).
     pub simulator_rx: mpsc::Receiver<SimulatorSettings>,
+    /// The simulator's parameters whenever they may have changed (None = simulator off).
+    pub sim_config_rx: mpsc::Receiver<Option<ssl_sim::SimConfig>>,
+    /// How fast the engine loop runs, once a second.
+    pub perf_rx: mpsc::Receiver<crate::perf::PerfStats>,
     pub command_tx: mpsc::Sender<EngineCommand>,
 }
 
@@ -124,6 +129,7 @@ pub enum Message {
     Recording(RecordingMessage),
     Control(ControlMessage),
     Charts(ChartsMessage),
+    SimParams(SimParamsMessage),
 
     // Events
     Tick,
