@@ -1,8 +1,8 @@
 // gui/panels/kalman.rs — Kalman filter configuration panel
 
-use iced::widget::{button, column, container, row, text, text_input, toggler};
-use iced::{Element, Length};
-use crate::gui::theme;
+use iced::widget::column;
+use iced::Element;
+use super::pipeline::{field, input, switch};
 
 #[derive(Debug, Clone)]
 pub enum KalmanMessage {
@@ -33,63 +33,15 @@ impl Default for KalmanPanel {
 }
 
 impl KalmanPanel {
-    pub fn view(&self) -> Element<KalmanMessage> {
-        let content = column![
-            text("Kalman Filter").size(16),
-            row![
-                text("Enabled").width(Length::Fixed(100.0)),
-                toggler(self.enabled)
-                    .on_toggle(KalmanMessage::EnabledToggled),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Proc. Noise (P)").width(Length::Fixed(100.0)),
-                text_input("0.0000001", &self.process_noise_p).style(theme::input)
-                    .on_input(KalmanMessage::ProcessNoisePChanged)
-                    .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Proc. Noise (V)").width(Length::Fixed(100.0)),
-                text_input("0.0001", &self.process_noise_v).style(theme::input)
-                    .on_input(KalmanMessage::ProcessNoiseVChanged)
-                    .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            row![
-                text("Meas. Noise").width(Length::Fixed(100.0)),
-                text_input("0.000001", &self.measurement_noise).style(theme::input)
-                    .on_input(KalmanMessage::MeasurementNoiseChanged)
-                    .width(Length::Fill),
-            ]
-            .spacing(8)
-            .align_y(iced::Alignment::Center),
-            button(text("Update KF").center().width(Length::Fill))
-                .on_press(KalmanMessage::Update)
-                .width(Length::Fill),
+    /// Settings shown on the Kalman card of the pipeline window.
+    pub fn body(&self) -> Element<'_, KalmanMessage> {
+        column![
+            switch("Filter enabled", self.enabled, KalmanMessage::EnabledToggled),
+            field("PROCESS NOISE · POSITION", input("0.0000001", &self.process_noise_p, KalmanMessage::ProcessNoisePChanged)),
+            field("PROCESS NOISE · VELOCITY", input("0.0001", &self.process_noise_v, KalmanMessage::ProcessNoiseVChanged)),
+            field("MEASUREMENT NOISE", input("0.000001", &self.measurement_noise, KalmanMessage::MeasurementNoiseChanged)),
         ]
-        .spacing(8)
-        .padding(12);
-
-        container(content)
-            .width(Length::Fixed(280.0))
-            .style(panel_style)
-            .into()
-    }
-}
-
-fn panel_style(_theme: &iced::Theme) -> container::Style {
-    container::Style {
-        background: Some(iced::Background::Color(theme::PANEL)),
-        text_color: Some(theme::TEXT),
-        border: iced::Border {
-            color: theme::DIVIDER,
-            width: 1.0,
-            radius: 6.0.into(),
-        },
-        ..Default::default()
+        .spacing(10)
+        .into()
     }
 }
