@@ -1,0 +1,417 @@
+// motion/settings.rs — Bang-bang motion limits, for all robots and per robot
+//
+// `move_to` / `move_direct` plan each robot's motion with a maximum
+// acceleration and speed. One pair applies to every robot; a robot can
+// override either value. They are kept in `robot_settings.toml` and changed
+// with the `motion ...` console commands (the Robot settings panel types
+// them), so every change shows in the console:
+//
+//   motion                                  every value
+//   motion all <max_accel|max_speed> <v>    the value for every robot
+//   motion <blue|yellow> <id> <param> <v>   one robot's own value
+//   motion <blue|yellow> <id> <param> default   back to the all-robots value
+//   motion <blue|yellow> <id> clear         drop all of that robot's own values
+//   motion save                             write robot_settings.toml
+
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{LazyLock, RwLock};
+use tracing::{info, warn};
+
+const SETTINGS_FILE: &str = "robot_settings.toml";
+
+const HEADER: &str = "\
+# Robot settings, read when the engine starts. Edit them in the Robot
+# settings panel or with the `motion ...` console commands (`motion save`
+# writes this file).
+#
+# [bangbang]: limits move_to/move_direct plan with, for every robot.
+# [[bangbang.robot]]: one robot's own values; a value left out uses the
+# all-robots one.
+
+";
+
+/// The limits one robot's motion is planned with.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BangBang {
+    /// m/s²
+    pub max_accel: f64,
+    /// m/s
+    pub max_speed: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TeamColor {
+    Blue,
+    Yellow,
+}
+
+impl TeamColor {
+    pub fn from_id(team: i32) -> Option<Self> {
+        match team {
+            0 => Some(Self::Blue),
+            1 => Some(Self::Yellow),
+            _ => None,
+        }
+    }
+
+    pub fn id(self) -> i32 {
+        match self {
+            Self::Blue => 0,
+            Self::Yellow => 1,
+        }
+    }
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Self::Blue => "blue",
+            Self::Yellow => "yellow",
+        }
+    }
+
+    fn parse(word: &str) -> Option<Self> {
+        match word {
+            "blue" | "b" | "0" => Some(Self::Blue),
+            "yellow" | "y" | "1" => Some(Self::Yellow),
+            _ => None,
+        }
+    }
+}
+
+/// One robot's own values; `None` uses the all-robots value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RobotBangBang {
+    pub team: TeamColor,
+    pub id: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_accel: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_speed: Option<f64>,
+}
+
+impl RobotBangBang {
+    pub fn get(&self, param: Param) -> Option<f64> {
+        match param {
+            Param::MaxAccel => self.max_accel,
+            Param::MaxSpeed => self.max_speed,
+        }
+    }
+
+    fn slot(&mut self, param: Param) -> &mut Option<f64> {
+        match param {
+            Param::MaxAccel => &mut self.max_accel,
+            Param::MaxSpeed => &mut self.max_speed,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.max_accel.is_none() && self.max_speed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BangBangSettings {
+    pub max_accel: f64,
+    pub max_speed: f64,
+    #[serde(rename = "robot", skip_serializing_if = "Vec::is_empty")]
+    pub robots: Vec<RobotBangBang>,
+}
+
+impl Default for BangBangSettings {
+    /// The values the engine always used.
+    fn default() -> Self {
+        Self { max_accel: 2.5, max_speed: 5.0, robots: Vec::new() }
+    }
+}
+
+impl BangBangSettings {
+    pub fn get(&self, param: Param) -> f64 {
+        match param {
+            Param::MaxAccel => self.max_accel,
+            Param::MaxSpeed => self.max_speed,
+        }
+    }
+
+    fn slot(&mut self, param: Param) -> &mut f64 {
+        match param {
+            Param::MaxAccel => &mut self.max_accel,
+            Param::MaxSpeed => &mut self.max_speed,
+        }
+    }
+
+    /// The robot's own values, if it has any.
+    pub fn robot(&self, team: TeamColor, id: i32) -> Option<&RobotBangBang> {
+        self.robots.iter().find(|r| r.team == team && r.id == id)
+    }
+
+    /// The limits robot (id, team) runs with.
+    pub fn for_robot(&self, id: i32, team: i32) -> BangBang {
+        let own = TeamColor::from_id(team).and_then(|team| self.robot(team, id));
+        BangBang {
+            max_accel: own.and_then(|r| r.max_accel).unwrap_or(self.max_accel),
+            max_speed: own.and_then(|r| r.max_speed).unwrap_or(self.max_speed),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RobotSettings {
+    pub bangbang: BangBangSettings,
+}
+
+impl RobotSettings {
+    /// Every limit must be a number > 0 (the planner divides by them).
+    pub fn validate(&self) -> Result<(), String> {
+        let check = |label: String, v: f64| {
+            if v.is_finite() && v > 0.0 { Ok(()) } else { Err(format!("{label} must be a number > 0")) }
+        };
+        let b = &self.bangbang;
+        check("max_accel".into(), b.max_accel)?;
+        check("max_speed".into(), b.max_speed)?;
+        for r in &b.robots {
+            for param in Param::ALL {
+                if let Some(v) = r.get(param) {
+                    check(format!("{} {} {}", r.team.word(), r.id, param.word()), v)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Param {
+    MaxAccel,
+    MaxSpeed,
+}
+
+impl Param {
+    pub const ALL: [Param; 2] = [Param::MaxAccel, Param::MaxSpeed];
+
+    pub fn word(self) -> &'static str {
+        match self {
+            Param::MaxAccel => "max_accel",
+            Param::MaxSpeed => "max_speed",
+        }
+    }
+
+    fn parse(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.word() == word)
+    }
+}
+
+// ─── The engine's settings ──────────────────────────────────────────────────
+
+static SETTINGS: LazyLock<RwLock<RobotSettings>> = LazyLock::new(|| RwLock::new(load()));
+/// Bumped on every change, so the GUI knows when to read them again.
+static VERSION: AtomicU64 = AtomicU64::new(1);
+
+/// The settings now.
+pub fn current() -> RobotSettings {
+    SETTINGS.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Changes with every change of the settings.
+pub fn version() -> u64 {
+    VERSION.load(Ordering::Relaxed)
+}
+
+/// The bang-bang limits robot (id, team) runs with.
+pub fn bangbang_for(id: i32, team: i32) -> BangBang {
+    SETTINGS.read().unwrap_or_else(|e| e.into_inner()).bangbang.for_robot(id, team)
+}
+
+/// Applies `edit` if the result is valid.
+fn update(edit: impl FnOnce(&mut RobotSettings) -> Result<(), String>) -> Result<(), String> {
+    let mut settings = SETTINGS.write().unwrap_or_else(|e| e.into_inner());
+    let mut changed = settings.clone();
+    edit(&mut changed)?;
+    changed.validate()?;
+    *settings = changed;
+    VERSION.fetch_add(1, Ordering::Relaxed);
+    Ok(())
+}
+
+/// `robot_settings.toml` in the working directory or, failing that, next to
+/// the executable. A new file goes in the working directory.
+fn settings_path() -> PathBuf {
+    let in_working_dir = PathBuf::from(SETTINGS_FILE);
+    if in_working_dir.exists() {
+        return in_working_dir;
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(SETTINGS_FILE)))
+        .filter(|next_to_exe| next_to_exe.exists())
+        .unwrap_or(in_working_dir)
+}
+
+fn load() -> RobotSettings {
+    let path = settings_path();
+    let Ok(text) = fs::read_to_string(&path) else {
+        return RobotSettings::default();
+    };
+    match parse(&text) {
+        Ok(settings) => {
+            info!("Robot settings loaded from {}", path.display());
+            settings
+        }
+        Err(e) => {
+            warn!("Invalid {}: {e}. Using default robot settings.", path.display());
+            RobotSettings::default()
+        }
+    }
+}
+
+fn parse(text: &str) -> Result<RobotSettings, String> {
+    let settings: RobotSettings = toml::from_str(text).map_err(|e| e.to_string())?;
+    settings.validate()?;
+    Ok(settings)
+}
+
+fn save() -> Result<PathBuf, String> {
+    let path = settings_path();
+    let text = toml::to_string(&current()).map_err(|e| e.to_string())?;
+    fs::write(&path, format!("{HEADER}{text}")).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    Ok(path)
+}
+
+// ─── Console ────────────────────────────────────────────────────────────────
+
+pub const HELP: &[&str] = &[
+    "motion                                  bang-bang limits (all robots and each robot's own)",
+    "motion all <max_accel|max_speed> <v>    set the limit for every robot (m/s², m/s)",
+    "motion <blue|yellow> <id> <param> <v>   set one robot's own limit (`default` = use the all-robots one)",
+    "motion <blue|yellow> <id> clear         one robot back to the all-robots limits",
+    "motion save                             keep these limits in robot_settings.toml",
+];
+
+/// Runs `motion <args>`; returns the lines to print.
+pub fn console(args: &[&str]) -> Result<Vec<String>, String> {
+    match args {
+        [] => Ok(describe(&current())),
+        ["help"] => Ok(HELP.iter().map(|s| s.to_string()).collect()),
+        ["save"] => save().map(|path| vec![format!("saved to {}", path.display())]),
+        ["all", param, value] => {
+            let param = parse_param(param)?;
+            let value = parse_value(value)?;
+            update(|s| {
+                *s.bangbang.slot(param) = value;
+                Ok(())
+            })?;
+            Ok(vec![format!("all robots {} = {value}", param.word())])
+        }
+        [team, id, "clear"] => {
+            let (team, id) = parse_robot(team, id)?;
+            update(|s| {
+                s.bangbang.robots.retain(|r| !(r.team == team && r.id == id));
+                Ok(())
+            })?;
+            Ok(vec![format!("{} {id} uses the all-robots limits", team.word())])
+        }
+        [team, id, param, value] => {
+            let (team, id) = parse_robot(team, id)?;
+            let param = parse_param(param)?;
+            let value = if *value == "default" { None } else { Some(parse_value(value)?) };
+            update(|s| {
+                let robots = &mut s.bangbang.robots;
+                let index = match robots.iter().position(|r| r.team == team && r.id == id) {
+                    Some(i) => i,
+                    None => {
+                        robots.push(RobotBangBang { team, id, max_accel: None, max_speed: None });
+                        robots.sort_by_key(|r| (r.team, r.id));
+                        robots.iter().position(|r| r.team == team && r.id == id).unwrap()
+                    }
+                };
+                *robots[index].slot(param) = value;
+                if robots[index].is_empty() {
+                    robots.remove(index);
+                }
+                Ok(())
+            })?;
+            Ok(vec![match value {
+                Some(v) => format!("{} {id} {} = {v}", team.word(), param.word()),
+                None => format!("{} {id} {} = all-robots value", team.word(), param.word()),
+            }])
+        }
+        _ => Err("usage: motion [all <param> <value> | <blue|yellow> <id> <param> <value|default> | <blue|yellow> <id> clear | save]".into()),
+    }
+}
+
+fn describe(settings: &RobotSettings) -> Vec<String> {
+    let b = &settings.bangbang;
+    let mut lines = vec![
+        "all robots:".to_string(),
+        format!("  max_accel = {} m/s²", b.max_accel),
+        format!("  max_speed = {} m/s", b.max_speed),
+    ];
+    for r in &b.robots {
+        let mut own = Vec::new();
+        for param in Param::ALL {
+            if let Some(v) = r.get(param) {
+                own.push(format!("{} = {v}", param.word()));
+            }
+        }
+        lines.push(format!("{} {}: {}", r.team.word(), r.id, own.join(", ")));
+    }
+    lines
+}
+
+fn parse_param(word: &str) -> Result<Param, String> {
+    Param::parse(word).ok_or_else(|| format!("unknown parameter `{word}` (max_accel or max_speed)"))
+}
+
+fn parse_value(word: &str) -> Result<f64, String> {
+    word.parse::<f64>()
+        .ok()
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .ok_or_else(|| format!("`{word}` is not a number > 0"))
+}
+
+fn parse_robot(team: &str, id: &str) -> Result<(TeamColor, i32), String> {
+    let team = TeamColor::parse(team).ok_or_else(|| format!("unknown team `{team}` (blue or yellow)"))?;
+    let id = id.parse::<i32>().ok().filter(|id| (0..16).contains(id)).ok_or_else(|| format!("robot id `{id}` must be 0-15"))?;
+    Ok((team, id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings() -> BangBangSettings {
+        BangBangSettings {
+            max_accel: 2.0,
+            max_speed: 4.0,
+            robots: vec![RobotBangBang { team: TeamColor::Yellow, id: 3, max_accel: Some(1.5), max_speed: None }],
+        }
+    }
+
+    #[test]
+    fn robots_use_their_own_values_and_the_rest_from_all() {
+        let s = settings();
+        assert_eq!(s.for_robot(3, 1), BangBang { max_accel: 1.5, max_speed: 4.0 });
+        assert_eq!(s.for_robot(3, 0), BangBang { max_accel: 2.0, max_speed: 4.0 });
+    }
+
+    #[test]
+    fn file_round_trips() {
+        let original = RobotSettings { bangbang: settings() };
+        let text = toml::to_string(&original).unwrap();
+        assert_eq!(parse(&text).unwrap(), original);
+        // An empty file is the defaults.
+        assert_eq!(parse("").unwrap(), RobotSettings::default());
+    }
+
+    #[test]
+    fn rejects_limits_that_are_not_positive() {
+        let mut s = RobotSettings { bangbang: settings() };
+        s.bangbang.robots[0].max_speed = Some(0.0);
+        assert!(s.validate().is_err());
+        assert!(parse("[bangbang]\nmax_accel = -1\n").is_err());
+    }
+}
