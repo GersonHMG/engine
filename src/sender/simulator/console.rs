@@ -17,7 +17,9 @@ const HELP: &[&str] = &[
     "sim config                              all simulator parameters",
     "sim robot [<parameter> <value>]         show or change the robot profile",
     "sim ball [<parameter> <value>]          show or change the ball profile",
-    "sim save                                keep the robot and ball profiles in simulator.toml",
+    "sim vision [<parameter> <value>]        show or change vision noise and delay (position_noise m, angle_noise rad, delay s)",
+    "sim radio [<parameter> <value>]         show or change the command delay (delay s)",
+    "sim save                                keep all these parameters in simulator.toml",
     "sim scenario save <name>                save where every robot and the ball are",
     "sim scenario load <name>                put robots and ball back as saved",
     "sim scenario list                       saved scenarios",
@@ -28,7 +30,10 @@ pub fn execute(line: &str, simulator: Option<&mut SimLink>, world: &mut World) -
     let words: Vec<&str> = line.split_whitespace().collect();
     let result = match words.as_slice() {
         [] => Ok(Vec::new()),
-        ["sim"] | ["sim", "help"] | ["help"] => Ok(HELP.iter().map(|s| s.to_string()).collect()),
+        ["sim"] | ["sim", "help"] | ["help"] => {
+            Ok(HELP.iter().chain(crate::motion::settings::HELP).map(|s| s.to_string()).collect())
+        }
+        ["motion", args @ ..] => crate::motion::settings::console(args),
         ["sim", args @ ..] => match simulator {
             Some(simulator) => run(simulator, world, args),
             None => Err("the simulator is off: click SIM in the toolbar".to_string()),
@@ -77,6 +82,10 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
             lines.extend(profile_lines(&config.robot));
             lines.push("ball:".to_string());
             lines.extend(profile_lines(&config.ball));
+            lines.push("vision:".to_string());
+            lines.extend(profile_lines(&config.vision));
+            lines.push("radio:".to_string());
+            lines.extend(profile_lines(&config.radio));
             Ok(lines)
         }
         ["robot"] => Ok(profile_lines(&simulator.sim.config().robot)),
@@ -94,6 +103,22 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
             config.validate()?;
             simulator.sim.set_config(config);
             Ok(vec![format!("ball {name} = {value}")])
+        }
+        ["vision"] => Ok(profile_lines(&simulator.sim.config().vision)),
+        ["vision", name, value] => {
+            let mut config = simulator.sim.config().clone();
+            config.vision = with_value(&config.vision, name, parse_number(value, name)?)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("vision {name} = {value}")])
+        }
+        ["radio"] => Ok(profile_lines(&simulator.sim.config().radio)),
+        ["radio", name, value] => {
+            let mut config = simulator.sim.config().clone();
+            config.radio = with_value(&config.radio, name, parse_number(value, name)?)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("radio {name} = {value}")])
         }
         ["save"] => {
             let path = crate::config::save_simulator_config(simulator.sim.config())?;
@@ -228,7 +253,9 @@ mod tests {
     fn needs_the_simulator_on() {
         let mut world = World::new(0, 0, 9.0, 6.0);
         assert_eq!(execute("sim status", None, &mut world), ["error: the simulator is off: click SIM in the toolbar"]);
-        assert_eq!(execute("sim help", None, &mut world).len(), HELP.len());
+        assert_eq!(execute("sim help", None, &mut world).len(), HELP.len() + crate::motion::settings::HELP.len());
+        // `motion` works without the simulator.
+        assert!(execute("motion", None, &mut world)[0].starts_with("all robots"));
     }
 
     #[test]
