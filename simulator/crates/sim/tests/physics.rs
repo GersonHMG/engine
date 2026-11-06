@@ -300,3 +300,94 @@ fn config_validation_names_the_bad_parameter() {
     config.ball.wall_restitution = f64::NAN;
     assert!(config.validate().unwrap_err().starts_with("ball.wall_restitution"));
 }
+
+fn slippery(grip_accel: f64, slide_grip: f64, slip_spin: f64) -> SimConfig {
+    let mut config = SimConfig::default();
+    config.robot.grip_accel = grip_accel;
+    config.robot.slide_grip = slide_grip;
+    config.robot.slip_spin = slip_spin;
+    config
+}
+
+#[test]
+fn robot_within_its_grip_drives_as_without_the_slip_model() {
+    // Grip above what the motors can do: nothing slips, same motion as perfect grip.
+    let mut plain = sim_with(Robot::new(BLUE0, Vec2::ZERO, 0.3), ball_out_of_the_way());
+    let mut gripping = Simulator::new(
+        slippery(SimConfig::default().robot.max_accel + 1.0, 0.5, 1.0),
+        SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.3)], ball_out_of_the_way()),
+    );
+    for sim in [&mut plain, &mut gripping] {
+        sim.set_command(BLUE0, RobotCommand { vt: 1.5, vn: -0.5, ..Default::default() }).unwrap();
+        run(sim, 1.0);
+        sim.set_command(BLUE0, RobotCommand::default()).unwrap();
+        run(sim, 1.0);
+    }
+    let (a, b) = (&plain.state().robots()[0], &gripping.state().robots()[0]);
+    assert_close(a.position.x, b.position.x, 1e-9);
+    assert_close(a.position.y, b.position.y, 1e-9);
+    assert!(!b.sliding);
+}
+
+#[test]
+fn braking_harder_than_the_grip_slides_past_the_stop() {
+    // Motors brake at max_accel (6 m/s²), the floor holds only 2 m/s², 1.2 m/s² once sliding.
+    let config = slippery(2.0, 0.6, 0.0);
+    let mut sim = Simulator::new(
+        config.clone(),
+        SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()),
+    );
+    // Accelerating at the grip limit (commands ramp at 2 m/s²) never slides.
+    for tick in 1..=60 {
+        let vt = (2.0 * TICK * tick as f64).min(2.0);
+        sim.set_command(BLUE0, RobotCommand { vt, ..Default::default() }).unwrap();
+        sim.step(TICK);
+        assert!(!sim.state().robots()[0].sliding, "slid while accelerating within the grip");
+    }
+    let x0 = sim.state().robots()[0].position.x;
+    assert_close(sim.state().robots()[0].velocity.x, 2.0, 1e-6);
+
+    // Stop at once: the wheels lock, the body slides at the sliding grip.
+    sim.set_command(BLUE0, RobotCommand::default()).unwrap();
+    run(&mut sim, 0.1);
+    assert!(sim.state().robots()[0].sliding);
+    run(&mut sim, 3.0);
+    let robot = &sim.state().robots()[0];
+    assert_close(robot.velocity.length(), 0.0, 1e-9);
+    assert!(!robot.sliding);
+    // About v²/(2a) at 1.2 m/s² = 1.67 m (a little less: full grip until the wheels
+    // let go), instead of 0.33 m at the motors' 6 m/s².
+    assert_close(robot.position.x - x0, 4.0 / (2.0 * 1.2), 0.06);
+}
+
+#[test]
+fn sliding_turns_the_heading_and_turning_while_driving_slides() {
+    let config = slippery(1.0, 1.0, 0.5);
+    let mut sim = Simulator::new(
+        config,
+        SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()),
+    );
+    // A step to 2 m/s with 1 m/s² grip: slides for ~2 s, drifting counter-clockwise.
+    sim.set_command(BLUE0, RobotCommand { vt: 2.0, ..Default::default() }).unwrap();
+    run(&mut sim, 0.5);
+    let robot = &sim.state().robots()[0];
+    assert!(robot.sliding);
+    assert!(robot.theta > 0.05, "heading should drift while sliding, got {}", robot.theta);
+
+    // Turning at 3 rad/s while driving 2 m/s needs 6 m/s² sideways: more than the grip.
+    let mut sim = Simulator::new(
+        slippery(1.0, 1.0, 0.0),
+        SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()),
+    );
+    let mut robot = Robot::new(BLUE0, Vec2::ZERO, 0.0);
+    robot.velocity = Vec2::new(2.0, 0.0);
+    robot.wheel_velocity = Vec2::new(2.0, 0.0);
+    sim.restore(SimState::new(vec![robot], ball_out_of_the_way()));
+    sim.set_command(BLUE0, RobotCommand { vt: 2.0, omega: 3.0, ..Default::default() }).unwrap();
+    run(&mut sim, 0.5);
+    let robot = &sim.state().robots()[0];
+    assert!(robot.sliding);
+    // It keeps going mostly the way it was going (+x), not the way it faces.
+    let along_heading = robot.velocity.dot(robot.heading()) / robot.velocity.length();
+    assert!(along_heading < 0.9, "should drift off its heading, got cos = {along_heading}");
+}

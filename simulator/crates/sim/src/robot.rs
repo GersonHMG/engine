@@ -3,6 +3,9 @@ use crate::math::{wrap_angle, Vec2};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+/// Slip speed past which the wheels let go and the robot slides, m/s.
+const SLIDE_SLIP: f64 = 0.1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Team {
@@ -58,6 +61,13 @@ pub struct Robot {
     /// rad/s.
     pub omega: f64,
     pub command: RobotCommand,
+    /// Ground speed of the wheels in the robot's frame (what the motors
+    /// drive), m/s. Differs from `velocity` only while the robot slides.
+    #[serde(default)]
+    pub wheel_velocity: Vec2,
+    /// The wheels are slipping on the floor (see `RobotConfig::grip_accel`).
+    #[serde(default)]
+    pub sliding: bool,
     /// Contacts in progress, so contact events fire once per contact.
     pub(crate) touching_ball: bool,
     pub(crate) touching_wall: bool,
@@ -73,6 +83,8 @@ impl Robot {
             velocity: Vec2::ZERO,
             omega: 0.0,
             command: RobotCommand::default(),
+            wheel_velocity: Vec2::ZERO,
+            sliding: false,
             touching_ball: false,
             touching_wall: false,
         }
@@ -95,17 +107,57 @@ impl Robot {
 
     /// Tracks the commanded velocities within the acceleration limits, then
     /// integrates the pose (semi-implicit Euler).
+    ///
+    /// With `grip_accel` > 0 the motors drive the wheels (in the robot's
+    /// frame) and the floor drags the body after them with at most
+    /// `grip_accel`: asking for more makes the wheels slip and the robot
+    /// slide (see `RobotConfig`).
     pub(crate) fn drive(&mut self, config: &RobotConfig, dt: f64) {
-        let target = Vec2::new(self.command.vt, self.command.vn)
-            .rotated(self.theta)
-            .clamp_length(config.max_speed);
-        self.velocity += (target - self.velocity).clamp_length(config.max_accel * dt);
+        if config.grip_accel > 0.0 {
+            self.drive_on_wheels(config, dt);
+        } else {
+            let target = Vec2::new(self.command.vt, self.command.vn)
+                .rotated(self.theta)
+                .clamp_length(config.max_speed);
+            self.velocity += (target - self.velocity).clamp_length(config.max_accel * dt);
+            self.sliding = false;
+            self.turn(config, dt, 0.0);
+            self.wheel_velocity = self.velocity.rotated(-self.theta);
+        }
+        self.position += self.velocity * dt;
+    }
 
+    /// Slip model: wheels follow the command, the body follows the wheels.
+    fn drive_on_wheels(&mut self, config: &RobotConfig, dt: f64) {
+        let target = Vec2::new(self.command.vt, self.command.vn).clamp_length(config.max_speed);
+        self.wheel_velocity += (target - self.wheel_velocity).clamp_length(config.max_accel * dt);
+
+        let slip = self.wheel_velocity.rotated(self.theta) - self.velocity;
+        let grip = config.grip_accel * if self.sliding { config.slide_grip } else { 1.0 };
+        let step = grip * dt;
+        let slip_speed = slip.length();
+        let left = (slip_speed - step).max(0.0);
+        if left == 0.0 {
+            self.velocity += slip;
+            self.sliding = false;
+        } else {
+            self.velocity += slip * (step / slip_speed);
+            // Tyres take small slips (a command that steps every tick)
+            // without letting go; a robot that falls further behind slides.
+            if left > SLIDE_SLIP {
+                self.sliding = true;
+            }
+        }
+        let spin = if self.sliding { config.slip_spin * left } else { 0.0 };
+        self.turn(config, dt, spin);
+    }
+
+    /// Angular speed toward the command within `max_alpha`; `extra` (rad/s)
+    /// turns the heading on top of it.
+    fn turn(&mut self, config: &RobotConfig, dt: f64, extra: f64) {
         let max_step = config.max_alpha * dt;
         let target_omega = self.command.omega.clamp(-config.max_omega, config.max_omega);
         self.omega += (target_omega - self.omega).clamp(-max_step, max_step);
-
-        self.position += self.velocity * dt;
-        self.theta = wrap_angle(self.theta + self.omega * dt);
+        self.theta = wrap_angle(self.theta + (self.omega + extra) * dt);
     }
 }
