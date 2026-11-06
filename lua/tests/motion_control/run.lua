@@ -63,10 +63,27 @@ local CONDITIONS = {
         "sim vision position_noise 0.005", "sim vision angle_noise 0.01",
         "sim vision delay 0.033", "sim radio delay 0.033",
     },
+    -- realistic + wheels that slip: the motors can change the wheel speed at 6 m/s², the
+    -- floor gives the body at most 2 m/s² (0.6 of that once sliding) and sliding turns
+    -- the robot. Guesses too: the robots slide on the real field, how much is not measured.
+    slip = {
+        "sim vision position_noise 0.005", "sim vision angle_noise 0.01",
+        "sim vision delay 0.033", "sim radio delay 0.033",
+        "sim robot max_accel 6", "sim robot grip_accel 2", "sim robot slide_grip 0.6",
+        "sim robot slip_spin 0.3",
+    },
+}
+-- Simulator parameters the conditions change: saved before the run, put back before
+-- each condition (so a condition only differs from simulator.toml by its own lines)
+-- and at the end.
+local CHANGED = {
+    vision = { "position_noise", "angle_noise", "delay" },
+    radio = { "delay" },
+    robot = { "max_accel", "grip_accel", "slide_grip", "slip_spin" },
 }
 local CONDITION_ORDER = {}
 for name in (os.getenv("MC_CONDITIONS") or "ideal,realistic"):gmatch("[^,%s]+") do
-    assert(CONDITIONS[name], "unknown condition '" .. name .. "' (ideal, realistic)")
+    assert(CONDITIONS[name], "unknown condition '" .. name .. "' (ideal, realistic, slip)")
     CONDITION_ORDER[#CONDITION_ORDER + 1] = name
 end
 
@@ -125,11 +142,19 @@ local function heading_of(case) return case.heading or case.start[3] end
 
 local profile
 
+--- The most the robot can accelerate: its motors, or the floor's grip if that is less.
+local function accel_limit()
+    if profile.grip_accel and profile.grip_accel > 0 then
+        return math.min(profile.max_accel, profile.grip_accel)
+    end
+    return profile.max_accel
+end
+
 local function optimal_time(case)
     if case.kind ~= "point" or case.switch then return nil end
     local d = dist(start_point(case), case.target)
     local turn = math.abs(wrap(heading_of(case) - case.start[3]))
-    return math.max(trapezoid(d, profile.max_speed, profile.max_accel),
+    return math.max(trapezoid(d, profile.max_speed, accel_limit()),
         trapezoid(turn, profile.max_omega, profile.max_alpha))
 end
 
@@ -138,7 +163,7 @@ local function duration_of(case)
     local t_ref = case.switch and case.switch.at or 0
     local d = dist(start_point(case), final_target(case))
     local turn = math.abs(wrap(heading_of(case) - case.start[3]))
-    local rough = math.max(trapezoid(d, profile.max_speed, profile.max_accel),
+    local rough = math.max(trapezoid(d, profile.max_speed, accel_limit()),
         trapezoid(turn, profile.max_omega, profile.max_alpha))
     return t_ref + math.min(12, math.max(3, 2 * rough + 2))
 end
@@ -398,10 +423,14 @@ local results = {}
 local restore = {}
 
 local function remember_settings()
-    for _, group in ipairs({ "vision", "radio" }) do
+    for group, names in pairs(CHANGED) do
+        local wanted = {}
+        for _, n in ipairs(names) do wanted[n] = true end
         for _, line in ipairs(run_console("sim " .. group)) do
             local name, value = line:match("^%s*([%w_]+)%s*=%s*([-+%d%.eE]+)")
-            if name then restore[#restore + 1] = string.format("sim %s %s %s", group, name, value) end
+            if name and wanted[name] then
+                restore[#restore + 1] = string.format("sim %s %s %s", group, name, value)
+            end
         end
     end
 end
@@ -432,7 +461,9 @@ local function start_job(i)
     job = jobs[i]
     if not job then return finish_all() end
     if job.first_of_condition then
+        for _, line in ipairs(restore) do run_console(line) end
         for _, line in ipairs(CONDITIONS[job.condition]) do run_console(line) end
+        profile = read_profile()
         results[job.condition] = {}
         print_header(job.condition)
     end
