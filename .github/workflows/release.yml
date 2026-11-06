@@ -98,11 +98,14 @@ jobs:
       - name: Zip Lua folder
         run: zip -r lua-scripts.zip lua/
 
+      # 3. Attach the binaries and the zip. No comments inside the `files`
+      #    block: in a `|` scalar a `#` is part of the path, not a comment.
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             artifacts/engine-linux-x86_64/engine
             artifacts/engine-windows-x86_64.exe/engine.exe
-            lua-scripts.zip # 3. Add the zip file to the release
+            lua-scripts.zip
           generate_release_notes: true
