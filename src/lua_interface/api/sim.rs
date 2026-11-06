@@ -1,18 +1,60 @@
-// sim.rs — `sim.*` functions for scripts run with `--headless`
+// sim.rs — `sim.*` functions for scripts run on the built-in simulator
+// (headless, or the GUI with SIM on; without the simulator they return 0,
+// nothing, nil or an error line)
 //
 // sim.time()       simulated time, s
 // sim.events()     simulator events since the last call
-// sim.finish(ok)   end the run after this tick; ok = false makes it fail
+// sim.finish(ok)   end the run after this tick; ok = false makes it fail (GUI: pauses the script)
+// sim.truth(id, team)  the robot's true state, without vision noise or delay
+//                  ({x, y, orientation, vel_x, vel_y, omega}, nil if not simulated)
+// sim.console(line)    runs a console line (e.g. "sim vision delay 0.03"), returns its output lines
 
 use crate::lua_interface::RunControl;
 use crate::sender::radio::Radio;
-use crate::sender::simulator::engine_id;
+use crate::sender::simulator::{console as simulator_console, engine_id};
+use crate::world::World;
 use mlua::prelude::*;
 use ssl_sim::{Event, EventKind, RobotId};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
-pub(super) fn register_sim_functions(lua: &Lua, radio: Arc<Mutex<Radio>>, control: Arc<RunControl>) {
+pub(super) fn register_sim_functions(
+    lua: &Lua,
+    radio: Arc<Mutex<Radio>>,
+    world: Arc<RwLock<World>>,
+    control: Arc<RunControl>,
+) {
     let sim_table = lua.create_table().unwrap();
+
+    let r_truth = Arc::clone(&radio);
+    let truth = lua
+        .create_function(move |lua, (id, team): (i32, i32)| {
+            let mut radio = r_truth.lock().map_err(|e| LuaError::external(format!("{e}")))?;
+            let Some((position, theta, velocity, omega)) =
+                radio.simulator_mut().and_then(|sim| sim.robot_truth(id, team))
+            else {
+                return Ok(None);
+            };
+            let t = lua.create_table()?;
+            t.set("x", position.x)?;
+            t.set("y", position.y)?;
+            t.set("orientation", theta)?;
+            t.set("vel_x", velocity.x)?;
+            t.set("vel_y", velocity.y)?;
+            t.set("omega", omega)?;
+            Ok(Some(t))
+        })
+        .unwrap();
+    sim_table.set("truth", truth).unwrap();
+
+    let r_console = Arc::clone(&radio);
+    let console = lua
+        .create_function(move |_, line: String| {
+            let mut radio = r_console.lock().map_err(|e| LuaError::external(format!("{e}")))?;
+            let mut world = world.write().map_err(|e| LuaError::external(format!("{e}")))?;
+            Ok(simulator_console::execute(&line, radio.simulator_mut(), &mut world))
+        })
+        .unwrap();
+    sim_table.set("console", console).unwrap();
 
     let r1 = Arc::clone(&radio);
     let time = lua

@@ -597,6 +597,7 @@ async fn run_engine(
                     for out in std::iter::once(format!("> {line}  (agent)")).chain(output.iter().cloned()) {
                         let _ = console_tx.try_send(out);
                     }
+                    send_sim_config(&radio, &sim_config_gui_tx);
                     let _ = reply.send(output);
                 }
                 mcp::Request::Log { since, reply } => {

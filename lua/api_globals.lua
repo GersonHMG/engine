@@ -117,3 +117,23 @@ grsim = {
 perf = {
 	now = function() return 0 end,
 }
+
+---@class SimEvent
+---@field time number
+---@field kind string  -- "ball_hit_wall" | "robot_hit_wall" | "robot_touched_ball" | "kick"
+
+---@class SimApi  -- only in `--headless` runs
+---@field time fun(): number  -- simulated time, s
+---@field events fun(): SimEvent[]  -- simulator events since the last call
+---@field finish fun(ok?: boolean)  -- end the run after this tick; ok = false makes it fail
+---@field truth fun(id: integer, team: integer): RobotState|nil  -- true state, no vision noise or delay (x, y, orientation, vel_x, vel_y, omega)
+---@field console fun(line: string): string[]  -- runs a console line (e.g. "sim vision delay 0.03"), returns its output
+
+---@type SimApi
+sim = {
+	time = function() return 0 end,
+	events = function() return {} end,
+	finish = function(ok) end,
+	truth = function(id, team) return nil end,
+	console = function(line) return {} end,
+}

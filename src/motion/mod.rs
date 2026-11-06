@@ -3,6 +3,7 @@
 
 pub mod controllers;
 pub mod pathplanning;
+pub mod settings;
 
 use crate::motion::pathplanning::environment::Environment;
 use crate::motion::pathplanning::FastPathPlanner;
@@ -20,7 +21,10 @@ pub struct Motion {
 impl Default for Motion {
     fn default() -> Self {
         Self {
-            bangbang: BangBangControl::new(2.5, 5.0),
+            bangbang: {
+                let limits = settings::BangBangSettings::default();
+                BangBangControl::new(limits.max_accel, limits.max_speed)
+            },
             planner: FastPathPlanner::default(),
         }
     }
@@ -29,6 +33,15 @@ impl Default for Motion {
 impl Motion {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Plans with robot (id, team)'s bang-bang limits (see `settings`).
+    pub fn for_robot(id: i32, team: i32) -> Self {
+        let limits = settings::bangbang_for(id, team);
+        Self {
+            bangbang: BangBangControl::new(limits.max_accel, limits.max_speed),
+            planner: FastPathPlanner::default(),
+        }
     }
 
     /// Move without obstacle avoidance (direct path).

@@ -49,7 +49,7 @@ pub(super) fn register_control_functions(
                 if !rs.active {
                     return Ok(());
                 }
-                let motion = Motion::new();
+                let motion = Motion::for_robot(id, team);
                 let cmd = motion.move_to(&rs, Vec2D::new(x, y), &w);
                 r.lock()
                     .map_err(|e| LuaError::external(format!("{e}")))?
@@ -81,7 +81,7 @@ pub(super) fn register_control_functions(
                 let planner = FastPathPlanner::default();
                 let path = planner.get_path(rs.position, target, &env);
 
-                let motion = Motion::new();
+                let motion = Motion::for_robot(id, team);
                 let cmd = motion.move_to(&rs, target, &w);
                 r.lock()
                     .map_err(|e| LuaError::external(format!("{e}")))?
@@ -113,7 +113,7 @@ pub(super) fn register_control_functions(
                 if !rs.active {
                     return Ok(());
                 }
-                let motion = Motion::new();
+                let motion = Motion::for_robot(id, team);
                 let cmd = motion.move_direct(&rs, Vec2D::new(x, y));
                 r.lock()
                     .map_err(|e| LuaError::external(format!("{e}")))?
@@ -174,7 +174,7 @@ pub(super) fn register_control_functions(
                     if !rs.active {
                         return Ok(());
                     }
-                    let motion = Motion::new();
+                    let motion = Motion::for_robot(id, team);
                     let cmd = motion.face_to(
                         &rs,
                         Vec2D::new(x, y),
