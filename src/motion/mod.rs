@@ -4,6 +4,7 @@
 pub mod controllers;
 pub mod pathplanning;
 pub mod settings;
+pub mod traction;
 
 use crate::motion::pathplanning::environment::Environment;
 use crate::motion::pathplanning::FastPathPlanner;
