@@ -63,7 +63,13 @@ impl SimLink {
             events: None,
             in_flight: VecDeque::new(),
             frames: VecDeque::new(),
-            rng: Gaussian::new(0x5157_4d1c_0ffe_e5ed),
+            // SIM_SEED=<n> picks another noise sequence (to repeat a benchmark with other noise).
+            rng: Gaussian::new(
+                std::env::var("SIM_SEED")
+                    .ok()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .map_or(0x5157_4d1c_0ffe_e5ed, |n| 0x5157_4d1c_0ffe_e5ed ^ n.wrapping_mul(0x9e37_79b9_7f4a_7c15)),
+            ),
         };
         link.place_robot(RobotId::new(Team::Blue, 0), Vec2::new(-1.0, 0.0), 0.0);
         link

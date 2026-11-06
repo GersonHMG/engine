@@ -1,13 +1,15 @@
 // motion/settings.rs — Bang-bang motion limits, for all robots and per robot
 //
 // `move_to` / `move_direct` plan each robot's motion with a maximum
-// acceleration and speed. One pair applies to every robot; a robot can
-// override either value. They are kept in `robot_settings.toml` and changed
+// acceleration and speed, and every velocity command a robot gets (also
+// send_velocity and manual control) changes by at most `ramp_accel` per
+// second, so the wheels keep their grip (`motion::traction`). One set
+// applies to every robot; a robot can override any value. They are kept in `robot_settings.toml` and changed
 // with the `motion ...` console commands (the Robot settings panel types
 // them), so every change shows in the console:
 //
 //   motion                                  every value
-//   motion all <max_accel|max_speed> <v>    the value for every robot
+//   motion all <max_accel|max_speed|ramp_accel> <v>    the value for every robot
 //   motion <blue|yellow> <id> <param> <v>   one robot's own value
 //   motion <blue|yellow> <id> <param> default   back to the all-robots value
 //   motion <blue|yellow> <id> clear         drop all of that robot's own values
@@ -27,7 +29,9 @@ const HEADER: &str = "\
 # settings panel or with the `motion ...` console commands (`motion save`
 # writes this file).
 #
-# [bangbang]: limits move_to/move_direct plan with, for every robot.
+# [bangbang]: limits move_to/move_direct plan with (max_accel, max_speed)
+# and how fast any velocity command may change (ramp_accel: what the robot
+# can do without slipping, 0 = no ramp), for every robot.
 # [[bangbang.robot]]: one robot's own values; a value left out uses the
 # all-robots one.
 
@@ -40,6 +44,10 @@ pub struct BangBang {
     pub max_accel: f64,
     /// m/s
     pub max_speed: f64,
+    /// m/s²: most the velocity command may change per second, whatever sent
+    /// it (see `motion::traction`): what the robot can do without its wheels
+    /// slipping. 0 = commands go out as they are.
+    pub ramp_accel: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -90,6 +98,8 @@ pub struct RobotBangBang {
     pub max_accel: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_speed: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ramp_accel: Option<f64>,
 }
 
 impl RobotBangBang {
@@ -97,6 +107,7 @@ impl RobotBangBang {
         match param {
             Param::MaxAccel => self.max_accel,
             Param::MaxSpeed => self.max_speed,
+            Param::RampAccel => self.ramp_accel,
         }
     }
 
@@ -104,11 +115,12 @@ impl RobotBangBang {
         match param {
             Param::MaxAccel => &mut self.max_accel,
             Param::MaxSpeed => &mut self.max_speed,
+            Param::RampAccel => &mut self.ramp_accel,
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.max_accel.is_none() && self.max_speed.is_none()
+        Param::ALL.into_iter().all(|p| self.get(p).is_none())
     }
 }
 
@@ -117,14 +129,17 @@ impl RobotBangBang {
 pub struct BangBangSettings {
     pub max_accel: f64,
     pub max_speed: f64,
+    pub ramp_accel: f64,
     #[serde(rename = "robot", skip_serializing_if = "Vec::is_empty")]
     pub robots: Vec<RobotBangBang>,
 }
 
 impl Default for BangBangSettings {
-    /// The values the engine always used.
     fn default() -> Self {
-        Self { max_accel: 2.5, max_speed: 5.0, robots: Vec::new() }
+        // Commands ramp at the simulator robot's 2 m/s² (simulator.toml); the
+        // plan keeps 10% below it, room to correct for vision and radio delay.
+        // Measured with lua/tests/motion_control (README there).
+        Self { max_accel: 1.8, max_speed: 5.0, ramp_accel: 2.0, robots: Vec::new() }
     }
 }
 
@@ -133,6 +148,7 @@ impl BangBangSettings {
         match param {
             Param::MaxAccel => self.max_accel,
             Param::MaxSpeed => self.max_speed,
+            Param::RampAccel => self.ramp_accel,
         }
     }
 
@@ -140,6 +156,7 @@ impl BangBangSettings {
         match param {
             Param::MaxAccel => &mut self.max_accel,
             Param::MaxSpeed => &mut self.max_speed,
+            Param::RampAccel => &mut self.ramp_accel,
         }
     }
 
@@ -154,6 +171,7 @@ impl BangBangSettings {
         BangBang {
             max_accel: own.and_then(|r| r.max_accel).unwrap_or(self.max_accel),
             max_speed: own.and_then(|r| r.max_speed).unwrap_or(self.max_speed),
+            ramp_accel: own.and_then(|r| r.ramp_accel).unwrap_or(self.ramp_accel),
         }
     }
 }
@@ -165,18 +183,20 @@ pub struct RobotSettings {
 }
 
 impl RobotSettings {
-    /// Every limit must be a number > 0 (the planner divides by them).
+    /// The planner limits must be numbers > 0 (it divides by them);
+    /// ramp_accel may also be 0 (no ramp).
     pub fn validate(&self) -> Result<(), String> {
-        let check = |label: String, v: f64| {
-            if v.is_finite() && v > 0.0 { Ok(()) } else { Err(format!("{label} must be a number > 0")) }
+        let check = |label: String, param: Param, v: f64| {
+            if param.valid(v) { Ok(()) } else { Err(format!("{label} must be a number {}", param.rule())) }
         };
         let b = &self.bangbang;
-        check("max_accel".into(), b.max_accel)?;
-        check("max_speed".into(), b.max_speed)?;
+        for param in Param::ALL {
+            check(param.word().into(), param, b.get(param))?;
+        }
         for r in &b.robots {
             for param in Param::ALL {
                 if let Some(v) = r.get(param) {
-                    check(format!("{} {} {}", r.team.word(), r.id, param.word()), v)?;
+                    check(format!("{} {} {}", r.team.word(), r.id, param.word()), param, v)?;
                 }
             }
         }
@@ -188,15 +208,31 @@ impl RobotSettings {
 pub enum Param {
     MaxAccel,
     MaxSpeed,
+    RampAccel,
 }
 
 impl Param {
-    pub const ALL: [Param; 2] = [Param::MaxAccel, Param::MaxSpeed];
+    pub const ALL: [Param; 3] = [Param::MaxAccel, Param::MaxSpeed, Param::RampAccel];
 
     pub fn word(self) -> &'static str {
         match self {
             Param::MaxAccel => "max_accel",
             Param::MaxSpeed => "max_speed",
+            Param::RampAccel => "ramp_accel",
+        }
+    }
+
+    pub fn valid(self, v: f64) -> bool {
+        match self {
+            Param::RampAccel => v.is_finite() && v >= 0.0,
+            _ => v.is_finite() && v > 0.0,
+        }
+    }
+
+    pub fn rule(self) -> &'static str {
+        match self {
+            Param::RampAccel => ">= 0 (0 = no ramp)",
+            _ => "> 0",
         }
     }
 
@@ -285,7 +321,7 @@ fn save() -> Result<PathBuf, String> {
 
 pub const HELP: &[&str] = &[
     "motion                                  bang-bang limits (all robots and each robot's own)",
-    "motion all <max_accel|max_speed> <v>    set the limit for every robot (m/s², m/s)",
+    "motion all <max_accel|max_speed|ramp_accel> <v>  set the limit for every robot (m/s², m/s, m/s²)",
     "motion <blue|yellow> <id> <param> <v>   set one robot's own limit (`default` = use the all-robots one)",
     "motion <blue|yellow> <id> clear         one robot back to the all-robots limits",
     "motion save                             keep these limits in robot_settings.toml",
@@ -299,7 +335,7 @@ pub fn console(args: &[&str]) -> Result<Vec<String>, String> {
         ["save"] => save().map(|path| vec![format!("saved to {}", path.display())]),
         ["all", param, value] => {
             let param = parse_param(param)?;
-            let value = parse_value(value)?;
+            let value = parse_value(param, value)?;
             update(|s| {
                 *s.bangbang.slot(param) = value;
                 Ok(())
@@ -317,13 +353,13 @@ pub fn console(args: &[&str]) -> Result<Vec<String>, String> {
         [team, id, param, value] => {
             let (team, id) = parse_robot(team, id)?;
             let param = parse_param(param)?;
-            let value = if *value == "default" { None } else { Some(parse_value(value)?) };
+            let value = if *value == "default" { None } else { Some(parse_value(param, value)?) };
             update(|s| {
                 let robots = &mut s.bangbang.robots;
                 let index = match robots.iter().position(|r| r.team == team && r.id == id) {
                     Some(i) => i,
                     None => {
-                        robots.push(RobotBangBang { team, id, max_accel: None, max_speed: None });
+                        robots.push(RobotBangBang { team, id, max_accel: None, max_speed: None, ramp_accel: None });
                         robots.sort_by_key(|r| (r.team, r.id));
                         robots.iter().position(|r| r.team == team && r.id == id).unwrap()
                     }
@@ -349,6 +385,7 @@ fn describe(settings: &RobotSettings) -> Vec<String> {
         "all robots:".to_string(),
         format!("  max_accel = {} m/s²", b.max_accel),
         format!("  max_speed = {} m/s", b.max_speed),
+        format!("  ramp_accel = {} m/s²", b.ramp_accel),
     ];
     for r in &b.robots {
         let mut own = Vec::new();
@@ -363,14 +400,14 @@ fn describe(settings: &RobotSettings) -> Vec<String> {
 }
 
 fn parse_param(word: &str) -> Result<Param, String> {
-    Param::parse(word).ok_or_else(|| format!("unknown parameter `{word}` (max_accel or max_speed)"))
+    Param::parse(word).ok_or_else(|| format!("unknown parameter `{word}` (max_accel, max_speed or ramp_accel)"))
 }
 
-fn parse_value(word: &str) -> Result<f64, String> {
+fn parse_value(param: Param, word: &str) -> Result<f64, String> {
     word.parse::<f64>()
         .ok()
-        .filter(|v| v.is_finite() && *v > 0.0)
-        .ok_or_else(|| format!("`{word}` is not a number > 0"))
+        .filter(|v| param.valid(*v))
+        .ok_or_else(|| format!("`{word}` is not a number {}", param.rule()))
 }
 
 fn parse_robot(team: &str, id: &str) -> Result<(TeamColor, i32), String> {
@@ -387,15 +424,16 @@ mod tests {
         BangBangSettings {
             max_accel: 2.0,
             max_speed: 4.0,
-            robots: vec![RobotBangBang { team: TeamColor::Yellow, id: 3, max_accel: Some(1.5), max_speed: None }],
+            ramp_accel: 2.5,
+            robots: vec![RobotBangBang { team: TeamColor::Yellow, id: 3, max_accel: Some(1.5), max_speed: None, ramp_accel: None }],
         }
     }
 
     #[test]
     fn robots_use_their_own_values_and_the_rest_from_all() {
         let s = settings();
-        assert_eq!(s.for_robot(3, 1), BangBang { max_accel: 1.5, max_speed: 4.0 });
-        assert_eq!(s.for_robot(3, 0), BangBang { max_accel: 2.0, max_speed: 4.0 });
+        assert_eq!(s.for_robot(3, 1), BangBang { max_accel: 1.5, max_speed: 4.0, ramp_accel: 2.5 });
+        assert_eq!(s.for_robot(3, 0), BangBang { max_accel: 2.0, max_speed: 4.0, ramp_accel: 2.5 });
     }
 
     #[test]

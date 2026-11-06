@@ -3,6 +3,7 @@
 
 use crate::sender::grsim::Grsim;
 use crate::sender::packet_serializer;
+use crate::motion::traction::TractionControl;
 use crate::sender::simulator::SimLink;
 use crate::types::{KickerCommand, MotionCommand, RobotCommand};
 use std::collections::{HashMap, HashSet};
@@ -21,6 +22,8 @@ pub struct Radio {
     grsim: Grsim,
     /// When attached, takes the place of the serial radio and grSim.
     simulator: Option<SimLink>,
+    /// Keeps the velocity commands within each robot's grip.
+    traction: TractionControl,
 }
 
 impl Radio {
@@ -56,6 +59,7 @@ impl Radio {
             serial_port,
             grsim: Grsim::new(),
             simulator: None,
+            traction: TractionControl::default(),
         }
     }
 
@@ -179,8 +183,20 @@ impl Radio {
     }
 
     pub fn send_commands(&mut self, world: &mut crate::world::World) {
+        let commanded = &self.command_map;
+        self.traction.keep_only(|key| commanded.contains_key(key));
         if self.command_map.is_empty() {
             return;
+        }
+
+        // 0. Velocity commands ramped within each robot's grip (motion::traction)
+        for cmd in self.command_map.values_mut() {
+            let ramp = crate::motion::settings::bangbang_for(cmd.id, cmd.team).ramp_accel;
+            let robot = world.get_robot_state(cmd.id, cmd.team);
+            let m = &mut cmd.motion;
+            let (vx, vy) = self.traction.limit(&robot, m.vx.unwrap_or(0.0), m.vy.unwrap_or(0.0), ramp);
+            m.vx = Some(vx);
+            m.vy = Some(vy);
         }
 
         // 1. Inject current commands to World for GUI/Log before sending
@@ -258,6 +274,7 @@ impl Radio {
     }
 
     pub fn teleport_robot(&mut self, id: i32, team: i32, x: f64, y: f64, orientation: f64) {
+        self.traction.forget(id, team);
         match self.simulator.as_mut() {
             Some(simulator) => simulator.teleport_robot(id, team, x, y, orientation),
             None => self.grsim.communicate_pos_robot(id, team, x, y, orientation),

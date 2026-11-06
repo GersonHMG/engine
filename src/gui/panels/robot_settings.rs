@@ -55,7 +55,7 @@ impl RobotSettingsPanel {
         self.settings = settings::current();
         // Edits the engine now runs with are done.
         let settings = &self.settings;
-        self.edits.retain(|(target, param), typed| parse(*target, typed) != Ok(current(settings, *target, *param)));
+        self.edits.retain(|(target, param), typed| parse(*target, *param, typed) != Ok(current(settings, *target, *param)));
     }
 
     /// The robots on the field (engine ids: team 0 = blue).
@@ -70,7 +70,7 @@ impl RobotSettingsPanel {
     pub fn update(&mut self, message: RobotSettingsMessage) -> Vec<String> {
         match message {
             RobotSettingsMessage::Edit(target, param, typed) => {
-                if parse(target, &typed) == Ok(current(&self.settings, target, param)) {
+                if parse(target, param, &typed) == Ok(current(&self.settings, target, param)) {
                     self.edits.remove(&(target, param));
                 } else {
                     self.edits.insert((target, param), typed);
@@ -84,7 +84,7 @@ impl RobotSettingsPanel {
                 self.edits
                     .iter()
                     .map(|((target, param), typed)| {
-                        let value = match parse(*target, typed) {
+                        let value = match parse(*target, *param, typed) {
                             Ok(Some(v)) => v.to_string(),
                             _ => "default".to_string(),
                         };
@@ -110,7 +110,7 @@ impl RobotSettingsPanel {
     /// Why the edits cannot be applied, if they cannot.
     fn error(&self) -> Option<String> {
         self.edits.iter().find_map(|((target, param), typed)| {
-            parse(*target, typed).err().map(|e| match target {
+            parse(*target, *param, typed).err().map(|e| match target {
                 Target::All => format!("all robots {}: {e}", param.word()),
                 Target::Robot(team, id) => format!("{} {id} {}: {e}", team.word(), param.word()),
             })
@@ -150,6 +150,7 @@ impl RobotSettingsPanel {
             text("Robot").size(11).color(theme::MUTED).width(Length::Fill),
             text("Accel m/s²").size(11).color(theme::MUTED).width(Length::Fixed(INPUT_W)),
             text("Speed m/s").size(11).color(theme::MUTED).width(Length::Fixed(INPUT_W)),
+            text("Ramp m/s²").size(11).color(theme::MUTED).width(Length::Fixed(INPUT_W)),
             Space::new().width(Length::Fixed(RESET_W)),
         ]
         .spacing(6);
@@ -191,6 +192,7 @@ impl RobotSettingsPanel {
                     name,
                     self.input(Target::Robot(team, id), Param::MaxAccel),
                     self.input(Target::Robot(team, id), Param::MaxSpeed),
+                    self.input(Target::Robot(team, id), Param::RampAccel),
                     reset,
                 ]
                 .spacing(6)
@@ -223,7 +225,7 @@ impl RobotSettingsPanel {
             group(all.into()),
             group(per_robot.into()),
             container(footer).padding([4, 2]),
-            text("Applies to move_to and move_direct at once. Save writes robot_settings.toml, read when the engine starts.")
+            text("Applies at once. Max acceleration and speed plan move_to/move_direct. Command ramp: most any velocity command (also manual control) may change per second, so the wheels do not slip; set it to what the robot can do without sliding, a little above max acceleration (0 = no ramp). Save writes robot_settings.toml, read when the engine starts.")
                 .size(10)
                 .color(theme::MUTED),
         ]
@@ -240,7 +242,7 @@ impl RobotSettingsPanel {
         };
         let state = match edited {
             None => Field::Clean,
-            Some(typed) if parse(target, typed).is_ok() => Field::Edited,
+            Some(typed) if parse(target, param, typed).is_ok() => Field::Edited,
             Some(_) => Field::Invalid,
         };
         // A robot's empty field shows the all-robots value it uses.
@@ -272,8 +274,8 @@ fn current(settings: &RobotSettings, target: Target, param: Param) -> Option<f64
     }
 }
 
-/// A typed value: a number > 0, or (for a robot) empty = the all-robots value.
-fn parse(target: Target, typed: &str) -> Result<Option<f64>, &'static str> {
+/// A typed value: a number valid for `param`, or (for a robot) empty = the all-robots value.
+fn parse(target: Target, param: Param, typed: &str) -> Result<Option<f64>, &'static str> {
     let typed = typed.trim();
     if typed.is_empty() {
         return match target {
@@ -282,7 +284,8 @@ fn parse(target: Target, typed: &str) -> Result<Option<f64>, &'static str> {
         };
     }
     match typed.parse::<f64>() {
-        Ok(v) if v.is_finite() && v > 0.0 => Ok(Some(v)),
+        Ok(v) if param.valid(v) => Ok(Some(v)),
+        _ if param == Param::RampAccel => Err("must be a number >= 0 (0 = no ramp)"),
         _ => Err("must be a number > 0"),
     }
 }
@@ -291,6 +294,7 @@ fn label(param: Param) -> &'static str {
     match param {
         Param::MaxAccel => "Max acceleration",
         Param::MaxSpeed => "Max speed",
+        Param::RampAccel => "Command ramp (grip)",
     }
 }
 
@@ -298,6 +302,7 @@ fn unit(param: Param) -> &'static str {
     match param {
         Param::MaxAccel => "m/s²",
         Param::MaxSpeed => "m/s",
+        Param::RampAccel => "m/s²",
     }
 }
 
@@ -357,6 +362,7 @@ mod tests {
             id: 2,
             max_accel: Some(1.5),
             max_speed: None,
+            ramp_accel: None,
         });
         panel
     }
