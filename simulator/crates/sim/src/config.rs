@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+/// Longest vision or command delay, s.
+pub const MAX_DELAY: f64 = 1.0;
+
 /// All physical parameters. Every field has a default, so a config file only
 /// needs the values it changes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -8,6 +11,10 @@ pub struct SimConfig {
     pub field: FieldConfig,
     pub robot: RobotConfig,
     pub ball: BallConfig,
+    /// What the AI sees: noise and latency of the vision frames.
+    pub vision: VisionConfig,
+    /// Latency of the robot commands.
+    pub radio: RadioConfig,
     /// Longest physics substep, s. `Simulator::step` splits its `dt` into
     /// substeps no longer than this.
     pub max_substep: f64,
@@ -20,6 +27,7 @@ impl SimConfig {
         let positive = |v: f64| v.is_finite() && v > 0.0;
         let non_negative = |v: f64| v.is_finite() && v >= 0.0;
         let fraction = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
+        let delay = |v: f64| v.is_finite() && (0.0..=MAX_DELAY).contains(&v);
         let (field, robot, ball) = (&self.field, &self.robot, &self.ball);
 
         let checks = [
@@ -47,6 +55,10 @@ impl SimConfig {
             ("ball.slide_decel", ball.slide_decel, non_negative(ball.slide_decel), ">= 0"),
             ("ball.roll_decel", ball.roll_decel, non_negative(ball.roll_decel), ">= 0"),
             ("ball.wall_restitution", ball.wall_restitution, fraction(ball.wall_restitution), "in [0, 1]"),
+            ("vision.position_noise", self.vision.position_noise, non_negative(self.vision.position_noise), ">= 0"),
+            ("vision.angle_noise", self.vision.angle_noise, non_negative(self.vision.angle_noise), ">= 0"),
+            ("vision.delay", self.vision.delay, delay(self.vision.delay), "in [0, 1]"),
+            ("radio.delay", self.radio.delay, delay(self.radio.delay), "in [0, 1]"),
         ];
 
         match checks.iter().find(|(_, _, ok, _)| !ok) {
@@ -62,6 +74,8 @@ impl Default for SimConfig {
             field: FieldConfig::default(),
             robot: RobotConfig::default(),
             ball: BallConfig::default(),
+            vision: VisionConfig::default(),
+            radio: RadioConfig::default(),
             max_substep: 0.001,
         }
     }
@@ -184,4 +198,27 @@ impl Default for BallConfig {
             wall_restitution: 0.6,
         }
     }
+}
+
+/// Vision as the AI receives it. The physics does not use these: whoever
+/// turns the simulation into vision frames (the engine) applies them.
+/// All zero = perfect, instant vision.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct VisionConfig {
+    /// Standard deviation of the gaussian noise on robot and ball positions, m.
+    pub position_noise: f64,
+    /// Standard deviation of the gaussian noise on robot headings, rad.
+    pub angle_noise: f64,
+    /// Age of a frame when the AI receives it, s.
+    pub delay: f64,
+}
+
+/// Robot commands as the robots receive them. Applied by whoever feeds the
+/// commands to the simulator (the engine). Zero = instant.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RadioConfig {
+    /// Time from sending a command to the robot acting on it, s.
+    pub delay: f64,
 }

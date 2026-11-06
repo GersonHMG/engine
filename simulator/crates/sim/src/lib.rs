@@ -21,7 +21,7 @@ mod robot;
 mod simulator;
 
 pub use ball::Ball;
-pub use config::{BallConfig, FieldConfig, RobotConfig, SimConfig};
+pub use config::{BallConfig, FieldConfig, RadioConfig, RobotConfig, SimConfig, VisionConfig, MAX_DELAY};
 pub use event::{Event, EventKind};
 pub use math::{wrap_angle, Vec2};
 pub use robot::{Robot, RobotCommand, RobotId, Team};
