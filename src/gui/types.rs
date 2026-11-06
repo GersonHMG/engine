@@ -10,6 +10,7 @@ use super::panels::control::ControlMessage;
 use super::panels::kalman::KalmanMessage;
 use super::panels::radio::RadioMessage;
 use super::panels::sim_params::SimParamsMessage;
+use super::panels::robot_settings::RobotSettingsMessage;
 use super::panels::recording::RecordingMessage;
 use super::panels::vision::VisionMessage;
 use super::sidebar::SidebarMessage;
@@ -130,6 +131,7 @@ pub enum Message {
     Control(ControlMessage),
     Charts(ChartsMessage),
     SimParams(SimParamsMessage),
+    RobotSettings(RobotSettingsMessage),
 
     // Events
     Tick,

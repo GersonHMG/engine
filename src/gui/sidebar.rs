@@ -10,6 +10,8 @@ pub enum SidebarPanel {
     Pipeline,
     /// Robot and ball parameters of the built-in simulator.
     SimParams,
+    /// Bang-bang motion limits, for all robots and per robot.
+    RobotSettings,
     Recording,
     Control,
     Charts,
@@ -63,6 +65,7 @@ impl Sidebar {
         let content = column![
             panel(Icon::Pipeline, "Vision → Kalman → Radio", SidebarPanel::Pipeline),
             panel(Icon::Sliders, "Simulator parameters", SidebarPanel::SimParams),
+            panel(Icon::Robot, "Robot settings", SidebarPanel::RobotSettings),
             panel(Icon::Record, "Recording", SidebarPanel::Recording),
             panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),
             panel(Icon::Chart, "Charts", SidebarPanel::Charts),
