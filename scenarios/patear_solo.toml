@@ -1,0 +1,13 @@
+# Field setup for the engine's simulator: where every robot and the ball are.
+# Load it with `sim scenario load <name>` in the Lua console.
+
+[ball]
+x = -0.5243324294165145
+y = 0.264294011434778
+
+[[robots]]
+team = "blue"
+id = 0
+x = -0.6764355897903442
+y = 0.34404924511909485
+theta = -0.44569656252861023
