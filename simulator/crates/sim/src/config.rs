@@ -46,6 +46,9 @@ impl SimConfig {
             ("robot.max_accel", robot.max_accel, non_negative(robot.max_accel), ">= 0"),
             ("robot.max_omega", robot.max_omega, non_negative(robot.max_omega), ">= 0"),
             ("robot.max_alpha", robot.max_alpha, non_negative(robot.max_alpha), ">= 0"),
+            ("robot.grip_accel", robot.grip_accel, non_negative(robot.grip_accel), ">= 0"),
+            ("robot.slide_grip", robot.slide_grip, fraction(robot.slide_grip), "in [0, 1]"),
+            ("robot.slip_spin", robot.slip_spin, non_negative(robot.slip_spin), ">= 0"),
             ("robot.max_kick_speed", robot.max_kick_speed, non_negative(robot.max_kick_speed), ">= 0"),
             ("robot.kick_x_speed", robot.kick_x_speed, non_negative(robot.kick_x_speed), ">= 0"),
             ("robot.kick_reach", robot.kick_reach, non_negative(robot.kick_reach), ">= 0"),
@@ -132,6 +135,19 @@ pub struct RobotConfig {
     pub max_speed: f64,
     /// m/s².
     pub max_accel: f64,
+    /// Most acceleration the floor can give the body, m/s² (friction).
+    /// 0 = perfect grip: the body follows the commanded velocity within
+    /// `max_accel` and never slides. Above 0, `max_accel` is what the motors
+    /// can do to the wheels; asking the body for more than `grip_accel`
+    /// (starting, braking, or turning while driving) makes the wheels slip.
+    pub grip_accel: f64,
+    /// Grip left while sliding, as a fraction of `grip_accel` (kinetic /
+    /// static friction): once a robot slides it accelerates and brakes worse
+    /// until its wheels match the floor again.
+    pub slide_grip: f64,
+    /// Heading drift while sliding, rad/s per m/s of slip (counter-clockwise):
+    /// slipping wheels push unevenly and the robot turns.
+    pub slip_spin: f64,
     /// rad/s.
     pub max_omega: f64,
     /// rad/s².
@@ -163,6 +179,9 @@ impl Default for RobotConfig {
             front_distance: 0.073,
             max_speed: 3.5,
             max_accel: 6.0,
+            grip_accel: 0.0,
+            slide_grip: 1.0,
+            slip_spin: 0.0,
             max_omega: 10.0,
             max_alpha: 40.0,
             max_kick_speed: 6.5,
