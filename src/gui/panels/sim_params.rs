@@ -15,6 +15,8 @@ use crate::gui::theme::{self, btn, Btn};
 pub enum Group {
     Robot,
     Ball,
+    Vision,
+    Radio,
 }
 
 impl Group {
@@ -22,6 +24,8 @@ impl Group {
         match self {
             Group::Robot => "robot",
             Group::Ball => "ball",
+            Group::Vision => "vision",
+            Group::Radio => "radio",
         }
     }
 
@@ -29,6 +33,8 @@ impl Group {
         match self {
             Group::Robot => ROBOT,
             Group::Ball => BALL,
+            Group::Vision => VISION,
+            Group::Radio => RADIO,
         }
     }
 }
@@ -56,6 +62,14 @@ const BALL: &[Param] = &[
     Param("wall_restitution", "Wall bounce", "0–1"),
     Param("radius", "Radius", "m"),
 ];
+
+const VISION: &[Param] = &[
+    Param("position_noise", "Position noise (σ)", "m"),
+    Param("angle_noise", "Heading noise (σ)", "rad"),
+    Param("delay", "Vision delay", "s"),
+];
+
+const RADIO: &[Param] = &[Param("delay", "Command delay", "s")];
 
 #[derive(Debug, Clone)]
 pub enum SimParamsMessage {
@@ -182,15 +196,27 @@ impl SimParamsPanel {
         .spacing(6)
         .align_y(Alignment::Center);
 
+        // Two columns keep the window short: the robot on the left, the rest on the right.
+        let sections = row![
+            column![self.section(config, Group::Robot)].width(Length::Fill),
+            column![
+                self.section(config, Group::Ball),
+                self.section(config, Group::Vision),
+                self.section(config, Group::Radio),
+            ]
+            .spacing(8)
+            .width(Length::Fill),
+        ]
+        .spacing(8);
+
         column![
-            self.section(config, Group::Robot),
-            self.section(config, Group::Ball),
-            container(footer).padding([6, 2]),
+            sections,
+            container(footer).padding([4, 2]),
             text("Save writes the running values to simulator.toml, read every time SIM turns on.")
                 .size(10)
                 .color(theme::MUTED),
         ]
-        .spacing(10)
+        .spacing(6)
         .padding(10)
         .into()
     }
@@ -199,8 +225,10 @@ impl SimParamsPanel {
         let title = match group {
             Group::Robot => "ROBOT",
             Group::Ball => "BALL",
+            Group::Vision => "VISION · WHAT THE AI SEES",
+            Group::Radio => "RADIO",
         };
-        let mut rows = column![text(title).size(11).font(theme::MONO_BOLD).color(theme::MUTED)].spacing(4);
+        let mut rows = column![text(title).size(11).font(theme::MONO_BOLD).color(theme::MUTED)].spacing(3);
         for &Param(name, label, unit) in group.params() {
             let edited = self.edits.get(&(group, name));
             let shown = match edited {
@@ -217,22 +245,22 @@ impl SimParamsPanel {
                 .on_submit(SimParamsMessage::Apply)
                 .font(theme::MONO)
                 .size(12)
-                .padding([3, 6])
+                .padding([2, 6])
                 .align_x(alignment::Horizontal::Right)
-                .width(Length::Fixed(84.0))
+                .width(Length::Fixed(72.0))
                 .style(move |t, s| field_style(t, s, state));
             rows = rows.push(
                 row![
                     text(label).size(12).color(if edited.is_some() { theme::TEXT } else { theme::TEXT_2 }).width(Length::Fill),
                     input,
-                    text(unit).size(11).font(theme::MONO).color(theme::MUTED).width(Length::Fixed(44.0)),
+                    text(unit).size(11).font(theme::MONO).color(theme::MUTED).width(Length::Fixed(40.0)),
                 ]
-                .spacing(8)
+                .spacing(6)
                 .align_y(Alignment::Center),
             );
         }
         container(rows)
-            .padding([10, 12])
+            .padding([8, 10])
             .width(Length::Fill)
             .style(|_| container::Style {
                 background: Some(Background::Color(theme::GROUP)),
@@ -289,7 +317,7 @@ mod tests {
     #[test]
     fn every_parameter_exists_in_the_config() {
         let config = SimConfig::default();
-        for group in [Group::Robot, Group::Ball] {
+        for group in [Group::Robot, Group::Ball, Group::Vision, Group::Radio] {
             for Param(name, ..) in group.params() {
                 assert!(value(&config, group, name).is_some(), "{} {name}", group.word());
             }
