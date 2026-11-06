@@ -1336,15 +1336,15 @@ impl EngineApp {
         vy *= self.control_panel.scale_vy_parsed();
         omega *= self.control_panel.scale_w_parsed();
 
-        if vx.abs() >= 0.05 || vy.abs() >= 0.05 || omega.abs() >= 0.05 {
-            let _ = self.command_tx.try_send(EngineCommand::SendRobotCommand {
-                id: self.control_panel.robot_id_parsed(),
-                team: self.control_panel.team.to_id(),
-                vx,
-                vy,
-                omega,
-            });
-        }
+        // Sent every frame, zero included: while manual control is on, the robot
+        // follows the keys (and stands still without them), not the script.
+        let _ = self.command_tx.try_send(EngineCommand::SendRobotCommand {
+            id: self.control_panel.robot_id_parsed(),
+            team: self.control_panel.team.to_id(),
+            vx,
+            vy,
+            omega,
+        });
     }
 
 }
