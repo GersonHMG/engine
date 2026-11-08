@@ -15,6 +15,8 @@ pub enum SidebarPanel {
     Recording,
     Control,
     Charts,
+    /// Runs the scenarios for the working tree and a baseline commit, with statistics.
+    Evaluation,
     LuaConsole,
 }
 
@@ -69,6 +71,7 @@ impl Sidebar {
             panel(Icon::Record, "Recording", SidebarPanel::Recording),
             panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),
             panel(Icon::Chart, "Charts", SidebarPanel::Charts),
+            panel(Icon::Flask, "Evaluation: Lua change vs baseline", SidebarPanel::Evaluation),
             container(Space::new().width(22).height(1)).style(bar(DIVIDER)),
             item(
                 Icon::Terminal,
