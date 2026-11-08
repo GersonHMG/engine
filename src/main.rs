@@ -18,6 +18,7 @@ mod config;
 mod headless;
 mod mcp;
 mod perf;
+mod evaluation;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
