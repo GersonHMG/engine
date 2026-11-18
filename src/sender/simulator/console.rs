@@ -16,6 +16,8 @@ const HELP: &[&str] = &[
     "sim reset                               robots and ball back to where they were last placed",
     "sim config                              all simulator parameters",
     "sim robot [<parameter> <value>]         show or change the robot profile",
+    "sim robot save|load <name>              keep the robot profile in robots/<name>.toml, or use a saved one",
+    "sim robot list                          saved robot profiles",
     "sim ball [<parameter> <value>]          show or change the ball profile",
     "sim vision [<parameter> <value>]        show or change vision noise and delay (position_noise m, angle_noise rad, delay s)",
     "sim radio [<parameter> <value>]         show or change the command delay (delay s)",
@@ -89,6 +91,25 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
             Ok(lines)
         }
         ["robot"] => Ok(profile_lines(&simulator.sim.config().robot)),
+        ["robot", "list"] => {
+            let names = crate::robot_profiles::list();
+            if names.is_empty() {
+                Ok(vec!["no saved robot profiles, create one with `sim robot save <name>`".to_string()])
+            } else {
+                Ok(names)
+            }
+        }
+        ["robot", "save", name] => {
+            let path = crate::robot_profiles::save(name, &simulator.sim.config().robot, "")?;
+            Ok(vec![format!("saved the robot profile to {}", path.display())])
+        }
+        ["robot", "load", name] => {
+            let mut config = simulator.sim.config().clone();
+            config.robot = crate::robot_profiles::load(name)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("every robot now uses the `{name}` profile")])
+        }
         ["robot", name, value] => {
             let mut config = simulator.sim.config().clone();
             config.robot = with_value(&config.robot, name, parse_number(value, name)?)?;
