@@ -15,8 +15,10 @@
 -- 4. Fault model (for asymmetric or weak wheels): the acceleration the robot really reaches
 --    is learned online per direction in its own frame (N_BINS bins). Whenever vision shows
 --    the robot clearly behind the command it was sent LATENCY earlier, the acceleration it
---    shows over EST_WINDOW ticks is the most it can do that way. The estimate sets the
---    braking curve (toward the target, in the robot's frame) and the prediction model.
+--    shows over EST_WINDOW ticks is the most it can do that way; φ and φ + 180° share it.
+--    The command ramps at PROBE × the estimate (at most A_CAP): a robot that keeps up
+--    raises its estimate, a weak one saturates. The estimate sets the ramp, the braking
+--    curve (toward the target, in the robot's frame) and the prediction model.
 -- 5. The command is turned into the robot frame with the heading predicted for when it acts.
 --
 -- It reads only vision (get_robot_state) and its own command history.
@@ -45,6 +47,8 @@ local EST_WINDOW = 6       -- ticks, window the acceleration is measured over
 local GAP_MIN = 0.15       -- m/s, the robot counts as saturated when this far behind the command
 local EST_RATE = 0.15      -- EMA weight of one measurement
 local A_EST_MIN = 0.8      -- m/s², floor of the estimate
+local A_CAP = 4.0          -- m/s², most acceleration ever planned with
+local PROBE = 1.25         -- ramp this much faster than the estimate, to find a higher limit
 
 local function wrap(a)
     while a > math.pi do a = a - 2 * math.pi end
@@ -97,16 +101,32 @@ function M.new(params)
         local gx, gy = c_now.vt - v[1], c_now.vn - v[2]
         local hx, hy = c_old.vt - v_old[1], c_old.vn - v_old[2]
         local g, h = math.sqrt(gx * gx + gy * gy), math.sqrt(hx * hx + hy * hy)
-        if g < GAP_MIN or h < GAP_MIN or (gx * hx + gy * hy) < 0.8 * g * h then return end
-        local ux, uy = gx / g, gy / g
-        local a = ((v[1] - v_old[1]) * ux + (v[2] - v_old[2]) * uy) / (EST_WINDOW * p.dt)
+        local ux, uy, a
+        if g >= GAP_MIN and h >= GAP_MIN and (gx * hx + gy * hy) >= 0.8 * g * h then
+            -- Saturated: what it shows is its limit that way.
+            ux, uy = gx / g, gy / g
+            a = ((v[1] - v_old[1]) * ux + (v[2] - v_old[2]) * uy) / (EST_WINDOW * p.dt)
+        elseif g < GAP_MIN and h < GAP_MIN then
+            -- Keeping up with a command that ramps faster than the estimate: it can do at
+            -- least what it shows (only raises the estimate).
+            local dx, dy = c_now.vt - c_old.vt, c_now.vn - c_old.vn
+            local dc = math.sqrt(dx * dx + dy * dy)
+            if dc < 1e-6 then return end
+            ux, uy = dx / dc, dy / dc
+            local ang = math.atan(uy, ux)
+            if dc / (EST_WINDOW * p.dt) < 1.1 * a_dir(s, ang) then return end
+            a = ((v[1] - v_old[1]) * ux + (v[2] - v_old[2]) * uy) / (EST_WINDOW * p.dt)
+            if a <= a_dir(s, ang) then return end
+        else
+            return
+        end
         if a <= 0 then return end
         local f = (math.atan(uy, ux) / (2 * math.pi)) % 1 * N_BINS
         local k = math.floor(f + 0.5) % N_BINS + 1
         -- Motor torque is the same both ways: toward φ and φ + 180° the limit is the same.
         for _, kk in ipairs({ k, (k - 1 + N_BINS // 2) % N_BINS + 1 }) do
             for j, wgt in pairs({ [kk] = EST_RATE, [(kk % N_BINS) + 1] = EST_RATE / 2, [((kk - 2) % N_BINS) + 1] = EST_RATE / 2 }) do
-                s.est[j] = math.max(A_EST_MIN, math.min(p.a_max, s.est[j] + wgt * (a - s.est[j])))
+                s.est[j] = math.max(A_EST_MIN, math.min(A_CAP, s.est[j] + wgt * (a - s.est[j])))
             end
         end
     end
@@ -146,13 +166,17 @@ function M.new(params)
         local ex, ey = target.x - x, target.y - y
         local d = math.sqrt(ex * ex + ey * ey)
         -- Brake with what the robot has shown it can do in the braking direction.
-        local a_brake = BRAKE_MARGIN * math.min(p.a_max, a_dir(s, math.atan(-ey, -ex) - th))
+        local a_brake = BRAKE_MARGIN * math.min(A_CAP, a_dir(s, math.atan(-ey, -ex) - th))
         local speed = math.min(p.v_max, math.sqrt(2 * a_brake * d), KP * d)
         local wx, wy = 0, 0
         if d > 1e-5 then wx, wy = ex / d * speed, ey / d * speed end
         -- Base: last command, held within MAX_LEAD of the predicted velocity.
         local bx, by = approach2(pvx, pvy, s.vx, s.vy, MAX_LEAD)
-        local vx, vy = approach2(bx, by, wx, wy, p.a_max * p.dt)
+        -- Ramp a little faster than the robot has shown it can: a robot that keeps up
+        -- raises its estimate, a weak one saturates and keeps its real limit.
+        local th_c = th
+        local a_ramp = math.min(A_CAP, PROBE * a_dir(s, math.atan(wy - by, wx - bx) - th_c))
+        local vx, vy = approach2(bx, by, wx, wy, a_ramp * p.dt)
 
         -- Rotation.
         local tth = target.theta or th
