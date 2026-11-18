@@ -103,8 +103,11 @@ function M.new(params)
         if a <= 0 then return end
         local f = (math.atan(uy, ux) / (2 * math.pi)) % 1 * N_BINS
         local k = math.floor(f + 0.5) % N_BINS + 1
-        for j, wgt in pairs({ [k] = EST_RATE, [(k % N_BINS) + 1] = EST_RATE / 2, [((k - 2) % N_BINS) + 1] = EST_RATE / 2 }) do
-            s.est[j] = math.max(A_EST_MIN, math.min(p.a_max, s.est[j] + wgt * (a - s.est[j])))
+        -- Motor torque is the same both ways: toward φ and φ + 180° the limit is the same.
+        for _, kk in ipairs({ k, (k - 1 + N_BINS // 2) % N_BINS + 1 }) do
+            for j, wgt in pairs({ [kk] = EST_RATE, [(kk % N_BINS) + 1] = EST_RATE / 2, [((kk - 2) % N_BINS) + 1] = EST_RATE / 2 }) do
+                s.est[j] = math.max(A_EST_MIN, math.min(p.a_max, s.est[j] + wgt * (a - s.est[j])))
+            end
         end
     end
 
