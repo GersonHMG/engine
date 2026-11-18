@@ -12,8 +12,8 @@ pub enum SidebarPanel {
     SimParams,
     /// Bang-bang motion limits, for all robots and per robot.
     RobotSettings,
-    /// Generates variations of the simulator's robot profile and saves them.
-    RobotVariations,
+    /// Edits the simulator robot (body, wheels, limits) and saves it as a profile.
+    RobotEditor,
     Recording,
     Control,
     Charts,
@@ -70,7 +70,7 @@ impl Sidebar {
             panel(Icon::Pipeline, "Vision → Kalman → Radio", SidebarPanel::Pipeline),
             panel(Icon::Sliders, "Simulator parameters", SidebarPanel::SimParams),
             panel(Icon::Robot, "Robot settings", SidebarPanel::RobotSettings),
-            panel(Icon::Dice, "Robot variations", SidebarPanel::RobotVariations),
+            panel(Icon::Chassis, "Robot editor: body, wheels, limits", SidebarPanel::RobotEditor),
             panel(Icon::Record, "Recording", SidebarPanel::Recording),
             panel(Icon::Gamepad, "Manual control", SidebarPanel::Control),
             panel(Icon::Chart, "Charts", SidebarPanel::Charts),

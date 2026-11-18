@@ -116,12 +116,11 @@ impl Robot {
         if config.grip_accel > 0.0 {
             self.drive_on_wheels(config, dt);
         } else {
-            let target = Vec2::new(self.command.vt, self.command.vn)
-                .rotated(self.theta)
-                .clamp_length(config.max_speed);
+            let (local, omega) = self.wheel_command(config);
+            let target = local.rotated(self.theta);
             self.velocity += (target - self.velocity).clamp_length(config.max_accel * dt);
             self.sliding = false;
-            self.turn(config, dt, 0.0);
+            self.turn(config, dt, omega, 0.0);
             self.wheel_velocity = self.velocity.rotated(-self.theta);
         }
         self.position += self.velocity * dt;
@@ -129,7 +128,7 @@ impl Robot {
 
     /// Slip model: wheels follow the command, the body follows the wheels.
     fn drive_on_wheels(&mut self, config: &RobotConfig, dt: f64) {
-        let target = Vec2::new(self.command.vt, self.command.vn).clamp_length(config.max_speed);
+        let (target, omega) = self.wheel_command(config);
         self.wheel_velocity += (target - self.wheel_velocity).clamp_length(config.max_accel * dt);
 
         let slip = self.wheel_velocity.rotated(self.theta) - self.velocity;
@@ -149,14 +148,21 @@ impl Robot {
             }
         }
         let spin = if self.sliding { config.slip_spin * left } else { 0.0 };
-        self.turn(config, dt, spin);
+        self.turn(config, dt, omega, spin);
     }
 
-    /// Angular speed toward the command within `max_alpha`; `extra` (rad/s)
-    /// turns the heading on top of it.
-    fn turn(&mut self, config: &RobotConfig, dt: f64, extra: f64) {
+    /// The commanded velocity (robot frame) and angular speed within
+    /// `max_speed`, `max_omega` and the wheels' top speed.
+    fn wheel_command(&self, config: &RobotConfig) -> (Vec2, f64) {
+        let local = Vec2::new(self.command.vt, self.command.vn).clamp_length(config.max_speed);
+        let omega = self.command.omega.clamp(-config.max_omega, config.max_omega);
+        config.wheel_limited(local, omega)
+    }
+
+    /// Angular speed toward `target_omega` within `max_alpha`; `extra`
+    /// (rad/s) turns the heading on top of it.
+    fn turn(&mut self, config: &RobotConfig, dt: f64, target_omega: f64, extra: f64) {
         let max_step = config.max_alpha * dt;
-        let target_omega = self.command.omega.clamp(-config.max_omega, config.max_omega);
         self.omega += (target_omega - self.omega).clamp(-max_step, max_step);
         self.theta = wrap_angle(self.theta + (self.omega + extra) * dt);
     }
