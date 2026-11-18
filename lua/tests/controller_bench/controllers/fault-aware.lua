@@ -1,15 +1,15 @@
--- controller_bench/controllers/fault-aware.lua â€” a go-to-pose controller meant to keep
+-- controller_bench/controllers/fault-aware.lua — a go-to-pose controller meant to keep
 -- working on robots with faults (a weak or asymmetric wheel, low torque) and with delay.
 --
 -- 1. Latency compensation. Vision is old and commands act late; the controller assumes
 --    one round-trip delay LATENCY (assumption: 66 ms = 33 ms vision + 33 ms radio). It
 --    predicts the pose for when this tick's command acts by replaying the robot-frame
 --    commands it already sent over that delay, starting from the vision pose and velocity,
---    with a first-order model (velocity moves toward each command by at most aÂ·dt).
+--    with a first-order model (velocity moves toward each command by at most a·dt).
 -- 2. Go-to-pose on the predicted state: wanted speed toward the target is
---    min(v_max, sqrt(2Â·a_brakeÂ·d), KPÂ·d) â€” the sqrt braking curve far away, a linear
+--    min(v_max, sqrt(2·a_brake·d), KP·d) — the sqrt braking curve far away, a linear
 --    (P) zone near the target so delay and noise don't make it hunt. Heading the same.
--- 3. The command ramps by at most A_RAMPÂ·dt per tick, and is never allowed to run more
+-- 3. The command ramps by at most a_max·dt per tick, and is never allowed to run more
 --    than MAX_LEAD ahead of the predicted velocity: a weak robot is not asked for speed
 --    it can't reach, so it doesn't brake too late.
 -- 4. Fault model (for asymmetric or weak wheels): the acceleration the robot really reaches
@@ -25,9 +25,9 @@ local M = {}
 
 M.DEFAULTS = {
     v_max = 2.5,      -- m/s
-    a_max = 2.5,      -- m/sÂ²
+    a_max = 2.5,      -- m/s²
     omega_max = 6.0,  -- rad/s
-    alpha_max = 20.0, -- rad/sÂ²
+    alpha_max = 20.0, -- rad/s²
     dt = 1 / 60,      -- s, control period
 }
 
@@ -44,7 +44,7 @@ local N_BINS = 8           -- directions, robot frame
 local EST_WINDOW = 6       -- ticks, window the acceleration is measured over
 local GAP_MIN = 0.15       -- m/s, the robot counts as saturated when this far behind the command
 local EST_RATE = 0.15      -- EMA weight of one measurement
-local A_EST_MIN = 0.8      -- m/sÂ², floor of the estimate
+local A_EST_MIN = 0.8      -- m/s², floor of the estimate
 
 local function wrap(a)
     while a > math.pi do a = a - 2 * math.pi end
@@ -165,7 +165,7 @@ function M.new(params)
 
         s.vx, s.vy, s.w = vx, vy, w
 
-        -- Field â†’ robot frame, with the heading at the middle of the tick the command acts.
+        -- Field → robot frame, with the heading at the middle of the tick the command acts.
         local thc = th + w * p.dt * 0.5
         local c, sn = math.cos(thc), math.sin(thc)
         local vt, vn = c * vx + sn * vy, -sn * vx + c * vy
