@@ -118,9 +118,11 @@ impl Robot {
         } else {
             let (local, omega) = self.wheel_command(config);
             let target = local.rotated(self.theta);
-            self.velocity += (target - self.velocity).clamp_length(config.max_accel * dt);
+            let dv = (target - self.velocity).clamp_length(config.max_accel * dt);
+            let (dv, dw) = config.torque_limited(dv.rotated(-self.theta), self.omega_step(config, omega, dt), dt);
+            self.velocity += dv.rotated(self.theta);
             self.sliding = false;
-            self.turn(config, dt, omega, 0.0);
+            self.spin(dw, 0.0, dt);
             self.wheel_velocity = self.velocity.rotated(-self.theta);
         }
         self.position += self.velocity * dt;
@@ -129,10 +131,12 @@ impl Robot {
     /// Slip model: wheels follow the command, the body follows the wheels.
     fn drive_on_wheels(&mut self, config: &RobotConfig, dt: f64) {
         let (target, omega) = self.wheel_command(config);
-        self.wheel_velocity += (target - self.wheel_velocity).clamp_length(config.max_accel * dt);
+        let dv = (target - self.wheel_velocity).clamp_length(config.max_accel * dt);
+        let (dv, dw) = config.torque_limited(dv, self.omega_step(config, omega, dt), dt);
+        self.wheel_velocity += dv;
 
         let slip = self.wheel_velocity.rotated(self.theta) - self.velocity;
-        let grip = config.grip_accel * if self.sliding { config.slide_grip } else { 1.0 };
+        let grip = config.grip_accel * config.mean_wheel_grip() * if self.sliding { config.slide_grip } else { 1.0 };
         let step = grip * dt;
         let slip_speed = slip.length();
         let left = (slip_speed - step).max(0.0);
@@ -147,8 +151,13 @@ impl Robot {
                 self.sliding = true;
             }
         }
-        let spin = if self.sliding { config.slip_spin * left } else { 0.0 };
-        self.turn(config, dt, omega, spin);
+        let spin = if self.sliding {
+            let uneven = if slip_speed > 0.0 { config.grip_spin(slip.rotated(-self.theta) * (1.0 / slip_speed)) } else { 0.0 };
+            (config.slip_spin + uneven) * left
+        } else {
+            0.0
+        };
+        self.spin(dw, spin, dt);
     }
 
     /// The commanded velocity (robot frame) and angular speed within
@@ -159,11 +168,16 @@ impl Robot {
         config.wheel_limited(local, omega)
     }
 
-    /// Angular speed toward `target_omega` within `max_alpha`; `extra`
-    /// (rad/s) turns the heading on top of it.
-    fn turn(&mut self, config: &RobotConfig, dt: f64, target_omega: f64, extra: f64) {
+    /// Change of angular speed toward `target_omega` within `max_alpha`.
+    fn omega_step(&self, config: &RobotConfig, target_omega: f64, dt: f64) -> f64 {
         let max_step = config.max_alpha * dt;
-        self.omega += (target_omega - self.omega).clamp(-max_step, max_step);
+        (target_omega - self.omega).clamp(-max_step, max_step)
+    }
+
+    /// Changes the angular speed by `step`, then turns the heading; `extra`
+    /// (rad/s) turns it on top.
+    fn spin(&mut self, step: f64, extra: f64, dt: f64) {
+        self.omega += step;
         self.theta = wrap_angle(self.theta + (self.omega + extra) * dt);
     }
 }
