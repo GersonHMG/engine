@@ -49,19 +49,8 @@ impl SimConfig {
             ("robot.grip_accel", robot.grip_accel, non_negative(robot.grip_accel), ">= 0"),
             ("robot.slide_grip", robot.slide_grip, fraction(robot.slide_grip), "in [0, 1]"),
             ("robot.slip_spin", robot.slip_spin, non_negative(robot.slip_spin), ">= 0"),
-            ("robot.wheel_speed", robot.wheel_speed, non_negative(robot.wheel_speed), ">= 0"),
-            (
-                "robot.front_wheel_angle",
-                robot.front_wheel_angle,
-                robot.front_wheel_angle.is_finite() && robot.front_wheel_angle > 0.0 && robot.front_wheel_angle < robot.back_wheel_angle,
-                "> 0 and < robot.back_wheel_angle",
-            ),
-            (
-                "robot.back_wheel_angle",
-                robot.back_wheel_angle,
-                robot.back_wheel_angle.is_finite() && robot.back_wheel_angle < std::f64::consts::PI,
-                "< π",
-            ),
+            ("robot.mass", robot.mass, positive(robot.mass), "> 0"),
+            ("robot.wheel_radius", robot.wheel_radius, positive(robot.wheel_radius), "> 0"),
             (
                 "robot.wheel_distance",
                 robot.wheel_distance,
@@ -83,10 +72,24 @@ impl SimConfig {
             ("radio.delay", self.radio.delay, delay(self.radio.delay), "in [0, 1]"),
         ];
 
-        match checks.iter().find(|(_, _, ok, _)| !ok) {
-            Some((name, value, _, rule)) => Err(format!("{name} must be {rule}, got {value}")),
-            None => Ok(()),
+        if let Some((name, value, _, rule)) = checks.iter().find(|(_, _, ok, _)| !ok) {
+            return Err(format!("{name} must be {rule}, got {value}"));
         }
+        for (i, wheel) in robot.wheels.iter().enumerate() {
+            let wheel_checks = [
+                ("angle", wheel.angle, wheel.angle.is_finite() && wheel.angle.abs() <= std::f64::consts::PI, "in [-π, π]"),
+                ("max_speed", wheel.max_speed, non_negative(wheel.max_speed), ">= 0"),
+                ("torque", wheel.torque, non_negative(wheel.torque), ">= 0"),
+                ("grip", wheel.grip, non_negative(wheel.grip), ">= 0"),
+            ];
+            if let Some((name, value, _, rule)) = wheel_checks.iter().find(|(_, _, ok, _)| !ok) {
+                return Err(format!("robot.wheels.{i}.{name} must be {rule}, got {value}"));
+            }
+        }
+        if robot.grip_accel > 0.0 && robot.wheels.iter().all(|w| w.grip == 0.0) {
+            return Err("robot.wheels: at least one wheel needs grip > 0".to_string());
+        }
+        Ok(())
     }
 }
 
@@ -167,18 +170,15 @@ pub struct RobotConfig {
     /// Heading drift while sliding, rad/s per m/s of slip (counter-clockwise):
     /// slipping wheels push unevenly and the robot turns.
     pub slip_spin: f64,
-    /// Most ground speed a wheel can reach, m/s. 0 = no wheel limit: the
-    /// robot reaches `max_speed` in every direction. Above 0, a command that
-    /// would spin any wheel faster is scaled down as a whole, so how fast the
-    /// robot goes depends on the direction (see the wheel angles).
-    pub wheel_speed: f64,
-    /// Angle of the two front omni wheels from the forward axis, rad (one on
-    /// each side, mirrored). Each wheel rolls at right angles to its axle.
-    pub front_wheel_angle: f64,
-    /// Angle of the two back omni wheels from the forward axis, rad.
-    pub back_wheel_angle: f64,
+    /// The four omni wheels: front left, back left, back right, front right.
+    pub wheels: [WheelConfig; 4],
     /// Distance from the center to the wheels' contact points, m.
     pub wheel_distance: f64,
+    /// Wheel radius, m: turns a motor torque into a push on the floor.
+    pub wheel_radius: f64,
+    /// kg. With the wheel torques, sets how hard each wheel can accelerate
+    /// the robot.
+    pub mass: f64,
     /// rad/s.
     pub max_omega: f64,
     /// rad/s².
@@ -202,32 +202,74 @@ impl RobotConfig {
         (self.radius * self.radius - self.front_distance * self.front_distance).sqrt()
     }
 
-    /// Where the four wheels are, counter-clockwise from the forward axis,
-    /// rad: front left, back left, back right, front right.
-    pub fn wheel_angles(&self) -> [f64; 4] {
-        let (f, b) = (self.front_wheel_angle, self.back_wheel_angle);
-        [f, b, -b, -f]
-    }
-
-    /// Ground speed of each wheel (in `wheel_angles` order) for a velocity in
-    /// the robot's frame, m/s.
+    /// Ground speed of each wheel for a velocity in the robot's frame, m/s.
     pub fn wheel_speeds(&self, local_velocity: crate::Vec2, omega: f64) -> [f64; 4] {
-        self.wheel_angles()
-            .map(|phi| -phi.sin() * local_velocity.x + phi.cos() * local_velocity.y + self.wheel_distance * omega)
+        self.wheels.map(|w| w.drive_direction().dot(local_velocity) + self.wheel_distance * omega)
     }
 
-    /// The command (robot frame) scaled down so no wheel goes past
-    /// `wheel_speed`; unchanged when `wheel_speed` is 0.
+    /// The command (robot frame) scaled down so no wheel goes past its
+    /// `max_speed`; unchanged when no wheel has one.
     pub fn wheel_limited(&self, local_velocity: crate::Vec2, omega: f64) -> (crate::Vec2, f64) {
-        if self.wheel_speed <= 0.0 {
-            return (local_velocity, omega);
-        }
-        let fastest = self.wheel_speeds(local_velocity, omega).iter().fold(0.0_f64, |m, s| m.max(s.abs()));
-        if fastest <= self.wheel_speed {
-            return (local_velocity, omega);
-        }
-        let k = self.wheel_speed / fastest;
+        let speeds = self.wheel_speeds(local_velocity, omega);
+        let k = self.wheels.iter().zip(speeds).fold(1.0_f64, |k, (w, s)| {
+            if w.max_speed > 0.0 && s.abs() > w.max_speed { k.min(w.max_speed / s.abs()) } else { k }
+        });
         (local_velocity * k, omega * k)
+    }
+
+    /// Most ground acceleration wheel `i`'s motor can give, m/s²; infinite
+    /// without a torque limit. Each wheel pushes a quarter of the mass.
+    pub fn wheel_max_accel(&self, i: usize) -> f64 {
+        let torque = self.wheels[i].torque;
+        if torque > 0.0 { torque / self.wheel_radius / (self.mass / 4.0) } else { f64::INFINITY }
+    }
+
+    /// A velocity change (robot frame) and angular speed change over `dt`,
+    /// scaled down so no motor needs more than its torque.
+    pub fn torque_limited(&self, delta_velocity: crate::Vec2, delta_omega: f64, dt: f64) -> (crate::Vec2, f64) {
+        if dt <= 0.0 {
+            return (delta_velocity, delta_omega);
+        }
+        let needed = self.wheel_speeds(delta_velocity, delta_omega);
+        let k = needed.iter().enumerate().fold(1.0_f64, |k, (i, n)| {
+            let most = self.wheel_max_accel(i) * dt;
+            if n.abs() > most { k.min(most / n.abs()) } else { k }
+        });
+        (delta_velocity * k, delta_omega * k)
+    }
+
+    /// Mean wheel grip: scales `grip_accel`.
+    pub fn mean_wheel_grip(&self) -> f64 {
+        self.wheels.iter().map(|w| w.grip).sum::<f64>() / 4.0
+    }
+
+    /// Heading drift while sliding from uneven wheel grip, rad/s per m/s of
+    /// slip, for a slip along `slip_direction` (unit, robot frame): the
+    /// wheels with more grip drag their side of the body harder.
+    pub fn grip_spin(&self, slip_direction: crate::Vec2) -> f64 {
+        let mean = self.mean_wheel_grip();
+        if mean <= 0.0 {
+            return 0.0;
+        }
+        let torque: f64 = self
+            .wheels
+            .iter()
+            .map(|w| (w.grip - mean) * w.position(self.wheel_distance).cross(slip_direction))
+            .sum();
+        // Normalized by the total grip (Σ grip × distance), it is in [-1, 1]:
+        // 1 when only one side grips, so the body pivots on that side and
+        // turns at about the slip speed over the track width (2 × distance).
+        torque / (4.0 * mean * self.wheel_distance) / (2.0 * self.wheel_distance)
+    }
+
+    /// Top acceleration from rest, without turning, in `direction` (rad from
+    /// the forward axis, robot frame), m/s².
+    pub fn top_accel_towards(&self, direction: f64) -> f64 {
+        let unit = crate::Vec2::new(direction.cos(), direction.sin());
+        let dt = 1e-3;
+        let (dv, _) = self.torque_limited(unit * (self.max_accel * dt), 0.0, dt);
+        let a = dv.length() / dt;
+        if self.grip_accel > 0.0 { a.min(self.grip_accel * self.mean_wheel_grip()) } else { a }
     }
 
     /// Top speed driving (without turning) in `direction`, rad from the
@@ -249,10 +291,10 @@ impl Default for RobotConfig {
             grip_accel: 0.0,
             slide_grip: 1.0,
             slip_spin: 0.0,
-            wheel_speed: 0.0,
-            front_wheel_angle: std::f64::consts::PI / 3.0,
-            back_wheel_angle: 3.0 * std::f64::consts::PI / 4.0,
+            wheels: WheelConfig::standard(),
             wheel_distance: 0.08,
+            wheel_radius: 0.027,
+            mass: 2.5,
             max_omega: 10.0,
             max_alpha: 40.0,
             max_kick_speed: 6.5,
@@ -261,6 +303,52 @@ impl Default for RobotConfig {
             body_restitution: 0.5,
             front_restitution: 0.2,
         }
+    }
+}
+
+/// One omni wheel. It drives the robot along the direction it rolls (at
+/// right angles to its axle) and slides freely across it.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct WheelConfig {
+    /// Where it is, counter-clockwise from the forward axis, rad.
+    pub angle: f64,
+    /// Most ground speed it can reach, m/s. 0 = no limit. A command that
+    /// would spin a wheel faster is scaled down as a whole, so this and the
+    /// angles set how fast the robot goes in each direction.
+    pub max_speed: f64,
+    /// Most motor torque, N·m. 0 = no limit (only `max_accel`). A command
+    /// that needs more from a motor is scaled down as a whole.
+    pub torque: f64,
+    /// Share of the floor's grip, 1 = normal. The robot's grip is
+    /// `grip_accel` × the mean; uneven grip turns it while it slides.
+    pub grip: f64,
+}
+
+impl WheelConfig {
+    fn at(degrees: f64) -> Self {
+        Self { angle: degrees.to_radians(), ..Self::default() }
+    }
+
+    /// Front wheels at ±60°, back wheels at ±135°.
+    pub fn standard() -> [Self; 4] {
+        [Self::at(60.0), Self::at(135.0), Self::at(-135.0), Self::at(-60.0)]
+    }
+
+    /// Unit vector it drives along, robot frame.
+    pub fn drive_direction(&self) -> crate::Vec2 {
+        crate::Vec2::new(-self.angle.sin(), self.angle.cos())
+    }
+
+    /// Contact point, robot frame, m.
+    pub fn position(&self, distance: f64) -> crate::Vec2 {
+        crate::Vec2::new(self.angle.cos(), self.angle.sin()) * distance
+    }
+}
+
+impl Default for WheelConfig {
+    fn default() -> Self {
+        Self { angle: 0.0, max_speed: 0.0, torque: 0.0, grip: 1.0 }
     }
 }
 

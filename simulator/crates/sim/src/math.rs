@@ -19,6 +19,11 @@ impl Vec2 {
         Self { x, y }
     }
 
+    /// z of the 3D cross product: positive when `other` is counter-clockwise from `self`.
+    pub fn cross(self, other: Vec2) -> f64 {
+        self.x * other.y - self.y * other.x
+    }
+
     pub fn dot(self, other: Vec2) -> f64 {
         self.x * other.x + self.y * other.y
     }
