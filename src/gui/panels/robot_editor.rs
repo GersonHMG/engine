@@ -168,7 +168,8 @@ pub struct RobotEditorPanel {
     /// Sent with Apply, waiting for the simulator to report it.
     pending: Option<RobotConfig>,
     selected_wheel: usize,
-    /// Dragging or editing a wheel changes its partner too, mirrored.
+    /// Dragging or editing a wheel changes its partner too, mirrored (off:
+    /// every wheel is edited on its own).
     mirror: bool,
     plot: Plot,
     name: String,
@@ -185,7 +186,7 @@ impl Default for RobotEditorPanel {
             touched: false,
             pending: None,
             selected_wheel: 0,
-            mirror: true,
+            mirror: false,
             plot: Plot::Speed,
             name: "my_robot".to_string(),
             saved: robot_profiles::list(),
@@ -392,7 +393,7 @@ impl RobotEditorPanel {
                 row![
                     section_title("TOP VIEW · drag a wheel"),
                     Space::new().width(Length::Fill),
-                    checkbox(self.mirror).label("Mirror left/right").on_toggle(EditorMessage::Mirror).style(theme::check).size(13).text_size(11),
+                    checkbox(self.mirror).label("Mirror to the opposite wheel").on_toggle(EditorMessage::Mirror).style(theme::check).size(13).text_size(11),
                 ]
                 .align_y(Alignment::Center),
                 Canvas::new(Drawing { robot: shown.clone(), ball_radius, selected: self.selected_wheel })
@@ -1092,8 +1093,19 @@ mod tests {
     }
 
     #[test]
+    fn wheels_are_edited_one_at_a_time_by_default() {
+        let mut panel = RobotEditorPanel::default();
+        panel.update(EditorMessage::DragWheel(0, 45.0));
+        panel.update(EditorMessage::Edit("wheels.1.torque".into(), "0.06".into()));
+        assert_eq!((panel.typed["wheels.0.angle"].as_str(), panel.typed["wheels.3.angle"].as_str()), ("45", "-60"));
+        assert_eq!((panel.typed["wheels.1.torque"].as_str(), panel.typed["wheels.2.torque"].as_str()), ("0.06", "0"));
+        assert!(panel.draft().is_ok());
+    }
+
+    #[test]
     fn mirrored_wheels_move_and_change_together() {
         let mut panel = RobotEditorPanel::default();
+        panel.update(EditorMessage::Mirror(true));
         panel.update(EditorMessage::DragWheel(0, 45.0));
         assert_eq!((panel.typed["wheels.0.angle"].as_str(), panel.typed["wheels.3.angle"].as_str()), ("45", "-45"));
         panel.update(EditorMessage::Edit("wheels.1.torque".into(), "0.06".into()));
