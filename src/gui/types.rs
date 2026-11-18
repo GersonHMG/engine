@@ -133,6 +133,7 @@ pub enum Message {
     SimParams(SimParamsMessage),
     RobotSettings(RobotSettingsMessage),
     Evaluation(super::panels::evaluation::EvaluationMessage),
+    RobotVariations(super::panels::robot_variations::VariationsMessage),
 
     // Events
     Tick,
