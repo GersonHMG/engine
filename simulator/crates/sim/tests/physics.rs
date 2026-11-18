@@ -396,11 +396,12 @@ fn sliding_turns_the_heading_and_turning_while_driving_slides() {
 fn wheel_angles_set_how_fast_the_robot_goes_each_way() {
     let mut config = SimConfig::default();
     config.robot.max_speed = 10.0;
-    config.robot.wheel_speed = 2.0;
-    config.robot.front_wheel_angle = 60f64.to_radians();
-    config.robot.back_wheel_angle = 135f64.to_radians();
+    for wheel in &mut config.robot.wheels {
+        wheel.max_speed = 2.0;
+    }
     let robot = &config.robot;
-    // Forward the front wheels roll at sin 60° of the speed; sideways the back ones at sin 45°.
+    // Wheels at ±60°, ±135°: forward the front wheels roll at sin 60° of the
+    // speed; sideways the back ones at sin 45°.
     assert_close(robot.top_speed_towards(0.0), 2.0 / 60f64.to_radians().sin(), 1e-9);
     assert_close(robot.top_speed_towards(FRAC_PI_2), 2.0 / 45f64.to_radians().sin(), 1e-9);
 
@@ -409,7 +410,51 @@ fn wheel_angles_set_how_fast_the_robot_goes_each_way() {
     run(&mut sim, 1.5);
     assert_close(sim.state().robots()[0].velocity.length(), config.robot.top_speed_towards(0.0), 1e-6);
 
-    // No wheel limit: the same everywhere.
-    config.robot.wheel_speed = 0.0;
+    // One slow wheel limits every direction it rolls in.
+    config.robot.wheels[0].max_speed = 0.5;
+    assert!(config.robot.top_speed_towards(0.0) < 1.0);
+
+    // No wheel limits: the same everywhere.
+    for wheel in &mut config.robot.wheels {
+        wheel.max_speed = 0.0;
+    }
     assert_close(config.robot.top_speed_towards(1.0), 10.0, 1e-12);
+}
+
+#[test]
+fn wheel_torque_limits_the_acceleration() {
+    let mut config = SimConfig::default();
+    config.robot.max_accel = 20.0;
+    // 0.05 N·m on a 2.7 cm wheel pushing a quarter of 2.5 kg: ~2.96 m/s² per wheel.
+    for wheel in &mut config.robot.wheels {
+        wheel.torque = 0.05;
+    }
+    let per_wheel = config.robot.wheel_max_accel(0);
+    assert_close(per_wheel, 0.05 / 0.027 / 0.625, 1e-12);
+    // Forward, the front wheels need 1 / sin 60° of the acceleration.
+    let forward = config.robot.top_accel_towards(0.0);
+    assert_close(forward, per_wheel / 60f64.to_radians().sin(), 1e-9);
+
+    let mut sim = Simulator::new(config.clone(), SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()));
+    sim.set_command(BLUE0, RobotCommand { vt: 3.0, ..Default::default() }).unwrap();
+    run(&mut sim, 0.25);
+    assert_close(sim.state().robots()[0].velocity.length(), forward * 0.25, 0.02);
+}
+
+#[test]
+fn uneven_wheel_grip_turns_a_sliding_robot() {
+    let mut config = SimConfig::default();
+    config.robot.grip_accel = 1.0;
+    config.robot.slide_grip = 1.0;
+    // The right wheels grip, the left ones barely.
+    config.robot.wheels[0].grip = 0.2;
+    config.robot.wheels[1].grip = 0.2;
+    let mut sim = Simulator::new(config, SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()));
+    sim.set_command(BLUE0, RobotCommand { vt: 2.0, ..Default::default() }).unwrap();
+    run(&mut sim, 0.3);
+    let robot = &sim.state().robots()[0];
+    assert!(robot.sliding);
+    assert!(robot.theta < 1.5, "a moderate drift, got {}", robot.theta);
+    // Dragged forward harder on its right side, it turns left (counter-clockwise).
+    assert!(robot.theta > 0.02, "should turn towards the weak side, got {}", robot.theta);
 }
