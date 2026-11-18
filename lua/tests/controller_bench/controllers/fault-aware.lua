@@ -47,7 +47,7 @@ local EST_WINDOW = 6       -- ticks, window the acceleration is measured over
 local GAP_MIN = 0.15       -- m/s, the robot counts as saturated when this far behind the command
 local EST_RATE = 0.15      -- EMA weight of one measurement
 local A_EST_MIN = 0.8      -- m/s², floor of the estimate
-local A_CAP = 4.0          -- m/s², most acceleration ever planned with
+local A_CAP = 5.5          -- m/s², most acceleration ever planned with
 local PROBE = 1.25         -- ramp this much faster than the estimate, to find a higher limit
 
 local function wrap(a)
