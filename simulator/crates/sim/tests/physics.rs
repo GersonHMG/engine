@@ -391,3 +391,25 @@ fn sliding_turns_the_heading_and_turning_while_driving_slides() {
     let along_heading = robot.velocity.dot(robot.heading()) / robot.velocity.length();
     assert!(along_heading < 0.9, "should drift off its heading, got cos = {along_heading}");
 }
+
+#[test]
+fn wheel_angles_set_how_fast_the_robot_goes_each_way() {
+    let mut config = SimConfig::default();
+    config.robot.max_speed = 10.0;
+    config.robot.wheel_speed = 2.0;
+    config.robot.front_wheel_angle = 60f64.to_radians();
+    config.robot.back_wheel_angle = 135f64.to_radians();
+    let robot = &config.robot;
+    // Forward the front wheels roll at sin 60° of the speed; sideways the back ones at sin 45°.
+    assert_close(robot.top_speed_towards(0.0), 2.0 / 60f64.to_radians().sin(), 1e-9);
+    assert_close(robot.top_speed_towards(FRAC_PI_2), 2.0 / 45f64.to_radians().sin(), 1e-9);
+
+    let mut sim = Simulator::new(config.clone(), SimState::new(vec![Robot::new(BLUE0, Vec2::ZERO, 0.0)], ball_out_of_the_way()));
+    sim.set_command(BLUE0, RobotCommand { vt: 10.0, ..Default::default() }).unwrap();
+    run(&mut sim, 1.5);
+    assert_close(sim.state().robots()[0].velocity.length(), config.robot.top_speed_towards(0.0), 1e-6);
+
+    // No wheel limit: the same everywhere.
+    config.robot.wheel_speed = 0.0;
+    assert_close(config.robot.top_speed_towards(1.0), 10.0, 1e-12);
+}
