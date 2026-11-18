@@ -49,6 +49,25 @@ impl SimConfig {
             ("robot.grip_accel", robot.grip_accel, non_negative(robot.grip_accel), ">= 0"),
             ("robot.slide_grip", robot.slide_grip, fraction(robot.slide_grip), "in [0, 1]"),
             ("robot.slip_spin", robot.slip_spin, non_negative(robot.slip_spin), ">= 0"),
+            ("robot.wheel_speed", robot.wheel_speed, non_negative(robot.wheel_speed), ">= 0"),
+            (
+                "robot.front_wheel_angle",
+                robot.front_wheel_angle,
+                robot.front_wheel_angle.is_finite() && robot.front_wheel_angle > 0.0 && robot.front_wheel_angle < robot.back_wheel_angle,
+                "> 0 and < robot.back_wheel_angle",
+            ),
+            (
+                "robot.back_wheel_angle",
+                robot.back_wheel_angle,
+                robot.back_wheel_angle.is_finite() && robot.back_wheel_angle < std::f64::consts::PI,
+                "< π",
+            ),
+            (
+                "robot.wheel_distance",
+                robot.wheel_distance,
+                positive(robot.wheel_distance) && robot.wheel_distance <= robot.radius,
+                "> 0 and <= robot.radius",
+            ),
             ("robot.max_kick_speed", robot.max_kick_speed, non_negative(robot.max_kick_speed), ">= 0"),
             ("robot.kick_x_speed", robot.kick_x_speed, non_negative(robot.kick_x_speed), ">= 0"),
             ("robot.kick_reach", robot.kick_reach, non_negative(robot.kick_reach), ">= 0"),
@@ -148,6 +167,18 @@ pub struct RobotConfig {
     /// Heading drift while sliding, rad/s per m/s of slip (counter-clockwise):
     /// slipping wheels push unevenly and the robot turns.
     pub slip_spin: f64,
+    /// Most ground speed a wheel can reach, m/s. 0 = no wheel limit: the
+    /// robot reaches `max_speed` in every direction. Above 0, a command that
+    /// would spin any wheel faster is scaled down as a whole, so how fast the
+    /// robot goes depends on the direction (see the wheel angles).
+    pub wheel_speed: f64,
+    /// Angle of the two front omni wheels from the forward axis, rad (one on
+    /// each side, mirrored). Each wheel rolls at right angles to its axle.
+    pub front_wheel_angle: f64,
+    /// Angle of the two back omni wheels from the forward axis, rad.
+    pub back_wheel_angle: f64,
+    /// Distance from the center to the wheels' contact points, m.
+    pub wheel_distance: f64,
     /// rad/s.
     pub max_omega: f64,
     /// rad/s².
@@ -170,6 +201,42 @@ impl RobotConfig {
     pub fn front_half_width(&self) -> f64 {
         (self.radius * self.radius - self.front_distance * self.front_distance).sqrt()
     }
+
+    /// Where the four wheels are, counter-clockwise from the forward axis,
+    /// rad: front left, back left, back right, front right.
+    pub fn wheel_angles(&self) -> [f64; 4] {
+        let (f, b) = (self.front_wheel_angle, self.back_wheel_angle);
+        [f, b, -b, -f]
+    }
+
+    /// Ground speed of each wheel (in `wheel_angles` order) for a velocity in
+    /// the robot's frame, m/s.
+    pub fn wheel_speeds(&self, local_velocity: crate::Vec2, omega: f64) -> [f64; 4] {
+        self.wheel_angles()
+            .map(|phi| -phi.sin() * local_velocity.x + phi.cos() * local_velocity.y + self.wheel_distance * omega)
+    }
+
+    /// The command (robot frame) scaled down so no wheel goes past
+    /// `wheel_speed`; unchanged when `wheel_speed` is 0.
+    pub fn wheel_limited(&self, local_velocity: crate::Vec2, omega: f64) -> (crate::Vec2, f64) {
+        if self.wheel_speed <= 0.0 {
+            return (local_velocity, omega);
+        }
+        let fastest = self.wheel_speeds(local_velocity, omega).iter().fold(0.0_f64, |m, s| m.max(s.abs()));
+        if fastest <= self.wheel_speed {
+            return (local_velocity, omega);
+        }
+        let k = self.wheel_speed / fastest;
+        (local_velocity * k, omega * k)
+    }
+
+    /// Top speed driving (without turning) in `direction`, rad from the
+    /// forward axis in the robot's frame, m/s.
+    pub fn top_speed_towards(&self, direction: f64) -> f64 {
+        let unit = crate::Vec2::new(direction.cos(), direction.sin());
+        let (v, _) = self.wheel_limited(unit * self.max_speed, 0.0);
+        v.length()
+    }
 }
 
 impl Default for RobotConfig {
@@ -182,6 +249,10 @@ impl Default for RobotConfig {
             grip_accel: 0.0,
             slide_grip: 1.0,
             slip_spin: 0.0,
+            wheel_speed: 0.0,
+            front_wheel_angle: std::f64::consts::PI / 3.0,
+            back_wheel_angle: 3.0 * std::f64::consts::PI / 4.0,
+            wheel_distance: 0.08,
             max_omega: 10.0,
             max_alpha: 40.0,
             max_kick_speed: 6.5,
