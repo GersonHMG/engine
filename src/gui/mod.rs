@@ -50,7 +50,7 @@ use panels::pipeline::{self, Link, Stage, Status};
 use panels::sim_params::SimParamsPanel;
 use panels::robot_settings::RobotSettingsPanel;
 use panels::evaluation::EvaluationPanel;
-use panels::robot_variations::RobotVariationsPanel;
+use panels::robot_editor::RobotEditorPanel;
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -70,7 +70,7 @@ pub struct EngineApp {
     sim_params_panel: SimParamsPanel,
     robot_settings_panel: RobotSettingsPanel,
     evaluation_panel: EvaluationPanel,
-    robot_variations_panel: RobotVariationsPanel,
+    robot_editor_panel: RobotEditorPanel,
 
     // Data
     field_data: FieldData,
@@ -155,7 +155,7 @@ impl EngineApp {
             sim_params_panel: SimParamsPanel::default(),
             robot_settings_panel: RobotSettingsPanel::default(),
             evaluation_panel: EvaluationPanel::default(),
-            robot_variations_panel: RobotVariationsPanel::default(),
+            robot_editor_panel: RobotEditorPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -203,7 +203,7 @@ impl EngineApp {
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
                 SidebarPanel::Evaluation => "Evaluation".to_string(),
-                SidebarPanel::RobotVariations => "Robot Variations".to_string(),
+                SidebarPanel::RobotEditor => "Robot Editor".to_string(),
                 SidebarPanel::LuaConsole => "Lua Console".to_string(),
             }
         } else {
@@ -230,7 +230,7 @@ impl EngineApp {
             SidebarPanel::SimParams => iced::Size::new(700.0, 470.0),
             SidebarPanel::RobotSettings => iced::Size::new(440.0, 480.0),
             SidebarPanel::Evaluation => iced::Size::new(720.0, 760.0),
-            SidebarPanel::RobotVariations => iced::Size::new(860.0, 820.0),
+            SidebarPanel::RobotEditor => iced::Size::new(900.0, 900.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -690,8 +690,8 @@ impl EngineApp {
                 self.evaluation_panel.update(msg);
             }
 
-            Message::RobotVariations(msg) => {
-                for line in self.robot_variations_panel.update(msg) {
+            Message::RobotEditor(msg) => {
+                for line in self.robot_editor_panel.update(msg) {
                     let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(line));
                 }
             }
@@ -840,7 +840,7 @@ impl EngineApp {
 
                 if let Ok(mut rx) = self.sim_config_rx.try_lock() {
                     while let Ok(config) = rx.try_recv() {
-                        self.robot_variations_panel.set_config(config.clone());
+                        self.robot_editor_panel.set_config(config.clone());
                         self.sim_params_panel.set_config(config);
                     }
                 }
@@ -1243,7 +1243,7 @@ impl EngineApp {
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
             SidebarPanel::Evaluation => self.evaluation_panel.view().map(Message::Evaluation),
-            SidebarPanel::RobotVariations => self.robot_variations_panel.view().map(Message::RobotVariations),
+            SidebarPanel::RobotEditor => self.robot_editor_panel.view().map(Message::RobotEditor),
             SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit, Message::ConsoleClear),
         };
 
