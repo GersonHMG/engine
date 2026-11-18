@@ -42,7 +42,7 @@ local W_LEAD = 1.5         -- rad/s, same for the turn rate
 
 -- Fault model: the acceleration the robot actually reaches, per direction in its own frame
 -- (a weak wheel makes it direction dependent). Learned online from vision.
-local N_BINS = 8           -- directions, robot frame
+local N_BINS = 16          -- directions, robot frame
 local EST_WINDOW = 6       -- ticks, window the acceleration is measured over
 local GAP_MIN = 0.15       -- m/s, the robot counts as saturated when this far behind the command
 local EST_RATE = 0.15      -- EMA weight of one measurement
