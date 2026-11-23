@@ -18,7 +18,6 @@ mod config;
 mod headless;
 mod mcp;
 mod perf;
-mod evaluation;
 mod robot_profiles;
 
 use std::sync::{Arc, RwLock, Mutex};

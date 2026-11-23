@@ -22,9 +22,7 @@ pub mod chart;
 pub mod scale;
 pub mod xy;
 
-pub use chart::{CategoryChart, Layer};
 pub use scale::TickFormat;
-pub use xy::{Series, SeriesKind, XyChart};
 
 use iced::widget::canvas::{Frame, LineDash, Path, Stroke, Text};
 use iced::{alignment, Color, Pixels, Point, Size};

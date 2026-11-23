@@ -1,5 +1,5 @@
 -- evaluate: runs an entry script (lua/run_ai.lua by default) on one scenario, N episodes,
--- and prints one line per episode. The Evaluation panel (src/evaluation) runs it once per
+-- and prints one line per episode. Run it headless (`engine --headless lua/tests/evaluate.lua`) once per
 -- scenario for the working tree and once for the baseline commit, with the same settings,
 -- so episode `rep` of a scenario starts from the same place on both sides (a paired design).
 --
