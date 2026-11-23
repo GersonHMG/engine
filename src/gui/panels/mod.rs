@@ -6,6 +6,5 @@ pub mod control;
 pub mod charts;
 pub mod pipeline;
 pub mod sim_params;
-pub mod robot_settings;
 pub mod evaluation;
 pub mod robot_editor;
