@@ -5,8 +5,8 @@
 // send_velocity and manual control) changes by at most `ramp_accel` per
 // second, so the wheels keep their grip (`motion::traction`). One set
 // applies to every robot; a robot can override any value. They are kept in `robot_settings.toml` and changed
-// with the `motion ...` console commands (the Robot settings panel types
-// them), so every change shows in the console:
+// with the `motion ...` console commands,
+// so every change shows in the console:
 //
 //   motion                                  every value
 //   motion all <max_accel|max_speed|ramp_accel> <v>    the value for every robot
@@ -18,7 +18,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{LazyLock, RwLock};
 use tracing::{info, warn};
 
@@ -63,13 +62,6 @@ impl TeamColor {
             0 => Some(Self::Blue),
             1 => Some(Self::Yellow),
             _ => None,
-        }
-    }
-
-    pub fn id(self) -> i32 {
-        match self {
-            Self::Blue => 0,
-            Self::Yellow => 1,
         }
     }
 
@@ -244,17 +236,10 @@ impl Param {
 // ─── The engine's settings ──────────────────────────────────────────────────
 
 static SETTINGS: LazyLock<RwLock<RobotSettings>> = LazyLock::new(|| RwLock::new(load()));
-/// Bumped on every change, so the GUI knows when to read them again.
-static VERSION: AtomicU64 = AtomicU64::new(1);
 
 /// The settings now.
 pub fn current() -> RobotSettings {
     SETTINGS.read().unwrap_or_else(|e| e.into_inner()).clone()
-}
-
-/// Changes with every change of the settings.
-pub fn version() -> u64 {
-    VERSION.load(Ordering::Relaxed)
 }
 
 /// The bang-bang limits robot (id, team) runs with.
@@ -269,7 +254,6 @@ fn update(edit: impl FnOnce(&mut RobotSettings) -> Result<(), String>) -> Result
     edit(&mut changed)?;
     changed.validate()?;
     *settings = changed;
-    VERSION.fetch_add(1, Ordering::Relaxed);
     Ok(())
 }
 
