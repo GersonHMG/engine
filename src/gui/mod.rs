@@ -48,7 +48,6 @@ use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
 use panels::pipeline::{self, Link, Stage, Status};
 use panels::sim_params::SimParamsPanel;
-use panels::evaluation::EvaluationPanel;
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -66,7 +65,6 @@ pub struct EngineApp {
     control_panel: ControlPanel,
     charts_panel: ChartsPanel,
     sim_params_panel: SimParamsPanel,
-    evaluation_panel: EvaluationPanel,
 
     // Data
     field_data: FieldData,
@@ -149,7 +147,6 @@ impl EngineApp {
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
             sim_params_panel: SimParamsPanel::default(),
-            evaluation_panel: EvaluationPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -195,7 +192,6 @@ impl EngineApp {
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
-                SidebarPanel::Evaluation => "Evaluation".to_string(),
                 SidebarPanel::LuaConsole => "Lua Console".to_string(),
             }
         } else {
@@ -220,7 +216,6 @@ impl EngineApp {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
             SidebarPanel::SimParams => iced::Size::new(700.0, 470.0),
-            SidebarPanel::Evaluation => iced::Size::new(720.0, 760.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -676,10 +671,6 @@ impl EngineApp {
                 }
             }
 
-            Message::Evaluation(msg) => {
-                self.evaluation_panel.update(msg);
-            }
-
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -809,7 +800,6 @@ impl EngineApp {
                     }
                 }
 
-                self.evaluation_panel.tick();
                 if let Ok(mut rx) = self.sim_config_rx.try_lock() {
                     while let Ok(config) = rx.try_recv() {
                         self.sim_params_panel.set_config(config);
@@ -1212,7 +1202,6 @@ impl EngineApp {
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
-            SidebarPanel::Evaluation => self.evaluation_panel.view().map(Message::Evaluation),
             SidebarPanel::LuaConsole => self.lua_console_panel.view(Message::LuaConsoleResizeStart, Message::ConsoleInputChanged, Message::ConsoleSubmit, Message::ConsoleClear),
         };
 

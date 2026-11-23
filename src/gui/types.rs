@@ -130,7 +130,6 @@ pub enum Message {
     Control(ControlMessage),
     Charts(ChartsMessage),
     SimParams(SimParamsMessage),
-    Evaluation(super::panels::evaluation::EvaluationMessage),
 
     // Events
     Tick,
