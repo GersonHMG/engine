@@ -131,7 +131,6 @@ pub enum Message {
     Charts(ChartsMessage),
     SimParams(SimParamsMessage),
     Evaluation(super::panels::evaluation::EvaluationMessage),
-    RobotEditor(super::panels::robot_editor::EditorMessage),
 
     // Events
     Tick,

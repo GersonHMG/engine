@@ -107,7 +107,6 @@ pub enum Icon {
     Stop,
     Terminal,
     Flask,
-    Chassis,
 }
 
 /// An icon, `size` px square. Stroked icons take the text color of their
@@ -130,7 +129,6 @@ pub fn icon<'a>(icon: Icon, size: f32, tint: Option<Color>) -> svg::Svg<'a> {
             include_bytes!("../../icons/ui/stop.svg"),
             include_bytes!("../../icons/ui/terminal.svg"),
             include_bytes!("../../icons/ui/flask.svg"),
-            include_bytes!("../../icons/ui/chassis.svg"),
         ]
         .into_iter()
         .map(svg::Handle::from_memory)
