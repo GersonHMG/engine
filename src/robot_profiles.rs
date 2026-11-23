@@ -3,7 +3,7 @@
 // A robot profile is the simulator's `[robot]` parameters (speed, grip, kicker,
 // body), kept as a TOML file in `robots/` under the working directory (the
 // repository root with `cargo run`). `sim robot load <name>` makes every
-// simulated robot use one; the Robot editor panel edits and saves them.
+// simulated robot use one; `sim robot save <name>` saves the running one.
 
 use ssl_sim::{RobotConfig, SimConfig};
 use std::fs;
@@ -13,18 +13,13 @@ pub const DIR: &str = "robots";
 
 const HEADER: &str = "\
 # Robot profile for the engine's simulator: the [robot] parameters of
-# simulator.toml. Load it with `sim robot load <name>` in the Lua console or
-# from the Robot editor panel. Missing values use the defaults.
+# simulator.toml. Load it with `sim robot load <name>` in the Lua console.
+# Missing values use the defaults.
 ";
 
 /// Why `robot` cannot run in the simulator, if it cannot.
 pub fn check(robot: &RobotConfig) -> Result<(), String> {
     SimConfig { robot: robot.clone(), ..SimConfig::default() }.validate()
-}
-
-/// A parameter's value, looked up by name.
-pub fn value(robot: &RobotConfig, name: &str) -> Option<f64> {
-    serde_json::to_value(robot).ok()?.get(name)?.as_f64()
 }
 
 /// Writes `robots/<name>.toml`, with `note` as comment lines under the
@@ -43,12 +38,6 @@ pub fn load(name: &str) -> Result<RobotConfig, String> {
     let robot = from_text(&text).map_err(|e| format!("invalid {}: {e}", path.display()))?;
     check(&robot).map_err(|e| format!("invalid {}: {e}", path.display()))?;
     Ok(robot)
-}
-
-/// Removes `robots/<name>.toml`.
-pub fn delete(name: &str) -> Result<(), String> {
-    let path = path_for(name)?;
-    fs::remove_file(&path).map_err(|e| format!("cannot delete {}: {e}", path.display()))
 }
 
 /// Names of the saved profiles, sorted.
