@@ -68,6 +68,7 @@ impl SimLink {
     /// Places the robots and the ball of `scenario`, at rest; robots that
     /// are not in it are removed. `reset` then returns to this setup.
     pub(super) fn load_scenario(&mut self, scenario: &Scenario, world: &mut World) {
+        self.clear_in_flight();
         let wanted: Vec<RobotId> = scenario.robots.iter().map(|r| RobotId::new(r.team, r.id)).collect();
         let unwanted: Vec<RobotId> = self
             .sim

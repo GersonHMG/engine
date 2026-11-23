@@ -1,0 +1,45 @@
+# Robot profile for the engine's simulator: the [robot] parameters of
+# simulator.toml. Load it with `sim robot load <name>` in the Lua console or
+# from the Robot editor panel. Missing values use the defaults.
+
+radius = 0.09
+front_distance = 0.073
+max_speed = 3.5
+max_accel = 6.0
+grip_accel = 8.0
+slide_grip = 1.0
+slip_spin = 0.0
+wheel_distance = 0.08
+wheel_radius = 0.027
+mass = 2.5
+max_omega = 10.0
+max_alpha = 40.0
+max_kick_speed = 6.5
+kick_x_speed = 3.0
+kick_reach = 0.01
+body_restitution = 0.5
+front_restitution = 0.2
+
+[[wheels]]
+angle = 1.0471975511965976
+max_speed = 0.0
+torque = 0.03
+grip = 1.0
+
+[[wheels]]
+angle = 2.356194490192345
+max_speed = 0.0
+torque = 0.03
+grip = 1.0
+
+[[wheels]]
+angle = -2.356194490192345
+max_speed = 0.0
+torque = 0.03
+grip = 1.0
+
+[[wheels]]
+angle = -1.0471975511965976
+max_speed = 0.0
+torque = 0.03
+grip = 1.0

@@ -5,6 +5,7 @@ pub mod sidebar;
 pub mod toolbar;
 pub mod bottom_panel;
 pub mod panels;
+pub mod plot;
 pub mod lua_console;
 pub mod recorder;
 pub mod replay;
@@ -214,7 +215,7 @@ impl EngineApp {
         let size = match panel {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
-            SidebarPanel::SimParams => iced::Size::new(400.0, 660.0),
+            SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -699,7 +700,10 @@ impl EngineApp {
                 }
 
                 let elapsed = self.last_vision_time.elapsed();
-                self.field_data.vision_connected = elapsed.as_millis() < 1000;
+                // The built-in simulator runs inside the engine, so it is never
+                // "disconnected": a slow tick (e.g. a script's first process()
+                // after a reload) only pauses the frames.
+                self.field_data.vision_connected = self.toolbar.simulator.enabled || elapsed.as_millis() < 1000;
                 if !self.field_data.vision_connected {
                     self.vision_panel.connected = false;
                     self.vision_panel.pps = 0;
@@ -1315,15 +1319,15 @@ impl EngineApp {
         vy *= self.control_panel.scale_vy_parsed();
         omega *= self.control_panel.scale_w_parsed();
 
-        if vx.abs() >= 0.05 || vy.abs() >= 0.05 || omega.abs() >= 0.05 {
-            let _ = self.command_tx.try_send(EngineCommand::SendRobotCommand {
-                id: self.control_panel.robot_id_parsed(),
-                team: self.control_panel.team.to_id(),
-                vx,
-                vy,
-                omega,
-            });
-        }
+        // Sent every frame, zero included: while manual control is on, the robot
+        // follows the keys (and stands still without them), not the script.
+        let _ = self.command_tx.try_send(EngineCommand::SendRobotCommand {
+            id: self.control_panel.robot_id_parsed(),
+            team: self.control_panel.team.to_id(),
+            vx,
+            vy,
+            omega,
+        });
     }
 
 }

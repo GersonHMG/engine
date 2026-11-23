@@ -18,6 +18,7 @@ mod config;
 mod headless;
 mod mcp;
 mod perf;
+mod robot_profiles;
 
 use std::sync::{Arc, RwLock, Mutex};
 use std::time::{Duration, Instant};
@@ -143,6 +144,10 @@ fn frame_duration(simulator: SimulatorSettings, sim_paused: bool) -> Option<Dura
 /// One engine tick (~60 FPS). With the simulator this is also the
 /// simulated time each tick advances.
 const TICK: Duration = Duration::from_micros(16_667);
+
+/// How long a manual-control command keeps overriding the script after the
+/// GUI's last one (the GUI sends one every frame while manual control is on).
+const MANUAL_HOLD: Duration = Duration::from_millis(200);
 
 /// Vision frame rate reported to the GUI in simulator mode (one frame per tick).
 const SIM_FRAME_RATE: u32 = 60;
@@ -422,6 +427,9 @@ async fn run_engine(
     info!("Engine started. Simulator: {}.", if simulator.enabled { "on" } else { "off" });
 
     let mut loop_stats = perf::LoopStats::default();
+    // Manual control's latest command per robot and when it came: it wins over
+    // the script's command for that robot while it keeps coming.
+    let mut manual: std::collections::HashMap<(i32, i32), (MotionCommand, Instant)> = std::collections::HashMap::new();
     let mut last_perf: Option<perf::PerfStats> = None;
 
     loop {
@@ -537,7 +545,8 @@ async fn run_engine(
                 EngineCommand::SendRobotCommand { id, team, vx, vy, omega } => {
                     let mut r = radio.lock().unwrap();
                     let cmd = MotionCommand { id, team, vx: Some(vx), vy: Some(vy), angular: Some(omega) };
-                    r.add_motion_command(cmd);
+                    r.add_motion_command(cmd.clone());
+                    manual.insert((id, team), (cmd, Instant::now()));
                 }
                 EngineCommand::SendKickCommand { id, team } => {
                     let mut r = radio.lock().unwrap();
@@ -597,6 +606,7 @@ async fn run_engine(
                     for out in std::iter::once(format!("> {line}  (agent)")).chain(output.iter().cloned()) {
                         let _ = console_tx.try_send(out);
                     }
+                    send_sim_config(&radio, &sim_config_gui_tx);
                     let _ = reply.send(output);
                 }
                 mcp::Request::Log { since, reply } => {
@@ -639,6 +649,15 @@ async fn run_engine(
         // situation can be inspected (and robots or the ball moved) and the
         // script resumed from exactly there.
         let sim_paused = script_state == ScriptExecState::Paused;
+
+        // Manual control overrides the script (running or paused) for its robot.
+        manual.retain(|_, (_, at)| at.elapsed() < MANUAL_HOLD);
+        if !manual.is_empty() {
+            let mut r = radio.lock().unwrap();
+            for (cmd, _) in manual.values() {
+                r.add_motion_command(cmd.clone());
+            }
+        }
 
         // Prepare radio frame
         {

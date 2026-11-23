@@ -22,9 +22,9 @@ pub(super) fn register_api_functions(
 ) {
     draw_gui::register_draw_gui_functions(lua, draw_commands);
     state::register_robot_state_functions(lua, Arc::clone(&world), game_state);
-    control::register_control_functions(lua, Arc::clone(&radio), world);
+    control::register_control_functions(lua, Arc::clone(&radio), Arc::clone(&world));
     if let Some(control) = run_control {
-        sim::register_sim_functions(lua, Arc::clone(&radio), control);
+        sim::register_sim_functions(lua, Arc::clone(&radio), world, control);
     }
     grsim::register_grsim_functions(lua, radio);
     register_perf_functions(lua);

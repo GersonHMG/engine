@@ -35,6 +35,11 @@ impl RunControl {
     pub fn outcome(&self) -> Option<bool> {
         *self.outcome.lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    /// The outcome, cleared (GUI: a finished script can be run again).
+    fn take(&self) -> Option<bool> {
+        self.outcome.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
 }
 
 pub struct LuaInterface {
@@ -46,6 +51,9 @@ pub struct LuaInterface {
     log_tx: Option<mpsc::Sender<String>>,
     /// Set for headless runs: registers the `sim` table.
     run_control: Option<Arc<RunControl>>,
+    /// The run control is this interface's own (GUI), not a headless run's:
+    /// `sim.finish` then pauses the script instead of ending the run.
+    own_run_control: bool,
     have_script: bool,
     is_paused: bool,
     has_failed: bool,
@@ -67,7 +75,10 @@ impl LuaInterface {
             game_state,
             draw_commands: Arc::new(Mutex::new(Vec::new())),
             log_tx,
-            run_control: None,
+            // The GUI engine gives scripts the `sim` table too (it works
+            // while SIM is on); a headless run replaces this control.
+            run_control: Some(Arc::new(RunControl::default())),
+            own_run_control: true,
             have_script: false,
             is_paused: false,
             has_failed: false,
@@ -81,6 +92,7 @@ impl LuaInterface {
     /// runs. Takes effect from the next `run_script`.
     pub fn set_run_control(&mut self, control: Arc<RunControl>) {
         self.run_control = Some(control);
+        self.own_run_control = false;
     }
 
     fn register_functions(&mut self) {
@@ -139,6 +151,10 @@ impl LuaInterface {
         self.is_paused = true;
         self.has_failed = false;
 
+        if self.own_run_control {
+            self.run_control = Some(Arc::new(RunControl::default()));
+        }
+
         // Reinitialize Lua state
         self.lua = Lua::new();
         self.register_functions();
@@ -178,7 +194,18 @@ impl LuaInterface {
             let globals = self.lua.globals();
             match globals.get::<LuaFunction>("process") {
                 Ok(process) => match process.call::<()>(()) {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        // In the GUI, `sim.finish(ok)` pauses the script.
+                        let finished = if self.own_run_control {
+                            self.run_control.as_ref().and_then(|c| c.take())
+                        } else {
+                            None
+                        };
+                        if let Some(ok) = finished {
+                            self.is_paused = true;
+                            self.log_info(format!("Script finished ({}), paused.", if ok { "ok" } else { "failed" }));
+                        }
+                    }
                     Err(e) => {
                         self.log_error(format!("Runtime error in process(): {e}"));
                         self.is_paused = true;

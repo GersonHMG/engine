@@ -15,9 +15,14 @@ const HELP: &[&str] = &[
     "sim remove <blue|yellow> <id>           remove a robot",
     "sim reset                               robots and ball back to where they were last placed",
     "sim config                              all simulator parameters",
-    "sim robot [<parameter> <value>]         show or change the robot profile",
+    "sim robot [<parameter> <value>]         show or change the robot profile (wheels: wheels.<0-3>.<angle|max_speed|torque|grip>)",
+    "sim robot set <p> <v> [<p> <v> ...]     change several robot parameters at once, checked together",
+    "sim robot save|load <name>              keep the robot profile in robots/<name>.toml, or use a saved one",
+    "sim robot list                          saved robot profiles",
     "sim ball [<parameter> <value>]          show or change the ball profile",
-    "sim save                                keep the robot and ball profiles in simulator.toml",
+    "sim vision [<parameter> <value>]        show or change vision noise and delay (position_noise m, angle_noise rad, delay s)",
+    "sim radio [<parameter> <value>]         show or change the command delay (delay s)",
+    "sim save                                keep all these parameters in simulator.toml",
     "sim scenario save <name>                save where every robot and the ball are",
     "sim scenario load <name>                put robots and ball back as saved",
     "sim scenario list                       saved scenarios",
@@ -28,7 +33,10 @@ pub fn execute(line: &str, simulator: Option<&mut SimLink>, world: &mut World) -
     let words: Vec<&str> = line.split_whitespace().collect();
     let result = match words.as_slice() {
         [] => Ok(Vec::new()),
-        ["sim"] | ["sim", "help"] | ["help"] => Ok(HELP.iter().map(|s| s.to_string()).collect()),
+        ["sim"] | ["sim", "help"] | ["help"] => {
+            Ok(HELP.iter().chain(crate::motion::settings::HELP).map(|s| s.to_string()).collect())
+        }
+        ["motion", args @ ..] => crate::motion::settings::console(args),
         ["sim", args @ ..] => match simulator {
             Some(simulator) => run(simulator, world, args),
             None => Err("the simulator is off: click SIM in the toolbar".to_string()),
@@ -77,9 +85,46 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
             lines.extend(profile_lines(&config.robot));
             lines.push("ball:".to_string());
             lines.extend(profile_lines(&config.ball));
+            lines.push("vision:".to_string());
+            lines.extend(profile_lines(&config.vision));
+            lines.push("radio:".to_string());
+            lines.extend(profile_lines(&config.radio));
             Ok(lines)
         }
-        ["robot"] => Ok(profile_lines(&simulator.sim.config().robot)),
+        ["robot"] => Ok(flat_lines(&simulator.sim.config().robot)),
+        ["robot", "set", pairs @ ..] => {
+            if pairs.is_empty() || pairs.len() % 2 != 0 {
+                return Err("usage: sim robot set <parameter> <value> [<parameter> <value> ...]".to_string());
+            }
+            let mut config = simulator.sim.config().clone();
+            let mut robot = config.robot.clone();
+            for pair in pairs.chunks(2) {
+                robot = with_value(&robot, pair[0], parse_number(pair[1], pair[0])?)?;
+            }
+            config.robot = robot;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("robot: {} parameter{} set", pairs.len() / 2, if pairs.len() == 2 { "" } else { "s" })])
+        }
+        ["robot", "list"] => {
+            let names = crate::robot_profiles::list();
+            if names.is_empty() {
+                Ok(vec!["no saved robot profiles, create one with `sim robot save <name>`".to_string()])
+            } else {
+                Ok(names)
+            }
+        }
+        ["robot", "save", name] => {
+            let path = crate::robot_profiles::save(name, &simulator.sim.config().robot, "")?;
+            Ok(vec![format!("saved the robot profile to {}", path.display())])
+        }
+        ["robot", "load", name] => {
+            let mut config = simulator.sim.config().clone();
+            config.robot = crate::robot_profiles::load(name)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("every robot now uses the `{name}` profile")])
+        }
         ["robot", name, value] => {
             let mut config = simulator.sim.config().clone();
             config.robot = with_value(&config.robot, name, parse_number(value, name)?)?;
@@ -94,6 +139,22 @@ fn run(simulator: &mut SimLink, world: &mut World, args: &[&str]) -> Result<Vec<
             config.validate()?;
             simulator.sim.set_config(config);
             Ok(vec![format!("ball {name} = {value}")])
+        }
+        ["vision"] => Ok(profile_lines(&simulator.sim.config().vision)),
+        ["vision", name, value] => {
+            let mut config = simulator.sim.config().clone();
+            config.vision = with_value(&config.vision, name, parse_number(value, name)?)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("vision {name} = {value}")])
+        }
+        ["radio"] => Ok(profile_lines(&simulator.sim.config().radio)),
+        ["radio", name, value] => {
+            let mut config = simulator.sim.config().clone();
+            config.radio = with_value(&config.radio, name, parse_number(value, name)?)?;
+            config.validate()?;
+            simulator.sim.set_config(config);
+            Ok(vec![format!("radio {name} = {value}")])
         }
         ["save"] => {
             let path = crate::config::save_simulator_config(simulator.sim.config())?;
@@ -157,18 +218,70 @@ fn profile_lines<T: Serialize>(profile: &T) -> Vec<String> {
     }
 }
 
-/// A copy of `profile` with parameter `name` set to `value`.
+/// `name = value` for every number in a profile; nested ones (the wheels)
+/// as dotted paths, e.g. `wheels.0.angle`.
+fn flat_lines<T: Serialize>(profile: &T) -> Vec<String> {
+    fn walk(prefix: &str, value: &serde_json::Value, out: &mut Vec<String>) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                for (name, v) in fields {
+                    walk(&join(prefix, name), v, out);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for (i, v) in items.iter().enumerate() {
+                    walk(&join(prefix, &i.to_string()), v, out);
+                }
+            }
+            other => out.push(format!("  {prefix} = {other}")),
+        }
+    }
+    fn join(prefix: &str, name: &str) -> String {
+        if prefix.is_empty() { name.to_string() } else { format!("{prefix}.{name}") }
+    }
+    let mut out = Vec::new();
+    match serde_json::to_value(profile) {
+        Ok(value) => walk("", &value, &mut out),
+        Err(_) => out.push("  (unavailable)".to_string()),
+    }
+    out
+}
+
+/// A copy of `profile` with parameter `name` set to `value`. `name` may be a
+/// dotted path into nested tables and lists (`wheels.2.torque`). Only wheel
+/// angles may be negative.
 fn with_value<T: Serialize + DeserializeOwned>(profile: &T, name: &str, value: f64) -> Result<T, String> {
-    if !(value.is_finite() && value >= 0.0) {
+    let signed = name.ends_with(".angle");
+    if !(value.is_finite() && (signed || value >= 0.0)) {
         return Err(format!("{name} must be a number >= 0"));
     }
     let mut json = serde_json::to_value(profile).map_err(|e| e.to_string())?;
-    let fields = json.as_object_mut().ok_or("profile is not a table")?;
-    if !fields.contains_key(name) {
-        let names: Vec<&str> = fields.keys().map(String::as_str).collect();
-        return Err(format!("unknown parameter `{name}`, one of: {}", names.join(", ")));
+    let mut slot = &mut json;
+    for (depth, key) in name.split('.').enumerate() {
+        let next = match slot {
+            serde_json::Value::Object(fields) => {
+                if !fields.contains_key(key) {
+                    let names: Vec<&str> = fields.keys().map(String::as_str).collect();
+                    let what = if depth == 0 { format!("parameter `{key}`") } else { format!("part `{key}` of `{name}`") };
+                    return Err(format!("unknown {what}, one of: {}", names.join(", ")));
+                }
+                fields.get_mut(key)
+            }
+            serde_json::Value::Array(items) => {
+                let len = items.len();
+                match key.parse::<usize>().ok().filter(|i| *i < len) {
+                    Some(i) => items.get_mut(i),
+                    None => return Err(format!("`{name}`: index must be 0–{}", len.saturating_sub(1))),
+                }
+            }
+            _ => return Err(format!("`{name}` goes past a number")),
+        };
+        slot = next.ok_or(format!("unknown parameter `{name}`"))?;
     }
-    fields.insert(name.to_string(), serde_json::json!(value));
+    if !slot.is_number() {
+        return Err(format!("`{name}` is a group, name one of its numbers"));
+    }
+    *slot = serde_json::json!(value);
     serde_json::from_value(json).map_err(|e| e.to_string())
 }
 
@@ -228,7 +341,9 @@ mod tests {
     fn needs_the_simulator_on() {
         let mut world = World::new(0, 0, 9.0, 6.0);
         assert_eq!(execute("sim status", None, &mut world), ["error: the simulator is off: click SIM in the toolbar"]);
-        assert_eq!(execute("sim help", None, &mut world).len(), HELP.len());
+        assert_eq!(execute("sim help", None, &mut world).len(), HELP.len() + crate::motion::settings::HELP.len());
+        // `motion` works without the simulator.
+        assert!(execute("motion", None, &mut world)[0].starts_with("all robots"));
     }
 
     #[test]
@@ -254,6 +369,20 @@ mod tests {
         assert_eq!(sim.sim.config().robot.max_speed, 2.0);
         assert_eq!(run_line(&mut sim, &mut world, "sim ball roll_decel 0.5"), ["ball roll_decel = 0.5"]);
         assert_eq!(sim.sim.config().ball.roll_decel, 0.5);
+
+        assert_eq!(run_line(&mut sim, &mut world, "sim robot wheels.2.torque 0.05"), ["robot wheels.2.torque = 0.05"]);
+        assert_eq!(sim.sim.config().robot.wheels[2].torque, 0.05);
+        assert_eq!(run_line(&mut sim, &mut world, "sim robot wheels.0.angle -0.5"), ["robot wheels.0.angle = -0.5"]);
+        assert!(run_line(&mut sim, &mut world, "sim robot wheels.7.grip 1")[0].starts_with("error"));
+
+        // Checked together: shrinking the body and its front face at once.
+        assert_eq!(
+            run_line(&mut sim, &mut world, "sim robot set radius 0.07 front_distance 0.06 wheel_distance 0.06"),
+            ["robot: 3 parameters set"]
+        );
+        assert_eq!((sim.sim.config().robot.radius, sim.sim.config().robot.front_distance), (0.07, 0.06));
+        assert!(run_line(&mut sim, &mut world, "sim robot set radius 0.05")[0].starts_with("error"));
+        assert_eq!(sim.sim.config().robot.radius, 0.07, "a rejected set changes nothing");
 
         let unknown = run_line(&mut sim, &mut world, "sim robot speed 2");
         assert!(unknown[0].starts_with("error: unknown parameter `speed`, one of:"), "{unknown:?}");
