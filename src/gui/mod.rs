@@ -215,7 +215,7 @@ impl EngineApp {
         let size = match panel {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
-            SidebarPanel::SimParams => iced::Size::new(700.0, 470.0),
+            SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
