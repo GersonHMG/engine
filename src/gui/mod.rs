@@ -48,7 +48,6 @@ use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
 use panels::pipeline::{self, Link, Stage, Status};
 use panels::sim_params::SimParamsPanel;
-use panels::robot_settings::RobotSettingsPanel;
 use panels::evaluation::EvaluationPanel;
 use panels::robot_editor::RobotEditorPanel;
 
@@ -68,7 +67,6 @@ pub struct EngineApp {
     control_panel: ControlPanel,
     charts_panel: ChartsPanel,
     sim_params_panel: SimParamsPanel,
-    robot_settings_panel: RobotSettingsPanel,
     evaluation_panel: EvaluationPanel,
     robot_editor_panel: RobotEditorPanel,
 
@@ -153,7 +151,6 @@ impl EngineApp {
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
             sim_params_panel: SimParamsPanel::default(),
-            robot_settings_panel: RobotSettingsPanel::default(),
             evaluation_panel: EvaluationPanel::default(),
             robot_editor_panel: RobotEditorPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
@@ -198,7 +195,6 @@ impl EngineApp {
             match panel {
                 SidebarPanel::Pipeline => "Data Pipeline".to_string(),
                 SidebarPanel::SimParams => "Simulator Parameters".to_string(),
-                SidebarPanel::RobotSettings => "Robot Settings".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
@@ -228,7 +224,6 @@ impl EngineApp {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
             SidebarPanel::SimParams => iced::Size::new(700.0, 470.0),
-            SidebarPanel::RobotSettings => iced::Size::new(440.0, 480.0),
             SidebarPanel::Evaluation => iced::Size::new(720.0, 760.0),
             SidebarPanel::RobotEditor => iced::Size::new(900.0, 900.0),
             _ => iced::Size::new(300.0, 420.0),
@@ -696,12 +691,6 @@ impl EngineApp {
                 }
             }
 
-            Message::RobotSettings(msg) => {
-                for line in self.robot_settings_panel.update(msg) {
-                    let _ = self.command_tx.try_send(EngineCommand::ConsoleCommand(line));
-                }
-            }
-
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -832,12 +821,6 @@ impl EngineApp {
                 }
 
                 self.evaluation_panel.tick();
-                self.robot_settings_panel.refresh();
-                self.robot_settings_panel.set_visible(
-                    self.field_data.robots_blue.iter().map(|r| (0, r.id as i32))
-                        .chain(self.field_data.robots_yellow.iter().map(|r| (1, r.id as i32))),
-                );
-
                 if let Ok(mut rx) = self.sim_config_rx.try_lock() {
                     while let Ok(config) = rx.try_recv() {
                         self.robot_editor_panel.set_config(config.clone());
@@ -1238,7 +1221,6 @@ impl EngineApp {
         let content: Element<'_, Message> = match panel {
             SidebarPanel::Pipeline => return self.view_pipeline(),
             SidebarPanel::SimParams => self.sim_params_panel.view().map(Message::SimParams),
-            SidebarPanel::RobotSettings => self.robot_settings_panel.view().map(Message::RobotSettings),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),
