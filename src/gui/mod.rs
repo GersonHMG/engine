@@ -29,6 +29,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::config::FieldConfig;
+use crate::lua_interface::{ClickButton, UiEvent};
 use crate::sender::simulator::scenario;
 
 use field_canvas::{FieldCanvas, FieldData, FieldMessage, LuaDrawCommand, RobotData};
@@ -458,6 +459,10 @@ impl EngineApp {
             Message::Field(FieldMessage::RobotClicked { id, team }) => {
                 self.field_data.selected_robot = Some((id, team));
             }
+            Message::Field(FieldMessage::ScriptClicked { field: (x, y), right }) => {
+                let button = if right { ClickButton::Right } else { ClickButton::Left };
+                let _ = self.command_tx.try_send(EngineCommand::ScriptUi(UiEvent::Click { x, y, button }));
+            }
             Message::TeleportMenu(choice) => {
                 let Some(menu) = self.teleport_menu.take() else {
                     return iced::Task::none();
@@ -824,6 +829,7 @@ impl EngineApp {
                     while let Ok(view) = rx.try_recv() {
                         self.script_ui_panel.set_view(view);
                     }
+                    self.field_data.script_clicks = self.script_ui_panel.on_click();
                 }
 
                 // Drain Lua script status channel

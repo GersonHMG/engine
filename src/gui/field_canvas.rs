@@ -1,5 +1,6 @@
 // gui/field_canvas.rs — Canvas widget for the RoboCup SSL field
 
+use iced::keyboard;
 use iced::mouse;
 use iced::widget::canvas::{self, Cache, Canvas, Frame, Geometry, Path, Stroke, Text};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
@@ -31,6 +32,8 @@ pub struct FieldData {
     pub highlight_robot: Option<(u32, i32)>,
     /// Robot selected by clicking it, also highlighted: (robot_id, team)
     pub selected_robot: Option<(u32, i32)>,
+    /// The script listens to field clicks: Ctrl+click goes to it.
+    pub script_clicks: bool,
 }
 
 impl Default for FieldData {
@@ -50,6 +53,7 @@ impl Default for FieldData {
             path_draw_mode: false,
             highlight_robot: None,
             selected_robot: None,
+            script_clicks: false,
         }
     }
 }
@@ -107,6 +111,9 @@ pub enum FieldMessage {
     RightClicked { screen: Point, field: (f64, f64) },
     /// Left click on a robot (team 0 = blue, 1 = yellow).
     RobotClicked { id: u32, team: i32 },
+    /// Ctrl+click while the script listens to the field: where (m), and
+    /// whether it was the right button.
+    ScriptClicked { field: (f64, f64), right: bool },
 }
 
 /// How close to a robot's center a click selects it, m.
@@ -254,22 +261,38 @@ impl<'a, M> FieldProgram<'a, M> {
 }
 
 impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
-    type State = ();
+    /// The keyboard modifiers held, for Ctrl+click.
+    type State = keyboard::Modifiers;
 
+    /// Ctrl+click while the script listens: publish it for the script.
     /// Right click: publish where it happened. Left click on a robot:
     /// publish which one, without capturing, so dragging still pans.
     fn update(
         &self,
-        _state: &mut Self::State,
+        modifiers: &mut Self::State,
         event: &canvas::Event,
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<M>> {
+        if let canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(held)) = event {
+            *modifiers = *held;
+            return None;
+        }
         let canvas::Event::Mouse(mouse::Event::ButtonPressed(button)) = event else {
             return None;
         };
         let screen = cursor.position_in(bounds)?;
         let field = screen_to_field(self.pan, self.scale, bounds, screen);
+
+        if self.data.script_clicks && modifiers.control() {
+            let right = match button {
+                mouse::Button::Left => false,
+                mouse::Button::Right => true,
+                _ => return None,
+            };
+            let message = (self.on_message)(FieldMessage::ScriptClicked { field, right });
+            return Some(canvas::Action::publish(message).and_capture());
+        }
 
         match button {
             mouse::Button::Right => {
@@ -281,6 +304,15 @@ impl<'a, M> canvas::Program<M> for FieldProgram<'a, M> {
                 Some(canvas::Action::publish((self.on_message)(FieldMessage::RobotClicked { id, team })))
             }
             _ => None,
+        }
+    }
+
+    /// A crosshair while a Ctrl+click would go to the script.
+    fn mouse_interaction(&self, modifiers: &Self::State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {
+        if self.data.script_clicks && modifiers.control() && cursor.is_over(bounds) {
+            mouse::Interaction::Crosshair
+        } else {
+            mouse::Interaction::default()
         }
     }
 
