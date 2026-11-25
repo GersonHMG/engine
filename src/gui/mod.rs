@@ -95,6 +95,9 @@ pub struct EngineApp {
     // Mouse state
     last_cursor_position: Option<iced::Point>,
 
+    /// Which pipeline stages (vision, kalman, radio) show their settings.
+    pipeline_open: [bool; 3],
+
     // Window management
     main_window_id: window::Id,
     panel_windows: HashMap<SidebarPanel, window::Id>,
@@ -170,6 +173,7 @@ impl EngineApp {
             kick_key_was_down: false,
             last_cursor_position: None,
             main_window_id: main_id,
+            pipeline_open: [false; 3],
             panel_windows: HashMap::new(),
             window_to_panel: HashMap::new(),
             lua_console_panel: LuaConsolePanel::new(),
@@ -220,7 +224,7 @@ impl EngineApp {
 
         let size = match panel {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
-            SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
+            SidebarPanel::Pipeline => iced::Size::new(380.0, 300.0),
             SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
             _ => iced::Size::new(300.0, 420.0),
         };
@@ -604,6 +608,12 @@ impl EngineApp {
                         ip: self.vision_panel.ip.clone(),
                         port,
                     });
+                }
+            }
+
+            Message::PipelineToggle(stage) => {
+                if let Some(open) = self.pipeline_open.get_mut(stage) {
+                    *open = !*open;
                 }
             }
 
@@ -1314,7 +1324,7 @@ impl EngineApp {
             Link { label: "detections", live: receiving, color: flow },
             Link { label: "world → AI", live: script_running && receiving, color: flow },
         ];
-        pipeline::diagram(stages, links)
+        pipeline::diagram(stages, links, self.pipeline_open, Message::PipelineToggle)
     }
 
     /// Robots on the field of one team (0 = blue, 1 = yellow).

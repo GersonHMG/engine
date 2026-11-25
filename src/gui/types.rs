@@ -137,6 +137,8 @@ pub enum Message {
     Control(ControlMessage),
     Charts(ChartsMessage),
     SimParams(SimParamsMessage),
+    /// A stage row of the pipeline window was clicked: show or hide its settings.
+    PipelineToggle(usize),
     ScriptUi(ScriptUiMessage),
 
     // Events
