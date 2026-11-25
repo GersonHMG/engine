@@ -1,7 +1,7 @@
 -- ui_demo.lua — Script controls: parameters, buttons and field clicks.
 --
--- Load it, open "Script controls" in the sidebar, set the parameters and
--- press Run. Ctrl+click the field to send the robot there (Ctrl+right click
+-- Load it, set the parameters in the Script controls box under the script
+-- buttons and press Run. Ctrl+click the field to send the robot there (Ctrl+right click
 -- to make it face that point instead); the buttons act while it runs or
 -- while it is paused.
 

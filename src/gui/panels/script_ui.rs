@@ -1,11 +1,12 @@
 // gui/panels/script_ui.rs — The controls the loaded script declares
 //
 // Sliders, numbers, toggles, choices and buttons from the script's `ui`
-// table (see lua_interface/ui.rs). Every change goes to the engine at once,
-// so a running script reads it on its next tick; a loaded script that has
-// not been started yet starts with them.
+// table (see lua_interface/ui.rs), in a collapsible box on the field just
+// below the toolbar's script buttons. Every change goes to the engine at
+// once, so a running script reads it on its next tick; a loaded script that
+// has not been started yet starts with them.
 
-use iced::widget::{button, checkbox, column, container, pick_list, row, slider, text, text_input, Space};
+use iced::widget::{button, checkbox, column, container, mouse_area, pick_list, row, scrollable, slider, text, text_input, Space};
 use iced::{alignment, Alignment, Element, Length};
 use std::collections::HashMap;
 
@@ -22,13 +23,24 @@ pub enum ScriptUiMessage {
     Toggle(String, bool),
     Choose(String, String),
     Press(String),
+    /// The header was clicked: show or hide the controls.
+    ToggleCollapsed,
+    /// A click on the box's background: kept from reaching the field.
+    Absorb,
 }
+
+/// Width of the box on the field, px.
+const BOX_WIDTH: f32 = 330.0;
+/// Height of the box before its controls scroll, px.
+const MAX_HEIGHT: f32 = 400.0;
 
 #[derive(Default)]
 pub struct ScriptUiPanel {
     view: ScriptUiView,
     /// Number fields being typed in, by control name.
     typed: HashMap<String, String>,
+    /// Only the header shows.
+    collapsed: bool,
 }
 
 impl ScriptUiPanel {
@@ -46,6 +58,11 @@ impl ScriptUiPanel {
     /// What to send to the engine, if anything.
     pub fn update(&mut self, message: ScriptUiMessage) -> Option<UiEvent> {
         let (name, value) = match message {
+            ScriptUiMessage::ToggleCollapsed => {
+                self.collapsed = !self.collapsed;
+                return None;
+            }
+            ScriptUiMessage::Absorb => return None,
             ScriptUiMessage::Press(name) => return Some(UiEvent::Press { name }),
             ScriptUiMessage::Type(name, typed) => {
                 self.typed.insert(name, typed);
@@ -76,16 +93,42 @@ impl ScriptUiPanel {
         self.view.widgets.iter().find(|w| w.name == name)
     }
 
-    pub fn view(&self) -> Element<'_, ScriptUiMessage> {
-        let mut rows = column![].spacing(6);
-
-        if self.view.widgets.is_empty() {
-            rows = rows.push(
-                text("The loaded script declares no controls. Scripts add them with ui.slider, ui.number, ui.toggle, ui.choice and ui.button (see lua/demo/ui_demo.lua).")
-                    .size(12)
-                    .color(theme::MUTED),
-            );
+    /// The collapsible box for the field, while the script has controls or
+    /// listens to clicks.
+    pub fn overlay(&self) -> Option<Element<'_, ScriptUiMessage>> {
+        if self.view.widgets.is_empty() && !self.view.on_click {
+            return None;
         }
+        let arrow = if self.collapsed { "▸" } else { "▾" };
+        let header = button(
+            row![
+                text(arrow).size(12).color(theme::MUTED),
+                text("SCRIPT CONTROLS").size(11).font(theme::MONO_BOLD).color(theme::TEXT_2),
+                Space::new().width(Length::Fill),
+                text(self.view.widgets.len()).size(11).font(theme::MONO).color(theme::MUTED),
+            ]
+            .spacing(6)
+            .align_y(Alignment::Center),
+        )
+        .width(Length::Fill)
+        .padding([5, 8])
+        .style(btn(Btn::Ghost))
+        .on_press(ScriptUiMessage::ToggleCollapsed);
+
+        let mut content = column![header];
+        if !self.collapsed {
+            content = content.push(scrollable(self.body()));
+        }
+        let boxed = container(content)
+            .width(Length::Fixed(BOX_WIDTH))
+            .max_height(MAX_HEIGHT)
+            .padding(2)
+            .style(theme::overlay_box);
+        Some(mouse_area(boxed).on_press(ScriptUiMessage::Absorb).into())
+    }
+
+    fn body(&self) -> Element<'_, ScriptUiMessage> {
+        let mut rows = column![].spacing(6);
 
         let params: Vec<&UiWidget> = self.view.widgets.iter().filter(|w| w.kind != UiKind::Button).collect();
         if !params.is_empty() {
@@ -93,7 +136,7 @@ impl ScriptUiPanel {
             for widget in params {
                 group = group.push(self.param_row(widget));
             }
-            rows = rows.push(container(group).padding([8, 10]).width(Length::Fill).style(theme::group));
+            rows = rows.push(container(group).padding([6, 8]).width(Length::Fill).style(theme::group));
         }
 
         let buttons: Vec<&UiWidget> = self.view.widgets.iter().filter(|w| w.kind == UiKind::Button).collect();
@@ -108,23 +151,23 @@ impl ScriptUiPanel {
                 );
             }
             let group = column![section_title("ACTIONS"), line.wrap()].spacing(6);
-            rows = rows.push(container(group).padding([8, 10]).width(Length::Fill).style(theme::group));
+            rows = rows.push(container(group).padding([6, 8]).width(Length::Fill).style(theme::group));
         }
 
         if self.view.on_click {
             rows = rows.push(
-                text("This script listens to the field: Ctrl+click (left or right) sends the point to it.")
+                text("Ctrl+click the field (left or right) to send the point to the script.")
                     .size(11)
                     .color(theme::ACCENT_FG),
             );
         }
 
-        rows.padding(10).into()
+        rows.padding(6).into()
     }
 
     fn param_row<'a>(&'a self, widget: &'a UiWidget) -> Element<'a, ScriptUiMessage> {
         let name = widget.name.clone();
-        let label = text(widget.name.as_str()).size(12).color(theme::TEXT_2).width(Length::Fixed(110.0));
+        let label = text(widget.name.as_str()).size(12).color(theme::TEXT_2).width(Length::Fixed(96.0));
 
         let control: Element<'a, ScriptUiMessage> = match (&widget.kind, &widget.value) {
             (UiKind::Slider { min, max, step }, UiValue::Number(v)) => row![
@@ -241,6 +284,16 @@ mod tests {
     fn presses_are_sent() {
         let mut panel = panel();
         assert_eq!(panel.update(ScriptUiMessage::Press("go".into())), Some(UiEvent::Press { name: "go".into() }));
+    }
+
+    #[test]
+    fn the_box_shows_only_with_controls_and_collapses() {
+        let mut panel = panel();
+        assert!(panel.overlay().is_some());
+        panel.update(ScriptUiMessage::ToggleCollapsed);
+        assert!(panel.collapsed);
+        panel.set_view(ScriptUiView::default());
+        assert!(panel.overlay().is_none());
     }
 
     #[test]

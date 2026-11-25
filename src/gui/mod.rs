@@ -195,7 +195,6 @@ impl EngineApp {
             match panel {
                 SidebarPanel::Pipeline => "Data Pipeline".to_string(),
                 SidebarPanel::SimParams => "Simulator Parameters".to_string(),
-                SidebarPanel::Script => "Script Controls".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
@@ -223,7 +222,6 @@ impl EngineApp {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
             SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
-            SidebarPanel::Script => iced::Size::new(420.0, 460.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -1071,17 +1069,23 @@ impl EngineApp {
             .field_canvas
             .view(&self.field_data, Message::Field);
 
-        // Mouse coords overlay, while the cursor is over the field
-        let mouse_overlay: Element<'_, Message> = match self.field_canvas.mouse_field_pos() {
-            Some((x, y)) => container(
-                container(text(format!("{x:.2}, {y:.2} m")).size(11).font(theme::MONO))
-                    .padding([3, 7])
-                    .style(theme::overlay_box),
-            )
-            .padding(8)
-            .into(),
-            None => iced::widget::Space::new().into(),
-        };
+        // Top left of the field, under the toolbar's script buttons: the
+        // script's controls (live view only), then the mouse coords while
+        // the cursor is over the field.
+        let script_box = if self.replay.enabled { None } else { self.script_ui_panel.overlay() };
+        let mouse_coords = self.field_canvas.mouse_field_pos().map(|(x, y)| {
+            container(text(format!("{x:.2}, {y:.2} m")).size(11).font(theme::MONO))
+                .padding([3, 7])
+                .style(theme::overlay_box)
+        });
+        let mouse_overlay: Element<'_, Message> = container(
+            column![]
+                .push(script_box.map(|b| b.map(Message::ScriptUi)))
+                .push(mouse_coords)
+                .spacing(6),
+        )
+        .padding(8)
+        .into();
 
         let field_stack: Element<'_, Message> = if self.replay.enabled {
             let can_control_replay = self.replay.has_frames();
@@ -1225,7 +1229,6 @@ impl EngineApp {
         let content: Element<'_, Message> = match panel {
             SidebarPanel::Pipeline => return self.view_pipeline(),
             SidebarPanel::SimParams => self.sim_params_panel.view().map(Message::SimParams),
-            SidebarPanel::Script => self.script_ui_panel.view().map(Message::ScriptUi),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),

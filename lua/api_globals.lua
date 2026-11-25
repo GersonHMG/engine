@@ -140,7 +140,7 @@ sim = {
 
 ---@alias UiValue number|boolean|string
 
----@class UiApi  -- controls in the GUI's Script controls panel; values outlive reloads
+---@class UiApi  -- controls in the Script controls box under the toolbar's script buttons; values outlive reloads
 ---@field slider fun(name: string, default: number, min: number, max: number, step?: number): number  -- declare (or read) a slider; returns its value
 ---@field number fun(name: string, default: number): number  -- a number field, applied with Enter
 ---@field toggle fun(name: string, default?: boolean): boolean
