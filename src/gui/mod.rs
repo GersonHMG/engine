@@ -232,6 +232,10 @@ impl EngineApp {
             ..Default::default()
         });
 
+        if panel == SidebarPanel::Pipeline {
+            // The serial ports may have changed since the window was last open.
+            self.radio_panel.scan_ports();
+        }
         self.panel_windows.insert(panel, id);
         self.window_to_panel.insert(id, panel);
         self.sidebar.active_panel = Some(panel);
@@ -612,6 +616,12 @@ impl EngineApp {
             }
             Message::Radio(RadioMessage::UseRadioToggled(val)) => {
                 self.radio_panel.use_radio = val;
+            }
+            Message::Radio(RadioMessage::ScanPorts) => {
+                self.radio_panel.scan_ports();
+            }
+            Message::Radio(RadioMessage::PortSelected(port)) => {
+                self.radio_panel.port_name = port.name;
             }
             Message::Radio(RadioMessage::Update) => {
                 let baud = self.radio_panel.baud_rate.parse::<u32>().unwrap_or(115200);
