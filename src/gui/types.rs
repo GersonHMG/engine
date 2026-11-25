@@ -10,6 +10,7 @@ use super::panels::charts::ChartsMessage;
 use super::panels::control::ControlMessage;
 use super::panels::kalman::KalmanMessage;
 use super::panels::radio::RadioMessage;
+use super::panels::script_ui::ScriptUiMessage;
 use super::panels::sim_params::SimParamsMessage;
 use super::panels::recording::RecordingMessage;
 use super::panels::vision::VisionMessage;
@@ -136,6 +137,7 @@ pub enum Message {
     Control(ControlMessage),
     Charts(ChartsMessage),
     SimParams(SimParamsMessage),
+    ScriptUi(ScriptUiMessage),
 
     // Events
     Tick,

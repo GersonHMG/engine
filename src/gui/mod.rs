@@ -48,6 +48,7 @@ use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
 use panels::pipeline::{self, Link, Stage, Status};
 use panels::sim_params::SimParamsPanel;
+use panels::script_ui::ScriptUiPanel;
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -65,6 +66,7 @@ pub struct EngineApp {
     control_panel: ControlPanel,
     charts_panel: ChartsPanel,
     sim_params_panel: SimParamsPanel,
+    script_ui_panel: ScriptUiPanel,
 
     // Data
     field_data: FieldData,
@@ -79,6 +81,7 @@ pub struct EngineApp {
     lua_draw_rx: Arc<Mutex<mpsc::Receiver<Vec<LuaDrawCmd>>>>,
     lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
     lua_log_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    lua_ui_rx: Arc<Mutex<mpsc::Receiver<crate::lua_interface::ScriptUiView>>>,
     simulator_rx: Arc<Mutex<mpsc::Receiver<SimulatorSettings>>>,
     sim_config_rx: Arc<Mutex<mpsc::Receiver<Option<ssl_sim::SimConfig>>>>,
     perf_rx: Arc<Mutex<mpsc::Receiver<crate::perf::PerfStats>>>,
@@ -147,6 +150,7 @@ impl EngineApp {
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
             sim_params_panel: SimParamsPanel::default(),
+            script_ui_panel: ScriptUiPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -156,6 +160,7 @@ impl EngineApp {
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
             lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
             lua_log_rx: Arc::new(Mutex::new(channels.lua_log_rx)),
+            lua_ui_rx: Arc::new(Mutex::new(channels.lua_ui_rx)),
             simulator_rx: Arc::new(Mutex::new(channels.simulator_rx)),
             sim_config_rx: Arc::new(Mutex::new(channels.sim_config_rx)),
             perf_rx: Arc::new(Mutex::new(channels.perf_rx)),
@@ -189,6 +194,7 @@ impl EngineApp {
             match panel {
                 SidebarPanel::Pipeline => "Data Pipeline".to_string(),
                 SidebarPanel::SimParams => "Simulator Parameters".to_string(),
+                SidebarPanel::Script => "Script Controls".to_string(),
                 SidebarPanel::Recording => "Recording".to_string(),
                 SidebarPanel::Control => "Manual Control".to_string(),
                 SidebarPanel::Charts => "Robot Charts".to_string(),
@@ -216,6 +222,7 @@ impl EngineApp {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
             SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
             SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
+            SidebarPanel::Script => iced::Size::new(420.0, 460.0),
             _ => iced::Size::new(300.0, 420.0),
         };
 
@@ -671,6 +678,13 @@ impl EngineApp {
                 }
             }
 
+            // --- Script controls ---
+            Message::ScriptUi(msg) => {
+                if let Some(event) = self.script_ui_panel.update(msg) {
+                    let _ = self.command_tx.try_send(EngineCommand::ScriptUi(event));
+                }
+            }
+
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -803,6 +817,12 @@ impl EngineApp {
                 if let Ok(mut rx) = self.sim_config_rx.try_lock() {
                     while let Ok(config) = rx.try_recv() {
                         self.sim_params_panel.set_config(config);
+                    }
+                }
+
+                if let Ok(mut rx) = self.lua_ui_rx.try_lock() {
+                    while let Ok(view) = rx.try_recv() {
+                        self.script_ui_panel.set_view(view);
                     }
                 }
 
@@ -1199,6 +1219,7 @@ impl EngineApp {
         let content: Element<'_, Message> = match panel {
             SidebarPanel::Pipeline => return self.view_pipeline(),
             SidebarPanel::SimParams => self.sim_params_panel.view().map(Message::SimParams),
+            SidebarPanel::Script => self.script_ui_panel.view().map(Message::ScriptUi),
             SidebarPanel::Recording => self.recording_panel.view().map(Message::Recording),
             SidebarPanel::Control => self.control_panel.view().map(Message::Control),
             SidebarPanel::Charts => self.charts_panel.view().map(Message::Charts),

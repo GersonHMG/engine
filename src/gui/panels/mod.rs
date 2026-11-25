@@ -6,3 +6,4 @@ pub mod control;
 pub mod charts;
 pub mod pipeline;
 pub mod sim_params;
+pub mod script_ui;
