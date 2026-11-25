@@ -137,3 +137,27 @@ sim = {
 	truth = function(id, team) return nil end,
 	console = function(line) return {} end,
 }
+
+---@alias UiValue number|boolean|string
+
+---@class UiApi  -- controls in the Script controls box under the toolbar's script buttons; values outlive reloads
+---@field slider fun(name: string, default: number, min: number, max: number, step?: number): number  -- declare (or read) a slider; returns its value
+---@field number fun(name: string, default: number): number  -- a number field, applied with Enter
+---@field toggle fun(name: string, default?: boolean): boolean
+---@field choice fun(name: string, default: string, options: string[]): string
+---@field button fun(name: string, callback: fun())  -- runs callback when pressed (between process() calls, paused or not)
+---@field on_click fun(callback: fun(x: number, y: number, button: "left"|"right")|nil)  -- Ctrl+click on the field, m; nil stops listening
+---@field get fun(name: string): UiValue|nil  -- a control's value now
+---@field set fun(name: string, value: UiValue)  -- change a control's value (shown in the panel)
+
+---@type UiApi
+ui = {
+	slider = function(name, default, min, max, step) return default end,
+	number = function(name, default) return default end,
+	toggle = function(name, default) return default or false end,
+	choice = function(name, default, options) return default end,
+	button = function(name, callback) end,
+	on_click = function(callback) end,
+	get = function(name) return nil end,
+	set = function(name, value) end,
+}

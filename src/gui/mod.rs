@@ -29,6 +29,7 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::config::FieldConfig;
+use crate::lua_interface::{ClickButton, UiEvent};
 use crate::sender::simulator::scenario;
 
 use field_canvas::{FieldCanvas, FieldData, FieldMessage, LuaDrawCommand, RobotData};
@@ -48,6 +49,7 @@ use panels::control::{ControlPanel, ControlMessage};
 use panels::charts::{export_csv_async, ChartsMessage, ChartsPanel, DataSample};
 use panels::pipeline::{self, Link, Stage, Status};
 use panels::sim_params::SimParamsPanel;
+use panels::script_ui::ScriptUiPanel;
 
 // --- Main Application ---
 pub struct EngineApp {
@@ -65,6 +67,7 @@ pub struct EngineApp {
     control_panel: ControlPanel,
     charts_panel: ChartsPanel,
     sim_params_panel: SimParamsPanel,
+    script_ui_panel: ScriptUiPanel,
 
     // Data
     field_data: FieldData,
@@ -79,6 +82,7 @@ pub struct EngineApp {
     lua_draw_rx: Arc<Mutex<mpsc::Receiver<Vec<LuaDrawCmd>>>>,
     lua_status_rx: Arc<Mutex<mpsc::Receiver<LuaScriptStatusUpdate>>>,
     lua_log_rx: Arc<Mutex<mpsc::Receiver<String>>>,
+    lua_ui_rx: Arc<Mutex<mpsc::Receiver<crate::lua_interface::ScriptUiView>>>,
     simulator_rx: Arc<Mutex<mpsc::Receiver<SimulatorSettings>>>,
     sim_config_rx: Arc<Mutex<mpsc::Receiver<Option<ssl_sim::SimConfig>>>>,
     perf_rx: Arc<Mutex<mpsc::Receiver<crate::perf::PerfStats>>>,
@@ -147,6 +151,7 @@ impl EngineApp {
             control_panel: ControlPanel::default(),
             charts_panel: ChartsPanel::new(),
             sim_params_panel: SimParamsPanel::default(),
+            script_ui_panel: ScriptUiPanel::default(),
             field_data: FieldData::new(field_config.length_m, field_config.width_m),
             robot_trace: Vec::new(),
             last_vision_time: std::time::Instant::now(),
@@ -156,6 +161,7 @@ impl EngineApp {
             lua_draw_rx: Arc::new(Mutex::new(channels.lua_draw_rx)),
             lua_status_rx: Arc::new(Mutex::new(channels.lua_status_rx)),
             lua_log_rx: Arc::new(Mutex::new(channels.lua_log_rx)),
+            lua_ui_rx: Arc::new(Mutex::new(channels.lua_ui_rx)),
             simulator_rx: Arc::new(Mutex::new(channels.simulator_rx)),
             sim_config_rx: Arc::new(Mutex::new(channels.sim_config_rx)),
             perf_rx: Arc::new(Mutex::new(channels.perf_rx)),
@@ -451,6 +457,10 @@ impl EngineApp {
             Message::Field(FieldMessage::RobotClicked { id, team }) => {
                 self.field_data.selected_robot = Some((id, team));
             }
+            Message::Field(FieldMessage::ScriptClicked { field: (x, y), right }) => {
+                let button = if right { ClickButton::Right } else { ClickButton::Left };
+                let _ = self.command_tx.try_send(EngineCommand::ScriptUi(UiEvent::Click { x, y, button }));
+            }
             Message::TeleportMenu(choice) => {
                 let Some(menu) = self.teleport_menu.take() else {
                     return iced::Task::none();
@@ -671,6 +681,13 @@ impl EngineApp {
                 }
             }
 
+            // --- Script controls ---
+            Message::ScriptUi(msg) => {
+                if let Some(event) = self.script_ui_panel.update(msg) {
+                    let _ = self.command_tx.try_send(EngineCommand::ScriptUi(event));
+                }
+            }
+
             // --- Control Panel ---
             Message::Control(ControlMessage::ModeSelected(mode)) => {
                 self.control_panel.mode = mode;
@@ -804,6 +821,13 @@ impl EngineApp {
                     while let Ok(config) = rx.try_recv() {
                         self.sim_params_panel.set_config(config);
                     }
+                }
+
+                if let Ok(mut rx) = self.lua_ui_rx.try_lock() {
+                    while let Ok(view) = rx.try_recv() {
+                        self.script_ui_panel.set_view(view);
+                    }
+                    self.field_data.script_clicks = self.script_ui_panel.on_click();
                 }
 
                 // Drain Lua script status channel
@@ -1045,17 +1069,23 @@ impl EngineApp {
             .field_canvas
             .view(&self.field_data, Message::Field);
 
-        // Mouse coords overlay, while the cursor is over the field
-        let mouse_overlay: Element<'_, Message> = match self.field_canvas.mouse_field_pos() {
-            Some((x, y)) => container(
-                container(text(format!("{x:.2}, {y:.2} m")).size(11).font(theme::MONO))
-                    .padding([3, 7])
-                    .style(theme::overlay_box),
-            )
-            .padding(8)
-            .into(),
-            None => iced::widget::Space::new().into(),
-        };
+        // Top left of the field, under the toolbar's script buttons: the
+        // script's controls (live view only), then the mouse coords while
+        // the cursor is over the field.
+        let script_box = if self.replay.enabled { None } else { self.script_ui_panel.overlay() };
+        let mouse_coords = self.field_canvas.mouse_field_pos().map(|(x, y)| {
+            container(text(format!("{x:.2}, {y:.2} m")).size(11).font(theme::MONO))
+                .padding([3, 7])
+                .style(theme::overlay_box)
+        });
+        let mouse_overlay: Element<'_, Message> = container(
+            column![]
+                .push(script_box.map(|b| b.map(Message::ScriptUi)))
+                .push(mouse_coords)
+                .spacing(6),
+        )
+        .padding(8)
+        .into();
 
         let field_stack: Element<'_, Message> = if self.replay.enabled {
             let can_control_replay = self.replay.has_frames();

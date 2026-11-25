@@ -1,6 +1,9 @@
 // lua_interface/mod.rs — Lua scripting interface
 
 mod api;
+mod ui;
+
+pub use ui::{ClickButton, ScriptUiView, UiEvent, UiKind, UiValue, UiWidget};
 
 use crate::game_controller::GameState;
 use crate::sender::radio::Radio;
@@ -48,6 +51,8 @@ pub struct LuaInterface {
     world: Arc<RwLock<World>>,
     game_state: Arc<Mutex<GameState>>,
     draw_commands: Arc<Mutex<Vec<DrawCommand>>>,
+    /// Controls the script declared (`ui` table); they outlive reloads.
+    ui: Arc<Mutex<ui::ScriptUi>>,
     log_tx: Option<mpsc::Sender<String>>,
     /// Set for headless runs: registers the `sim` table.
     run_control: Option<Arc<RunControl>>,
@@ -74,6 +79,7 @@ impl LuaInterface {
             world,
             game_state,
             draw_commands: Arc::new(Mutex::new(Vec::new())),
+            ui: Arc::new(Mutex::new(ui::ScriptUi::default())),
             log_tx,
             // The GUI engine gives scripts the `sim` table too (it works
             // while SIM is on); a headless run replaces this control.
@@ -104,6 +110,9 @@ impl LuaInterface {
             Arc::clone(&self.draw_commands),
             self.run_control.clone(),
         );
+        if let Err(e) = ui::register_ui_functions(&self.lua, Arc::clone(&self.ui)) {
+            self.log_error(format!("Failed to register the ui table: {e}"));
+        }
         self.register_print();
     }
 
@@ -155,7 +164,8 @@ impl LuaInterface {
             self.run_control = Some(Arc::new(RunControl::default()));
         }
 
-        // Reinitialize Lua state
+        // Reinitialize Lua state; the script declares its controls again.
+        self.ui.lock().unwrap_or_else(|e| e.into_inner()).begin_load();
         self.lua = Lua::new();
         self.register_functions();
 
@@ -261,6 +271,38 @@ impl LuaInterface {
         self.log_info("Script resumed.".to_string());
 
         self.script_state()
+    }
+
+    /// Applies what the user did in the Script panel or on the field:
+    /// sets a value, or runs the script's callback for a button or click
+    /// (between two `process()` calls, paused or not). A callback's error
+    /// fails the script like one in `process()`.
+    pub fn handle_ui_event(&mut self, event: UiEvent) -> ScriptExecState {
+        if !self.have_script {
+            return self.script_state();
+        }
+        if let UiEvent::Set { name, value } = &event {
+            let result = self.ui.lock().unwrap_or_else(|e| e.into_inner()).set(name, value.clone());
+            if let Err(e) = result {
+                self.log_error(e);
+            }
+            return self.script_state();
+        }
+        if let Err(e) = ui::dispatch(&self.lua, &event) {
+            let what = match &event {
+                UiEvent::Press { name } => format!("button \"{name}\""),
+                _ => "ui.on_click".to_string(),
+            };
+            self.log_error(format!("Runtime error in {what}: {e}"));
+            self.is_paused = true;
+            self.has_failed = true;
+        }
+        self.script_state()
+    }
+
+    /// The script's controls, if they changed since the last call.
+    pub fn take_ui_view(&self) -> Option<ScriptUiView> {
+        self.ui.lock().unwrap_or_else(|e| e.into_inner()).take_view()
     }
 
     /// Memory the Lua state uses, bytes.
