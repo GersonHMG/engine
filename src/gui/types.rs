@@ -2,6 +2,7 @@ use iced::event::Event;
 use iced::window;
 use tokio::sync::mpsc;
 
+use crate::lua_interface::{ScriptUiView, UiEvent};
 use crate::types::Vec2D;
 
 use super::bottom_panel::BottomPanelMessage;
@@ -85,6 +86,9 @@ pub enum EngineCommand {
     TeleportBall { x: f64, y: f64 },
     /// A line typed in the console, e.g. `sim status`.
     ConsoleCommand(String),
+    /// The user changed a script control, pressed a script button or
+    /// clicked the field for the script.
+    ScriptUi(UiEvent),
 }
 
 /// In-process simulator on/off and how fast it runs.
@@ -101,6 +105,8 @@ pub struct GuiChannels {
     pub lua_draw_rx: mpsc::Receiver<Vec<LuaDrawCmd>>,
     pub lua_status_rx: mpsc::Receiver<LuaScriptStatusUpdate>,
     pub lua_log_rx: mpsc::Receiver<String>,
+    /// The script's controls whenever they change (`ui` table).
+    pub lua_ui_rx: mpsc::Receiver<ScriptUiView>,
     /// Simulator settings changed by the engine (e.g. by an MCP agent).
     pub simulator_rx: mpsc::Receiver<SimulatorSettings>,
     /// The simulator's parameters whenever they may have changed (None = simulator off).

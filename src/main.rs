@@ -28,6 +28,7 @@ use tracing::{info, warn};
 use crate::game_controller::GameState;
 use crate::lua_interface::LuaInterface;
 use crate::lua_interface::ScriptExecState;
+use crate::lua_interface::ScriptUiView;
 use crate::receiver::vision;
 use crate::sender::radio::Radio;
 use crate::sender::simulator::console as simulator_console;
@@ -252,6 +253,7 @@ fn main() -> iced::Result {
     let (lua_draw_tx, lua_draw_rx) = tokio::sync::mpsc::channel::<Vec<LuaDrawCmd>>(256);
     let (lua_status_tx, lua_status_rx) = tokio::sync::mpsc::channel::<LuaScriptStatusUpdate>(64);
     let (lua_log_tx, lua_log_rx) = tokio::sync::mpsc::channel::<String>(512);
+    let (lua_ui_tx, lua_ui_rx) = tokio::sync::mpsc::channel::<ScriptUiView>(64);
     let (command_tx, command_rx) = tokio::sync::mpsc::channel::<EngineCommand>(256);
     let (simulator_gui_tx, simulator_rx) = tokio::sync::mpsc::channel::<SimulatorSettings>(16);
     let (sim_config_gui_tx, sim_config_rx) = tokio::sync::mpsc::channel::<Option<ssl_sim::SimConfig>>(16);
@@ -263,6 +265,7 @@ fn main() -> iced::Result {
         lua_draw_rx,
         lua_status_rx,
         lua_log_rx,
+        lua_ui_rx,
         simulator_rx,
         sim_config_rx,
         perf_rx,
@@ -288,6 +291,7 @@ fn main() -> iced::Result {
                 lua_draw_tx_clone,
                 lua_status_tx_clone,
                 lua_log_tx_clone,
+                lua_ui_tx,
                 simulator_gui_tx,
                 sim_config_gui_tx,
                 perf_gui_tx,
@@ -330,6 +334,8 @@ async fn run_engine(
     lua_draw_gui_tx: tokio::sync::mpsc::Sender<Vec<LuaDrawCmd>>,
     lua_status_gui_tx: tokio::sync::mpsc::Sender<LuaScriptStatusUpdate>,
     lua_log_gui_tx: tokio::sync::mpsc::Sender<String>,
+    // The script's controls whenever they change.
+    lua_ui_gui_tx: tokio::sync::mpsc::Sender<ScriptUiView>,
     simulator_gui_tx: tokio::sync::mpsc::Sender<SimulatorSettings>,
     // The simulator's parameters, sent whenever they may have changed (None = simulator off).
     sim_config_gui_tx: tokio::sync::mpsc::Sender<Option<ssl_sim::SimConfig>>,
@@ -570,6 +576,16 @@ async fn run_engine(
                     let mut last = last_script_path.lock().unwrap();
                     *last = path;
                 }
+                EngineCommand::ScriptUi(event) => {
+                    let state = lua_iface.lock().unwrap().handle_ui_event(event);
+                    if state != last_script_state {
+                        last_script_state = state;
+                        let _ = lua_status_gui_tx.try_send(LuaScriptStatusUpdate {
+                            status: map_script_state(state),
+                            script_path: None,
+                        });
+                    }
+                }
                 EngineCommand::PauseScript => {
                     let state = {
                         let mut lua = lua_iface.lock().unwrap();
@@ -622,14 +638,20 @@ async fn run_engine(
         }
 
         // Call Lua process()
-        let (draw_cmds, script_state, ran_process, lua_time, lua_mem) = {
+        let (draw_cmds, script_state, ran_process, lua_time, lua_mem, ui_view) = {
             let mut lua = lua_iface.lock().unwrap();
             let ran_process = lua.script_state() == ScriptExecState::Running;
             let lua_start = Instant::now();
             let state = lua.call_process();
             let lua_time = lua_start.elapsed();
-            (lua.take_draw_commands(), state, ran_process, lua_time, lua.used_memory())
+            (lua.take_draw_commands(), state, ran_process, lua_time, lua.used_memory(), lua.take_ui_view())
         };
+
+        // The script's controls, when a load, a declaration or a change
+        // (GUI or ui.set) altered them.
+        if let Some(view) = ui_view {
+            let _ = lua_ui_gui_tx.try_send(view);
+        }
 
         if script_state != last_script_state {
             last_script_state = script_state;
