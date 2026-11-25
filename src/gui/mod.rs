@@ -95,6 +95,9 @@ pub struct EngineApp {
     // Mouse state
     last_cursor_position: Option<iced::Point>,
 
+    /// Which pipeline stages (vision, kalman, radio) show their settings.
+    pipeline_open: [bool; 3],
+
     // Window management
     main_window_id: window::Id,
     panel_windows: HashMap<SidebarPanel, window::Id>,
@@ -170,6 +173,7 @@ impl EngineApp {
             kick_key_was_down: false,
             last_cursor_position: None,
             main_window_id: main_id,
+            pipeline_open: [false; 3],
             panel_windows: HashMap::new(),
             window_to_panel: HashMap::new(),
             lua_console_panel: LuaConsolePanel::new(),
@@ -220,7 +224,7 @@ impl EngineApp {
 
         let size = match panel {
             SidebarPanel::Charts => iced::Size::new(640.0, 400.0),
-            SidebarPanel::Pipeline => iced::Size::new(900.0, 480.0),
+            SidebarPanel::Pipeline => iced::Size::new(380.0, 300.0),
             SidebarPanel::SimParams => iced::Size::new(960.0, 560.0),
             _ => iced::Size::new(300.0, 420.0),
         };
@@ -232,6 +236,10 @@ impl EngineApp {
             ..Default::default()
         });
 
+        if panel == SidebarPanel::Pipeline {
+            // The serial ports may have changed since the window was last open.
+            self.radio_panel.scan_ports();
+        }
         self.panel_windows.insert(panel, id);
         self.window_to_panel.insert(id, panel);
         self.sidebar.active_panel = Some(panel);
@@ -603,6 +611,12 @@ impl EngineApp {
                 }
             }
 
+            Message::PipelineToggle(stage) => {
+                if let Some(open) = self.pipeline_open.get_mut(stage) {
+                    *open = !*open;
+                }
+            }
+
             // --- Radio Panel ---
             Message::Radio(RadioMessage::PortNameChanged(name)) => {
                 self.radio_panel.port_name = name;
@@ -612,6 +626,12 @@ impl EngineApp {
             }
             Message::Radio(RadioMessage::UseRadioToggled(val)) => {
                 self.radio_panel.use_radio = val;
+            }
+            Message::Radio(RadioMessage::ScanPorts) => {
+                self.radio_panel.scan_ports();
+            }
+            Message::Radio(RadioMessage::PortSelected(port)) => {
+                self.radio_panel.port_name = port.name;
             }
             Message::Radio(RadioMessage::Update) => {
                 let baud = self.radio_panel.baud_rate.parse::<u32>().unwrap_or(115200);
@@ -1304,7 +1324,7 @@ impl EngineApp {
             Link { label: "detections", live: receiving, color: flow },
             Link { label: "world → AI", live: script_running && receiving, color: flow },
         ];
-        pipeline::diagram(stages, links)
+        pipeline::diagram(stages, links, self.pipeline_open, Message::PipelineToggle)
     }
 
     /// Robots on the field of one team (0 = blue, 1 = yellow).
